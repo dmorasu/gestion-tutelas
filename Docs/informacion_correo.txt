@@ -1,0 +1,98 @@
+Buenas tardes Diego.
+De acuerdo con nuestra reunión de hace un rato, te emito la primera parte de la información que nos solicitaste:
+
+1. ROLES:
+
+COORDINADOR
+Revisa paquete
+Devuelve a auxiliar, en caso de requerir ajustes
+Entrega V1 paquete de escrito y anexos a Cliente
+Entrega V2 paquete de escrito y anexos a Cliente*
+*en caso de que hayan sido devueltos
+Informes equipo
+ANS
+Reportes cliente
+Seguimiento x estados x nivel criticidad
+Repartir excepcionalmente
+Seguimiento y comunicación de alertas a cliente
+
+ASISTENTE ADMINISTRATIVO
+Registra o completa información de asignaciones
+Organiza y carga documentos a los expedientes
+Realiza seguimiento a procesos para actualizar estados
+Solicitud de expedientes a Juzgados
+
+AUXILIAR JURÍDICO
+Revisa expediente
+Solicita y recibe insumos
+Proyecta escrito
+Envía paquete de escrito y anexos a Revisor
+Generar y enviar escrito de emergencia
+
+REVISOR
+Revisa paquete
+Devuelve a auxiliar, en caso de requerir ajustes
+Entrega V1 paquete de escrito y anexos a Cliente
+Entrega V2 paquete de escrito y anexos a Cliente*
+*en caso de que hayan sido devueltos
+Informes equipo
+Seguimiento x estados x nivel criticidad personas a cargo
+
+2. CORREOS
+
+asignacionsdmc@gomezpinedaabogados.com
+Entrada: Recibir asignaciones - individuales o en paquete
+Adjuntos por definir si vienen en enlace o como adjuntos
+Salida: Confirmar recibido con #caso
+Se solicitó al cliente que el identificador principal sea el # de radicado de 23 dígitos - Plantilla
+Salida: Solicitud de datos faltantes sobre las asignaciones (incluidos los expedientes de los Juzgados)
+Plantilla
+Entrada: recibir información faltante
+Salida: confirmación de recibido de información faltante
+Plantilla
+
+insumosdmc@gomezpinedaabogados.com
+Salida: Solicitar insumos
+Plantilla - Matriz de insumos y anexos
+Entrada: Recibir insumos
+Salida: confirmación de recibido de insumos
+Plantilla
+
+entrega@gomezpinedaabogados.com
+Salida: Entrega V1 escrito y anexos (enlace)
+Plantilla
+Entrada: recibido o devolución de V1
+Salida: Entrega V1 escrito y anexos (enlace)
+Plantilla
+
+3. FORMA DE RECIBO DE DOCUMENTOS:
+3.1 Por definir con cliente si envía documentos como adjunto individual o como enlace.
+3.2. Los anexos a nuestro cargo deben remitirse como enlace.
+3.3. Se le solicitó al cliente la indicación del radicado de 23 dígitos para identificar cada caso y alternativamente, se le ofreció la posibilidad de nombrar los con un número interno de caso, que igual nosotros debemos implementar, es decir, lo ideal es que cada caso tenga el número de radicado como identificador principal y el numero interno de caso.
+
+4. ASUNTOS PARA LOS PRINCIPALES CORREOS DE SALIDA:
+Convención de asunto correo de asignación: [GPA-SDM-PST] [CRÍTICO / ALTO / ORDINARIO] [Radicado de 23 dígitos] [Actuación: TUTELA, IMPUGNACIÓN, CUMPLIMIENTO, REQUERIMIENTO PREVIO, DESACATO] [Vence: fecha y hora]. Las llamadas telefónicas no reemplazan el registro escrito y deben confirmarse por correo el mismo día.
+Convención de asunto correo de solicitud de insumos: [GPA-SDM-PST] [CRÍTICO / ALTO / ORDINARIO] [Radicado de 23 dígitos] [SOLICITUD DE INSUMOS] [Vence: fecha y hora]. Las llamadas telefónicas no reemplazan el registro escrito y deben confirmarse por correo el mismo día.
+Convención de asunto correo de entrega: [GPA-SDM-PST] [CRÍTICO / ALTO / ORDINARIO] [Radicado de 23 dígitos] [ENTREGA V1] [Vence: fecha y hora]. Las llamadas telefónicas no reemplazan el registro escrito y deben confirmarse por correo el mismo día.
+Convención de asunto correo de entrega posterior a devolución: [GPA-SDM-PST] [CRÍTICO / ALTO / ORDINARIO] [Radicado de 23 dígitos] [ENTREGA V2] [Vence: fecha y hora]. Las llamadas telefónicas no reemplazan el registro escrito y deben confirmarse por correo el mismo día.
+
+5. INFORMES:
+
+Informe semanal
+Segundo día hábil de cada semana: asignaciones, actividades, respuestas proyectadas y novedades procesales.
+Validar cifras contra tablero y anexar bloqueos y acciones.
+
+Informe mensual
+Quinto día hábil de cada mes: consolidado de gestión, indicadores, casos abiertos y ANS.
+Entregar matriz de casos abiertos y explicar desviaciones.
+
+Alertas inmediatas por escrito
+Términos vencidos/próximos, requerimientos de cumplimiento, desacatos, sanciones, falta de insumos y duplicidad con otro operador.
+
+6. LICENCIAS COPILOT
+Se requieren 16 para Auxiliares Jurídicos, 4 para Revisores y 1 para Coordinador.
+
+PENDIENTE ENVÍO DE PLANTILLAS EN COLOR ROJO DEL PUNTO 2.
+
+Muchas gracias. Saludos.
+DMA
