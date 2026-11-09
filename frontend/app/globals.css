@@ -1,0 +1,146 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Diseño de la familia Nodex (copiado de Nodex Gastos), con el grafito (slate) como color de esta app.
+   El ámbar se reserva para advertencias: semáforo "próximo", supuestos y pendientes */
+
+/* Siempre claro, aunque el navegador esté en modo oscuro (incluye controles nativos) */
+html {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800;
+}
+
+@layer components {
+  /* Formularios y botones: mismas medidas que Nodex (components/ui/estilos.ts de Gastos) */
+  .campo {
+    @apply w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-xs text-slate-700 placeholder:text-slate-300 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:bg-slate-50 disabled:text-slate-400;
+  }
+  textarea.campo {
+    @apply h-auto py-2.5 resize-y;
+  }
+  .etiqueta {
+    @apply block mb-1.5 text-xs font-medium text-slate-600;
+  }
+  .boton-primario {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-md shadow-sm bg-slate-800 text-white text-xs font-semibold transition hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .boton-secundario {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-slate-200 bg-white text-slate-600 text-xs font-semibold transition hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .boton-peligro {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 rounded-md border border-red-200 bg-white text-red-600 text-xs font-semibold transition hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .enlace {
+    @apply font-semibold text-slate-800 underline decoration-slate-300 underline-offset-2 transition hover:decoration-slate-800;
+  }
+  .tarjeta {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  .titulo-pagina {
+    @apply text-lg font-semibold tracking-tight text-slate-800;
+  }
+  /* Tablas como las bandejas de Nodex */
+  .tabla {
+    @apply w-full text-left text-xs;
+  }
+  .tabla thead {
+    @apply bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500;
+  }
+  .tabla th {
+    @apply px-4 py-3 font-semibold whitespace-nowrap;
+  }
+  .tabla tbody {
+    @apply divide-y divide-slate-100;
+  }
+  .tabla td {
+    @apply px-4 py-3 align-top text-slate-600;
+  }
+}
+
+/* Entrada escalonada de las tarjetas del inicio (el retraso va en style="animation-delay") */
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+.aparecer {
+  animation: aparecer 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Brillo suave del punto "en vivo" */
+@keyframes latido {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+.latido {
+  animation: latido 2s ease-in-out infinite;
+}
+
+/* ── Avisos (react-toastify): tarjeta blanca, ícono en círculo de color y barra de tiempo delgada ── */
+:root {
+  --toastify-toast-width: 380px;
+  --toastify-toast-min-height: 60px;
+  --toastify-toast-bd-radius: 14px;
+  --toastify-toast-padding: 12px 12px 14px 14px;
+  --toastify-font-family: inherit;
+  --toastify-toast-shadow: 0 12px 32px -12px rgb(15 23 42 / 0.25), 0 2px 6px -2px rgb(15 23 42 / 0.08);
+  --toastify-color-progress-success: #10b981;
+  --toastify-color-progress-error: #ef4444;
+  --toastify-color-progress-warning: #f59e0b;
+  --toastify-color-progress-info: #0ea5e9;
+}
+
+.Toastify__toast.aviso-nodex {
+  @apply w-full items-center gap-3 border border-slate-200/80 bg-white/95 text-[13px] font-medium leading-snug text-slate-700 backdrop-blur;
+}
+
+.aviso-nodex .Toastify__toast-icon {
+  @apply me-0 w-auto;
+}
+
+.aviso-nodex::before {
+  content: "";
+  @apply absolute inset-y-3 left-0 w-[3px] rounded-r-full;
+}
+.aviso-nodex--success::before { @apply bg-emerald-500; }
+.aviso-nodex--error::before { @apply bg-red-500; }
+.aviso-nodex--warning::before { @apply bg-amber-500; }
+.aviso-nodex--info::before { @apply bg-sky-500; }
+
+.aviso-nodex .Toastify__progress-bar {
+  height: 3px;
+  opacity: 0.55 !important;
+}
+.aviso-nodex .Toastify__progress-bar--bg {
+  opacity: 0.08 !important;
+}
+
+@media (max-width: 480px) {
+  .Toastify__toast-container {
+    left: 0 !important;
+    right: 0 !important;
+    width: 100% !important;
+    transform: none !important;
+    box-sizing: border-box !important;
+    padding: 12px 12px 0 !important;
+  }
+  .Toastify__toast.aviso-nodex { @apply mb-2 rounded-[14px]; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aparecer, .latido { animation: none; }
+  .transition, .transition-all, .transition-transform { transition: none !important; }
+}
+
+/* Un recuadro con desplazamiento horizontal contiene lo que va posicionado adentro (sr-only) */
+.overflow-x-auto, .overflow-auto { position: relative; }
+
+/* En el celular las tablas no aplastan sus columnas: el recuadro se desplaza de lado */
+@media (max-width: 767px) {
+  .overflow-x-auto > table, .overflow-auto > table { min-width: 640px; }
+}

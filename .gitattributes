@@ -1,0 +1,5 @@
+# Fin de línea LF en el repositorio para que Windows y Mac no generen cambios falsos
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.xlsx binary
