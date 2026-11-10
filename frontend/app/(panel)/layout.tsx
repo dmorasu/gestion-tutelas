@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { requiereRol } from "@/src/auth/dal"
-import { modulosPermitidos } from "@/src/auth/permisos"
+import { modulosPermitidos, soloConsulta } from "@/src/auth/permisos"
 import LogoEncabezado from "@/components/ui/LogoEncabezado"
 import Navegacion from "@/components/layout/Navegacion"
 import MenuUsuario from "@/components/layout/MenuUsuario"
@@ -31,7 +31,7 @@ export default async function PanelLayout({ children }: Readonly<{ children: Rea
 
         {/* En el celular el menú va en el botón ☰ (MenuMovil) */}
         <div className="hidden md:block max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-2">
-          <Navegacion modulos={modulos} />
+          <Navegacion modulos={modulos} conInicio={!soloConsulta(sesion.roles)} />
         </div>
       </header>
 

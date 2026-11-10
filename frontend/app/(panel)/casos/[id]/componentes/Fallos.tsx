@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { useState, useTransition } from "react"
 import { toast } from "react-toastify"
-import { abrirCumplimiento, pasoActuacion } from "../../acciones"
+import { abrirCumplimiento, marcarSancion, pasoActuacion } from "../../acciones"
 import { INSTANCIAS, SENTIDOS, fechaHora, isoDesdeLocal } from "@/src/lib/formato"
 
 export type DecisionFila = {
   id: number, instancia: string, sentido: string, fechaDecision: string | null, fechaNotificacion: string | null, notificadaPorCorreo: boolean,
-  favorable: boolean | null, fechaVenceImpugnacion: string | null, requiereCumplimiento: boolean, actuacionCumplimientoId: number | null
+  favorable: boolean | null, fechaVenceImpugnacion: string | null, requiereCumplimiento: boolean, actuacionCumplimientoId: number | null,
+  sancionAtribuible: boolean
 }
 
 type Props = {
@@ -39,6 +40,16 @@ export default function Fallos({ casoId, actuacionId, decisiones, sentidos, pued
       const r = await abrirCumplimiento(casoId, decisionId)
       if (!r.ok) return void toast.error(r.errores.join(". "))
       toast.success("Cumplimiento abierto")
+    })
+  }
+
+  const sancion = (d: DecisionFila) => {
+    const nuevo = !d.sancionAtribuible
+    if (!confirm(nuevo ? "¿Marcar la sanción como atribuible a la entrega tardía? El caso no causa remuneración." : "¿Quitar la marca de sanción atribuible?")) return
+    iniciar(async () => {
+      const r = await marcarSancion(casoId, d.id, nuevo)
+      if (!r.ok) return void toast.error(r.errores.join(". "))
+      toast.success(nuevo ? "Marcado sin remuneración" : "Marca quitada")
     })
   }
 
@@ -94,6 +105,12 @@ export default function Fallos({ casoId, actuacionId, decisiones, sentidos, pued
                   {coordina && <button disabled={pendiente} className="enlace" onClick={() => abrir(d.id)}>Abrir ahora</button>}
                 </span>
               )
+          )}
+          {d.sancionAtribuible && <span className="rounded-full bg-red-50 px-2 py-px text-xs text-red-700">Sin remuneración</span>}
+          {coordina && d.favorable === false && (
+            <button disabled={pendiente} className="ml-auto text-xs enlace" onClick={() => sancion(d)}>
+              {d.sancionAtribuible ? "Quitar sanción atribuible" : "Sanción atribuible a entrega tardía"}
+            </button>
           )}
         </div>
       ))}

@@ -43,6 +43,11 @@ export const autenticacion = async (req: Request, res: Response, next: NextFunct
 
     req.usuario = usuario
     req.roles = (usuario.roles ?? []).map(r => r.codigo)
+    // D28: quien solo tiene el perfil de consulta (PST, la entidad) ve el tablero y nada más
+    const soloConsulta = req.roles.length > 0 && req.roles.every(r => r === ROLES.CONSULTA)
+    if (soloConsulta && !/^\/api\/(auth|tablero)(\/|$|\?)/.test(req.originalUrl)) {
+      return res.status(403).json({ error: 'Su perfil solo permite ver el tablero' })
+    }
     // El historial del caso registra quién hizo cada cambio
     ejecutarConContexto({ usuarioId: usuario.id, nombre: usuario.nombre, origen: origenDeRuta(req.originalUrl) }, next)
   } catch {

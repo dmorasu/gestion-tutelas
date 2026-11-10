@@ -1,9 +1,10 @@
 import ExcelJS from 'exceljs'
 import { Op } from 'sequelize'
-import { Actuacion, Alerta, Archivo, Caso, Devolucion, Equipo, Escrito, Informe, Juzgado, SolicitudInsumo, Usuario } from '../models'
+import { Actuacion, Alerta, Archivo, Caso, Decision, Devolucion, Equipo, Escrito, Informe, Juzgado, RadicacionJuzgado, SolicitudInsumo, Usuario } from '../models'
 import { calcularAns, limiteInforme, rango, type Indicador } from './indicadores'
 import { guardarArchivo } from './almacenamiento'
 import { CRITICIDADES, NOMBRES_CRITICIDAD, NOMBRES_ETAPAS, type Etapa } from './constantes'
+import { NOMBRES_ALERTA } from './alertas'
 import { sumarDias, textoFechaHora, enBogota } from '../utils/fechaColombia'
 import { formatoRadicado } from '../utils/radicado'
 import { ErrorNegocio } from '../utils/errores'
@@ -11,6 +12,8 @@ import { ErrorNegocio } from '../utils/errores'
 // =====================================
 // INFORMES SEMANAL Y MENSUAL (correo del cliente, punto 5; manual §21.2 y §26)
 // Semanal: asignaciones, actividades, entregas, devoluciones, ANS y alertas de la semana.
+// D28: novedades procesales (fallos y radicaciones) y bloqueos (lo que frena la entrega), para que
+// el coordinador anexe las acciones.
 // Mensual: lo mismo para el mes, la matriz de casos abiertos y la relación de casos causados para
 // la factura (primer escrito entregado en el mes: radicado, despacho, asignación y entrega).
 // Sin nombres ni documentos de los accionantes: el manual pide minimizar datos personales en los
@@ -74,10 +77,10 @@ export const generarInforme = async (d: { tipo: 'SEMANAL' | 'MENSUAL', desde: st
     Escrito.count({ where: { fechaAprobacion: enPeriodo } }),
     Actuacion.findAll({
       where: { estado: { [Op.notIn]: ['CERRADA'] }, fechaAsignacion: { [Op.lt]: fin } },
-      include: [caso, ...personas, { model: SolicitudInsumo, attributes: ['fechaRecepcion'] }],
+      include: [caso, ...personas, { model: SolicitudInsumo, attributes: ['fechaRecepcion', 'descripcion'] }],
       order: [['fechaVencimiento', 'ASC NULLS LAST']]
     }),
-    Alerta.findAll({ where: { fechaDeteccion: enPeriodo }, attributes: ['tipo', 'estado'] }),
+    Alerta.findAll({ where: { fechaDeteccion: enPeriodo }, attributes: ['tipo', 'estado', 'actuacionId'] }),
     calcularAns(desde, hasta)
   ])
   const ahora = new Date()
@@ -151,6 +154,35 @@ export const generarInforme = async (d: { tipo: 'SEMANAL' | 'MENSUAL', desde: st
     (a.insumos ?? []).filter(i => !i.fechaRecepcion).length, a.auxiliar?.nombre ?? '', a.revisor?.nombre ?? '', a.equipo?.nombre ?? '',
     Math.floor((ahora.getTime() - a.fechaAsignacion.getTime()) / 86_400_000), a.caso?.deOtroOperador ? 'Sí' : ''
   ]))
+
+  // D28: novedades procesales del periodo: fallos registrados y radicaciones de la entidad
+  const casoMin = { model: Caso, attributes: ['numeroInterno', 'radicado'] }
+  const [fallos, radicaciones] = await Promise.all([
+    Decision.findAll({ where: { createdAt: enPeriodo }, include: [{ model: Actuacion, attributes: ['etapa'], include: [casoMin] }], order: [['createdAt', 'ASC']] }),
+    RadicacionJuzgado.findAll({ where: { fechaRadicacion: enPeriodo }, include: [{ model: Actuacion, attributes: ['etapa'], include: [casoMin] }], order: [['fechaRadicacion', 'ASC']] })
+  ])
+  const SENTIDO: Record<string, string> = {
+    CONCEDE: 'Concede', CONCEDE_PARCIAL: 'Concede parcialmente', NIEGA: 'Niega', IMPROCEDENTE: 'Improcedente', HECHO_SUPERADO: 'Hecho superado',
+    CONFIRMA: 'Confirma', REVOCA: 'Revoca', MODIFICA: 'Modifica', SANCIONA: 'Sanciona', NO_SANCIONA: 'No sanciona'
+  }
+  const INSTANCIA: Record<string, string> = { PRIMERA: 'Primera instancia', SEGUNDA: 'Segunda instancia', DESACATO: 'Desacato' }
+  hoja(libro, 'Novedades procesales', [
+    { titulo: 'Fecha', ancho: 17 }, { titulo: 'Caso', ancho: 16 }, { titulo: 'Radicado', ancho: 30 }, { titulo: 'Etapa', ancho: 20 }, { titulo: 'Novedad', ancho: 60 }
+  ], [
+    ...fallos.map(x => ({ cuando: x.fechaNotificacion ?? x.createdAt, a: x.actuacion, texto: `Fallo de ${INSTANCIA[x.instancia] ?? x.instancia}: ${SENTIDO[x.sentido] ?? x.sentido}${x.favorable === null ? '' : x.favorable ? ' (favorable)' : ' (desfavorable)'}${x.requiereCumplimiento ? '. Exige memorial de cumplimiento' : ''}` })),
+    ...radicaciones.map(x => ({ cuando: x.fechaRadicacion, a: x.actuacion, texto: 'La entidad radicó el escrito en el juzgado' }))
+  ].sort((p, q) => p.cuando.getTime() - q.cuando.getTime()).map(n => [fecha(n.cuando), n.a?.caso?.numeroInterno ?? '', formatoRadicado(n.a?.caso?.radicado ?? ''), etapa(n.a?.etapa ?? ''), n.texto]))
+
+  // D28: bloqueos al cierre del periodo, con una columna para la acción que anota el coordinador
+  const bloqueos = [
+    ...abiertas.filter(a => (a.insumos ?? []).some(i => !i.fechaRecepcion)).map(a => ({ a, texto: `Esperando insumos: ${(a.insumos ?? []).filter(i => !i.fechaRecepcion).map(i => i.descripcion).join('; ')}` })),
+    ...abiertas.filter(a => a.datosFaltantesPendientes).map(a => ({ a, texto: 'Esperando los datos faltantes de la asignación (el ANS no corre)' })),
+    ...abiertas.filter(a => a.caso?.deOtroOperador).map(a => ({ a, texto: 'Radicado asignado a otro operador en el archivo maestro' })),
+    ...alertas.filter(x => x.estado === 'PENDIENTE').map(x => ({ a: abiertas.find(a => a.id === x.actuacionId), texto: `Alerta sin emitir: ${NOMBRES_ALERTA[x.tipo]}` }))
+  ]
+  hoja(libro, 'Bloqueos', [
+    { titulo: 'Caso', ancho: 16 }, { titulo: 'Radicado', ancho: 30 }, { titulo: 'Etapa', ancho: 20 }, { titulo: 'Bloqueo', ancho: 60 }, { titulo: 'Acción', ancho: 50 }
+  ], bloqueos.filter(b => b.a).map(b => [b.a!.caso?.numeroInterno ?? '', formatoRadicado(b.a!.caso?.radicado ?? ''), etapa(b.a!.etapa), b.texto, '']))
 
   // Entregas del periodo
   hoja(libro, 'Entregas', [

@@ -480,4 +480,11 @@ export class Decision extends Model {
   @ForeignKey(() => Actuacion)
   @Column(DataType.INTEGER)
   declare actuacionCumplimientoId: number | null
+
+  // D29: sanción en desacato o vulneración por extemporaneidad causada solo por la entrega tardía
+  // del escrito, acreditada en el acta de seguimiento: el caso no causa remuneración
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare sancionAtribuible: boolean
 }

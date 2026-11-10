@@ -108,3 +108,56 @@ export class Informe extends Model {
   @Column(DataType.JSONB)
   declare resumen: unknown
 }
+
+// =====================================
+// ANS POR MES: foto del cálculo de services/indicadores (la misma regla de la pantalla). La lee la
+// vista tablero.ans de Power BI y el tablero de la app: así las dos muestran las mismas cifras.
+// Se refresca cada 30 minutos el mes en curso y el anterior; los meses cerrados no cambian.
+// =====================================
+@Table({ tableName: 'ans_periodos', indexes: [{ unique: true, fields: ['mes', 'codigo'] }] })
+export class AnsPeriodo extends Model {
+  // AAAA-MM
+  @AllowNull(false)
+  @Column(DataType.STRING(7))
+  declare mes: string
+
+  @AllowNull(false)
+  @Column(DataType.STRING(10))
+  declare codigo: string
+
+  @AllowNull(false)
+  @Column(DataType.STRING(80))
+  declare nombre: string
+
+  @Column(DataType.STRING(10))
+  declare sentido: string | null
+
+  @Column(DataType.DECIMAL(6, 2))
+  declare meta: number | null
+
+  @Default(0)
+  @Column(DataType.INTEGER)
+  declare cumplen: number
+
+  @Default(0)
+  @Column(DataType.INTEGER)
+  declare total: number
+
+  @Column(DataType.DECIMAL(6, 2))
+  declare porcentaje: number | null
+
+  @Column(DataType.BOOLEAN)
+  declare cumple: boolean | null
+
+  // Se mide fuera de la app (ANS-11, ANS-12)
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  declare fueraDeApp: boolean
+
+  // D29: nivel de incumplimiento (LEVE, MODERADO, GRAVE) y descuento sobre la factura del mes
+  @Column(DataType.STRING(10))
+  declare nivel: string | null
+
+  @Column(DataType.DECIMAL(5, 2))
+  declare descuento: number | null
+}

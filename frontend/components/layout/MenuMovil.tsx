@@ -13,7 +13,7 @@ export default function MenuMovil({ modulos }: { modulos: { href: string, nombre
   const [abierto, setAbierto] = useState(false)
   const pathname = usePathname()
   const estaEn = (href: string) => pathname === href || pathname.startsWith(`${href}/`)
-  const enlaces = [{ href: "/inicio", nombre: "Inicio" }, ...modulos]
+  const enlaces = modulos.length === 1 && modulos[0].href === "/tablero" ? modulos : [{ href: "/inicio", nombre: "Inicio" }, ...modulos]
 
   return (
     <>

@@ -10,7 +10,9 @@ export const ROLES = {
   COORDINADOR: 'COORDINADOR',
   ASISTENTE: 'ASISTENTE',
   AUXILIAR: 'AUXILIAR',
-  REVISOR: 'REVISOR'
+  REVISOR: 'REVISOR',
+  // D28: PST y la entidad entran a ver solo el tablero de la operación
+  CONSULTA: 'CONSULTA'
 } as const
 export type CodigoRol = typeof ROLES[keyof typeof ROLES]
 
@@ -19,7 +21,8 @@ export const NOMBRES_ROLES: Record<CodigoRol, string> = {
   COORDINADOR: 'Coordinador',
   ASISTENTE: 'Asistente administrativo',
   AUXILIAR: 'Auxiliar jurídico',
-  REVISOR: 'Revisor'
+  REVISOR: 'Revisor',
+  CONSULTA: 'Consulta del tablero (cliente)'
 }
 
 export const TIPOS_SOLICITUD = ['TUTELA', 'ACCION_CUMPLIMIENTO', 'PQRS'] as const

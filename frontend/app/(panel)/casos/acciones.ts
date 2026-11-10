@@ -33,6 +33,14 @@ export async function abrirCumplimiento(casoId: number, decisionId: number): Pro
   return { ok: true, datos: await r.json() }
 }
 
+// D29: sanción o vulneración causada solo por la entrega tardía (acta de seguimiento)
+export async function marcarSancion(casoId: number, decisionId: number, sancionAtribuible: boolean): Promise<Resultado> {
+  const r = await fetchApi(`/casos/decisiones/${decisionId}`, { method: "PATCH", body: JSON.stringify({ sancionAtribuible }) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true }
+}
+
 export async function registrarManual(datos: Record<string, unknown>): Promise<Resultado> {
   const r = await fetchApi("/casos", { method: "POST", body: JSON.stringify(datos) })
   if (!r.ok) return { ok: false, errores: await leerErrores(r) }

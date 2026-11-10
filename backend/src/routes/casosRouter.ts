@@ -360,6 +360,19 @@ router.post('/actuaciones/:id/decision', param('id').isInt(), body('instancia').
     fechaNotificacion: req.body.fechaNotificacion || null, notificadaPorCorreo: req.body.notificadaPorCorreo === true, usuarioId: req.usuario!.id
   })))
 
+// D29: el acta de seguimiento acredita que la sanción o la vulneración se debió solo a la entrega
+// tardía del escrito: el caso no causa remuneración. Lo marca el coordinador
+router.patch('/decisiones/:id', requiereRol(ROLES.COORDINADOR), param('id').isInt(), body('sancionAtribuible').isBoolean(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const decision = await Decision.findByPk(Number(req.params.id))
+    if (!decision) throw new ErrorNegocio('El fallo no existe', 404)
+    if (decision.favorable !== false) throw new ErrorNegocio('Solo un fallo desfavorable puede tener sanción atribuible')
+    res.json(await decision.update({ sancionAtribuible: req.body.sancionAtribuible === true }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
 // La entidad pidió el memorial por otro canal: el coordinador abre el cumplimiento sin esperar el correo
 router.post('/decisiones/:id/cumplimiento', requiereRol(ROLES.COORDINADOR), param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {

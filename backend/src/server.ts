@@ -16,6 +16,8 @@ import catalogosRouter from './routes/catalogosRouter'
 import archivosRouter from './routes/archivosRouter'
 import carguesRouter from './routes/carguesRouter'
 import seguimientoRouter from './routes/seguimientoRouter'
+import tableroRouter from './routes/tableroRouter'
+import { crearVistasTablero, refrescarAns } from './services/tablero'
 
 // Bitácora de cambios de los casos (hooks de los modelos): antes de atender peticiones
 activarHistorialCasos()
@@ -27,6 +29,11 @@ export async function conectarBase() {
     await db.sync({ alter: process.env.NODE_ENV !== 'production' })
     await sembrarBase()
     await cargarCalendario(true)
+    // Vistas de Power BI y foto del ANS (D28): si fallan, la API sigue arriba
+    await crearVistasTablero().catch(error => console.error(colors.red('❌ Vistas del tablero'), error))
+    await cargarParametros(true)
+    refrescarAns(true).catch(error => console.error(colors.red('❌ ANS del tablero'), error))
+    setInterval(() => { refrescarAns().catch(error => console.error(colors.red('❌ ANS del tablero'), error)) }, 30 * 60_000).unref()
     console.log(colors.blue.bold('Conexión exitosa a la base de tutelas'))
   } catch (error) {
     console.log(colors.red.bold('Falló la conexión a la base de datos'))
@@ -61,5 +68,6 @@ app.use('/api/catalogos', autenticacion, catalogosRouter)
 app.use('/api/archivos', autenticacion, archivosRouter)
 app.use('/api/cargues', autenticacion, carguesRouter)
 app.use('/api/seguimiento', autenticacion, seguimientoRouter)
+app.use('/api/tablero', autenticacion, tableroRouter)
 
 export default app

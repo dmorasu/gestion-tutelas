@@ -55,6 +55,12 @@ export const PARAMETROS_BASE = {
   MINUTOS_ALERTA_SIN_ATENDER: { valor: 30, descripcion: 'Una asignación sin atender después de estos minutos se avisa al coordinador (en horario hábil)' },
   ACUSE_AUTOMATICO: { valor: true, descripcion: 'Enviar la confirmación de recibido con el número interno al registrar la asignación' },
   REPARTO_AUTOMATICO: { valor: true, descripcion: 'Asignar el auxiliar con menos casos abiertos del equipo que atiende la etapa' },
+  DESCUENTOS_ANS: {
+    valor: { leveHasta: 5, moderadoHasta: 10, leve: 0.5, moderado: 1.5, grave: 3, tope: 10, siempreGraves: ['ANS-12', 'ANS-13'], reincidencia: { codigos: ['ANS-01', 'ANS-02', 'ANS-03'], meses: 3 } },
+    duda: 'D29', fuente: 'Dudas TI D29',
+    descripcion: 'Descuentos por indicador sobre la factura del mes (antes de IVA): leve hasta leveHasta puntos bajo la meta, moderado hasta moderadoHasta, grave más (o ANS-12/13); tope mensual y reincidencia (grave en ANS-01, 02 o 03 tres meses seguidos). Los valores están entre corchetes en el contrato'
+  },
+  VALOR_FACTURA_MENSUAL: { valor: 0, duda: 'D29', descripcion: 'Valor de la factura del mes antes de IVA (pesos), para mostrar el descuento en dinero. 0 = solo en porcentaje' },
   SEMAFORO_HORAS_ROJO: { valor: 4, descripcion: 'Semáforo rojo: menos de estas horas para la fecha límite (o vencido)' },
   SEMAFORO_HORAS_AMARILLO: { valor: 24, descripcion: 'Semáforo amarillo: menos de estas horas para la fecha límite' }
 } satisfies Record<string, Definicion>

@@ -1,8 +1,9 @@
 import Link from "next/link"
-import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, type LucideIcon } from "lucide-react"
+import { redirect } from "next/navigation"
+import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, ChartColumn, type LucideIcon } from "lucide-react"
 import { fetchApi } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
-import { NOMBRES_ROLES, modulosPermitidos, tieneRol, type CodigoRol } from "@/src/auth/permisos"
+import { NOMBRES_ROLES, modulosPermitidos, soloConsulta, tieneRol, type CodigoRol } from "@/src/auth/permisos"
 import { BUZONES, CRITICIDADES, ETAPAS, fechaHora } from "@/src/lib/formato"
 
 // Aspecto de cada módulo (las clases van completas: Tailwind solo genera las que lee literalmente)
@@ -10,6 +11,7 @@ const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string
   "/correos": { Icono: Inbox, fondo: "from-cyan-400 to-sky-600", sombra: "shadow-cyan-500/30", borde: "hover:border-cyan-300", halo: "bg-cyan-400" },
   "/casos": { Icono: LayoutList, fondo: "from-orange-400 to-red-600", sombra: "shadow-orange-500/30", borde: "hover:border-orange-300", halo: "bg-orange-400" },
   "/seguimiento": { Icono: Gauge, fondo: "from-slate-600 to-slate-900", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-500" },
+  "/tablero": { Icono: ChartColumn, fondo: "from-blue-400 to-indigo-600", sombra: "shadow-blue-500/30", borde: "hover:border-blue-300", halo: "bg-blue-400" },
   "/indicadores": { Icono: Target, fondo: "from-emerald-400 to-teal-600", sombra: "shadow-emerald-500/30", borde: "hover:border-emerald-300", halo: "bg-emerald-400" },
   "/alertas": { Icono: Bell, fondo: "from-red-400 to-rose-600", sombra: "shadow-red-500/30", borde: "hover:border-red-300", halo: "bg-red-400" },
   "/informes": { Icono: FileSpreadsheet, fondo: "from-sky-400 to-blue-600", sombra: "shadow-sky-500/30", borde: "hover:border-sky-300", halo: "bg-sky-400" },
@@ -50,6 +52,8 @@ const saludo = () => {
 
 export default async function InicioPage() {
   const sesion = await obtenerSesion()
+  // El perfil de consulta (cliente) entra directo al tablero
+  if (soloConsulta(sesion.roles)) redirect("/tablero")
   const modulos = modulosPermitidos(sesion.roles)
   const registra = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const [resumen, buzon] = await Promise.all([
