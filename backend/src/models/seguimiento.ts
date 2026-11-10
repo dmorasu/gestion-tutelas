@@ -14,8 +14,8 @@ import { Archivo } from './correos'
 export class Alerta extends Model {
   @Index
   @AllowNull(false)
-  @Column(DataType.STRING(20))
-  declare tipo: 'TERMINO_PROXIMO' | 'TERMINO_VENCIDO' | 'DESACATO' | 'FALTA_INSUMOS' | 'DUPLICIDAD'
+  @Column(DataType.STRING(30))
+  declare tipo: 'TERMINO_PROXIMO' | 'TERMINO_VENCIDO' | 'DESACATO' | 'FALTA_INSUMOS' | 'DUPLICIDAD' | 'CUMPLIMIENTO_PENDIENTE'
 
   @ForeignKey(() => Caso)
   @AllowNull(false)

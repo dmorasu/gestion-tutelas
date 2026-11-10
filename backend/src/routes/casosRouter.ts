@@ -8,10 +8,11 @@ import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES } from '../services/constantes'
+import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO } from '../services/constantes'
 import { normalizarRadicado } from '../utils/radicado'
 import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
+import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
 import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
 import { modoEnvio, borradorLibre, enviarLibre } from '../services/buzon/correosSalida'
@@ -192,7 +193,7 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     ])
     const datos = caso.toJSON() as Record<string, unknown> & { actuaciones?: Record<string, unknown>[] }
     datos.actuaciones = (caso.actuaciones ?? []).map(a => ({ ...a.toJSON(), semaforo: a.estado === 'CERRADA' ? null : semaforoDe(a) }))
-    res.json({ caso: datos, correos, archivos, motivosCierre: flujo.MOTIVOS_CIERRE, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    res.json({ caso: datos, correos, archivos, motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
@@ -350,5 +351,22 @@ router.post('/actuaciones/:id/radicacion', param('id').isInt(), body('fecha').is
 
 router.post('/actuaciones/:id/cerrar', requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE, ROLES.REVISOR), param('id').isInt(), body('motivo').isString(), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.cerrarActuacion({ actuacionId: a.id, motivo: req.body.motivo })))
+
+// ── Fallos (D12, D13): se registran aunque la actuación esté cerrada ──
+router.post('/actuaciones/:id/decision', param('id').isInt(), body('instancia').isIn(INSTANCIAS), body('sentido').isString(),
+  body('fechaDecision').optional({ values: 'falsy' }).isISO8601(), body('fechaNotificacion').optional({ values: 'falsy' }).isISO8601(), manejarErroresEntrada,
+  paso('RESPONSABLE', (req, a) => registrarDecision({
+    actuacionId: a.id, instancia: req.body.instancia, sentido: req.body.sentido, fechaDecision: req.body.fechaDecision || null,
+    fechaNotificacion: req.body.fechaNotificacion || null, notificadaPorCorreo: req.body.notificadaPorCorreo === true, usuarioId: req.usuario!.id
+  })))
+
+// La entidad pidió el memorial por otro canal: el coordinador abre el cumplimiento sin esperar el correo
+router.post('/decisiones/:id/cumplimiento', requiereRol(ROLES.COORDINADOR), param('id').isInt(), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await abrirCumplimiento({ decisionId: Number(req.params.id), usuarioId: req.usuario!.id }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
 
 export default router

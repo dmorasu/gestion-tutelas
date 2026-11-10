@@ -104,6 +104,23 @@ export const PLANTILLAS = {
 } as const satisfies Record<string, { buzon: Buzon, nombre: string, titulo: string }>
 export type CodigoPlantilla = keyof typeof PLANTILLAS
 
+// Tipo de escrito de cada actuación (D9 y D14). El memorial de cumplimiento (fallo desfavorable) y
+// la respuesta al requerimiento previo son escritos distintos: el requerimiento puede llegar con o
+// sin memorial enviado. En la impugnación, la entidad impugna o responde la del accionante (descorre)
+export const TIPOS_ESCRITO = {
+  ACCION: 'Contestación de la acción',
+  IMPUGNACION: 'Escrito de impugnación',
+  DESCORRE: 'Respuesta a la impugnación del accionante (descorre)',
+  CUMPLIMIENTO: 'Memorial de cumplimiento',
+  REQUERIMIENTO_PREVIO: 'Respuesta al requerimiento previo',
+  DESACATO: 'Respuesta al incidente de desacato',
+  PQRS: 'Respuesta a la PQRS'
+} as const
+export type TipoEscrito = keyof typeof TIPOS_ESCRITO
+
+export const tipoEscrito = (a: { etapa: Etapa, origenImpugnacion?: string | null }): TipoEscrito =>
+  a.etapa === 'IMPUGNACION' && a.origenImpugnacion === 'ACCIONANTE' ? 'DESCORRE' : a.etapa
+
 // Sentidos de las decisiones (D13: "Concede parcialmente", "Hecho superado" y los de desacato)
 export const SENTIDOS_DECISION = [
   'CONCEDE', 'CONCEDE_PARCIAL', 'NIEGA', 'IMPROCEDENTE', 'HECHO_SUPERADO', // primera instancia

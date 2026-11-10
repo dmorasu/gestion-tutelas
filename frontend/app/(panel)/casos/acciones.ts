@@ -25,6 +25,14 @@ export async function pasoActuacion(casoId: number, actuacionId: number, paso: s
   return { ok: true, datos: await r.json().catch(() => null) }
 }
 
+// D12: la entidad pidió el memorial por otro canal y el coordinador abre el cumplimiento
+export async function abrirCumplimiento(casoId: number, decisionId: number): Promise<Resultado> {
+  const r = await fetchApi(`/casos/decisiones/${decisionId}/cumplimiento`, { method: "POST" })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true, datos: await r.json() }
+}
+
 export async function registrarManual(datos: Record<string, unknown>): Promise<Resultado> {
   const r = await fetchApi("/casos", { method: "POST", body: JSON.stringify(datos) })
   if (!r.ok) return { ok: false, errores: await leerErrores(r) }

@@ -84,4 +84,19 @@ export const PROPOSITOS: Record<string, string> = {
   ASIGNACION_PAQUETE: "Asignación en paquete (Excel)"
 }
 
+// Fallos (D13)
+export const INSTANCIAS: Record<string, string> = { PRIMERA: "Primera instancia", SEGUNDA: "Segunda instancia", DESACATO: "Incidente de desacato" }
+export const SENTIDOS: Record<string, string> = {
+  CONCEDE: "Concede", CONCEDE_PARCIAL: "Concede parcialmente", NIEGA: "Niega", IMPROCEDENTE: "Improcedente", HECHO_SUPERADO: "Hecho superado",
+  CONFIRMA: "Confirma", REVOCA: "Revoca", MODIFICA: "Modifica", SANCIONA: "Sanciona", NO_SANCIONA: "No sanciona"
+}
+
+// El escrito de cada actuación (D9 y D14)
+export const TIPOS_ESCRITO: Record<string, string> = {
+  ACCION: "Contestación de la acción", IMPUGNACION: "Escrito de impugnación", DESCORRE: "Respuesta a la impugnación del accionante (descorre)",
+  CUMPLIMIENTO: "Memorial de cumplimiento", REQUERIMIENTO_PREVIO: "Respuesta al requerimiento previo", DESACATO: "Respuesta al incidente de desacato", PQRS: "Respuesta a la PQRS"
+}
+export const tipoEscrito = (a: { etapa: string, origenImpugnacion?: string | null }) =>
+  TIPOS_ESCRITO[a.etapa === "IMPUGNACION" && a.origenImpugnacion === "ACCIONANTE" ? "DESCORRE" : a.etapa] ?? "Escrito"
+
 export const UNIDADES_TERMINO: Record<string, string> = { HORAS: "Horas (en días hábiles)", DIAS_HABILES: "Días hábiles", DIAS_CALENDARIO: "Días calendario" }

@@ -8,6 +8,7 @@ import { parametro } from './parametros'
 import { recalcularPlazos } from './registroCasos'
 import { revisorDeEquipo } from './reparto'
 import { textoFechaHora } from '../utils/fechaColombia'
+import { tipoEscrito } from './constantes'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -124,7 +125,7 @@ export const escritoEnElaboracion = async (actuacionId: number) => {
   const ultimo = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']] })
   if (ultimo && ABIERTOS.includes(ultimo.estado)) return ultimo
   if (ultimo && ultimo.estado !== 'DEVUELTO') throw new ErrorNegocio(`La V${ultimo.version} ya se entregó: espere la respuesta de la entidad`)
-  const escrito = await Escrito.create({ actuacionId, version: (ultimo?.version ?? 0) + 1, tipo: a.etapa, estado: 'BORRADOR' })
+  const escrito = await Escrito.create({ actuacionId, version: (ultimo?.version ?? 0) + 1, tipo: tipoEscrito(a), estado: 'BORRADOR' })
   if (['POR_ASUMIR', 'EN_ANALISIS', 'DEVUELTO'].includes(a.estado)) await a.update({ estado: 'EN_PROYECCION' })
   return escrito
 }

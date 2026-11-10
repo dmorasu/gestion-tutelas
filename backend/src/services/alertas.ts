@@ -1,5 +1,5 @@
 import { Op } from 'sequelize'
-import { Actuacion, Alerta, Caso, SolicitudInsumo } from '../models'
+import { Actuacion, Alerta, Caso, Decision, SolicitudInsumo } from '../models'
 import { asignacionEfectiva, finDeDiasHabilesSiguientes } from './plazos'
 import { parametro } from './parametros'
 import { enviarPlantilla } from './buzon/correosSalida'
@@ -19,7 +19,8 @@ export const NOMBRES_ALERTA: Record<Alerta['tipo'], string> = {
   TERMINO_VENCIDO: 'Término vencido sin entrega',
   DESACATO: 'Desacato o requerimiento de cumplimiento',
   FALTA_INSUMOS: 'Falta de insumos',
-  DUPLICIDAD: 'Duplicidad con otro operador'
+  DUPLICIDAD: 'Duplicidad con otro operador',
+  CUMPLIMIENTO_PENDIENTE: 'Fallo desfavorable sin asignación de cumplimiento'
 }
 
 const SIN_ENTREGAR = ['POR_ASUMIR', 'EN_ANALISIS', 'EN_INSUMOS', 'EN_PROYECCION', 'EN_REVISION', 'AJUSTE_INTERNO', 'DEVUELTO']
@@ -71,6 +72,18 @@ export const detectarAlertas = async () => {
   for (const lista of porActuacion.values()) {
     const a = lista[0].actuacion!
     nuevas += await crear('FALTA_INSUMOS', a, `No han llegado los insumos pedidos el ${textoFechaHora(lista[0].fechaSolicitud)}: ${lista.map(s => s.descripcion).join('; ')}. El ANS sigue suspendido, pero el término judicial corre.`, ahora)
+  }
+  // D12: fallo desfavorable cuya asignación de cumplimiento no ha llegado en DIAS_ESPERA_CUMPLIMIENTO
+  // días hábiles desde la notificación (o desde que se registró, si no hay notificación)
+  const esperando = await Decision.findAll({
+    where: { requiereCumplimiento: true, actuacionCumplimientoId: null },
+    include: [{ model: Actuacion, include: [{ model: Caso, attributes: ['id', 'numeroInterno', 'radicado'] }] }]
+  })
+  for (const dec of esperando) {
+    const desde = dec.fechaNotificacion ?? dec.createdAt
+    if (!dec.actuacion || finDeDiasHabilesSiguientes(desde, parametro<number>('DIAS_ESPERA_CUMPLIMIENTO')) > ahora) continue
+    nuevas += await crear('CUMPLIMIENTO_PENDIENTE', dec.actuacion,
+      `El fallo de ${dec.instancia === 'PRIMERA' ? 'primera' : 'segunda'} instancia${dec.fechaDecision ? ` del ${dec.fechaDecision.split('-').reverse().join('/')}` : ''} es desfavorable y exige memorial de cumplimiento, aunque se impugne. Aún no llega la asignación del cumplimiento.`, ahora)
   }
   return nuevas
 }

@@ -92,7 +92,9 @@ export const calcularAns = async (desde: string, hasta: string): Promise<Indicad
   }
   const ans01 = oportunidad(a => a.etapa === 'ACCION' && !esCritica(a), true)
   const ans02 = oportunidad(a => esCritica(a), false)
-  const ans03 = oportunidad(a => a.etapa === 'IMPUGNACION' && !esCritica(a), true)
+  // D14: el descorre (respuesta a la impugnación del accionante) cuenta si el parámetro lo dice
+  const conDescorre = parametro<boolean>('ANS03_INCLUYE_DESCORRE')
+  const ans03 = oportunidad(a => a.etapa === 'IMPUGNACION' && !esCritica(a) && (conDescorre || a.origenImpugnacion !== 'ACCIONANTE'), true)
 
   // ANS-04: avance del plan de choque (acumulado desde el acta de inicio)
   let ans04: Indicador

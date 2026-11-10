@@ -245,7 +245,7 @@ export class Actuacion extends Model {
   @HasMany(() => RadicacionJuzgado)
   declare radicaciones?: RadicacionJuzgado[]
 
-  @HasMany(() => Decision)
+  @HasMany(() => Decision, 'actuacionId')
   declare decisiones?: Decision[]
 }
 
@@ -439,7 +439,7 @@ export class Decision extends Model {
   @Column(DataType.INTEGER)
   declare actuacionId: number
 
-  @BelongsTo(() => Actuacion, { onDelete: 'CASCADE' })
+  @BelongsTo(() => Actuacion, { foreignKey: 'actuacionId', onDelete: 'CASCADE' })
   declare actuacion?: Actuacion
 
   @AllowNull(false)
@@ -463,4 +463,21 @@ export class Decision extends Model {
   // Primera instancia: hasta cuándo se puede impugnar (D5)
   @Column(DataType.DATE)
   declare fechaVenceImpugnacion: Date | null
+
+  // D5: notificada por correo electrónico (Ley 2213 de 2022 puede sumar días al término)
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare notificadaPorCorreo: boolean
+
+  // D12: fallo desfavorable que exige memorial de cumplimiento, y la actuación que lo atiende
+  // (null mientras la entidad no asigna el cumplimiento)
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare requiereCumplimiento: boolean
+
+  @ForeignKey(() => Actuacion)
+  @Column(DataType.INTEGER)
+  declare actuacionCumplimientoId: number | null
 }

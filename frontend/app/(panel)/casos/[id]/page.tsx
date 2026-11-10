@@ -26,6 +26,7 @@ type Detalle = {
   correos: CorreoCaso[]
   archivos: (ArchivoCaso & DocumentoCaso)[]
   motivosCierre: string[]
+  sentidos: Record<string, string[]>
   envio: string
   almacen: string
 }
@@ -40,7 +41,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, envio, almacen }, historial, usuarios] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, envio, almacen }, historial, usuarios] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
     obtener<Usuario[]>("/catalogos/usuarios")
@@ -145,6 +146,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
               puedeRevisar={revisa(actual)}
               puedeCerrar={gestiona || revisa(actual)}
               motivosCierre={motivosCierre}
+              sentidos={sentidos}
             />
           )}
 

@@ -6,7 +6,8 @@ import { actualizarActuacion, asumirActuacion } from "../acciones"
 import Semaforo from "@/components/ui/Semaforo"
 import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
-import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, valorFechaHoraLocal } from "@/src/lib/formato"
+import Fallos, { type DecisionFila } from "./componentes/Fallos"
+import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal } from "@/src/lib/formato"
 
 export type Responsable = { id: number, nombre: string }
 export type ActuacionDetalle = {
@@ -14,6 +15,7 @@ export type ActuacionDetalle = {
   fechaAsignacion: string, fechaAsignacionEfectiva: string | null, fechaNotificacion: string | null,
   terminoValor: number | null, terminoUnidad: string | null, fechaVencimientoInformada: string | null, fechaVencimiento: string | null, fechaLimiteEntrega: string | null,
   auxiliarId: number | null, revisorId: number | null, requiereInsumos: boolean, loQueSePide: string | null,
+  origenImpugnacion: string | null, datosFaltantesPendientes: boolean, decisiones: DecisionFila[],
   auxiliar: Responsable | null, revisor: Responsable | null, equipo: { id: number, nombre: string } | null
   insumos: Insumo[], escritos: EscritoFila[]
 }
@@ -21,12 +23,12 @@ export type ActuacionDetalle = {
 type Props = {
   casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number,
   auxiliares: Responsable[], revisores: Responsable[], archivos: ArchivoCaso[]
-  puedeTrabajar: boolean, puedeRevisar: boolean, puedeCerrar: boolean, motivosCierre: string[]
+  puedeTrabajar: boolean, puedeRevisar: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, sentidos }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
@@ -90,8 +92,12 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           <Dato nombre="Revisor" valor={`${a.revisor?.nombre ?? "Sin asignar"}${a.equipo ? ` · ${a.equipo.nombre}` : ""}`} />
           <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />
           <Dato nombre="Insumos" valor={a.requiereInsumos ? "Requiere" : "No requiere"} />
+          <Dato nombre="Escrito" valor={tipoEscrito(a)} />
           {a.loQueSePide && <div className="sm:col-span-3"><Dato nombre="Lo que se pide al juez" valor={a.loQueSePide} /></div>}
-          {a.requiereInsumos && !a.fechaLimiteEntrega && (
+          {a.datosFaltantesPendientes && (
+            <p className="sm:col-span-3 text-xs text-amber-700">El ANS está suspendido hasta que lleguen los datos faltantes de la asignación. El término judicial sigue corriendo.</p>
+          )}
+          {a.requiereInsumos && !a.datosFaltantesPendientes && !a.fechaLimiteEntrega && (
             <p className="sm:col-span-3 text-xs text-amber-700">El ANS está suspendido hasta que lleguen los insumos. El término judicial sigue corriendo.</p>
           )}
         </dl>
@@ -169,7 +175,13 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         puedeRevisar={puedeRevisar}
         puedeCerrar={puedeCerrar}
         motivosCierre={motivosCierre}
+        tipoEscrito={tipoEscrito(a)}
       />
+      {["ACCION", "IMPUGNACION", "DESACATO"].includes(a.etapa) && (
+        <div className="mt-5">
+          <Fallos casoId={casoId} actuacionId={a.id} decisiones={a.decisiones ?? []} sentidos={sentidos} puedeRegistrar={puedeTrabajar} coordina={coordina} />
+        </div>
+      )}
     </section>
   )
 }

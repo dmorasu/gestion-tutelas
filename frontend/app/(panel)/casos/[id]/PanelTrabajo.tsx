@@ -26,6 +26,7 @@ type Props = {
   puedeRevisar: boolean
   puedeCerrar: boolean
   motivosCierre: string[]
+  tipoEscrito: string
 }
 
 // Cómo se nombra cada documento dentro de la versión del escrito
@@ -38,7 +39,7 @@ const ESTADOS_ESCRITO: Record<string, string> = {
   ENTREGADO: "Entregado", DEVUELTO: "Devuelto por la entidad", APROBADO: "Aprobado"
 }
 
-export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre }: Props) {
+export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "devolverAux" | "respuesta" | "radicacion" | "cierre">("")
   // Texto con el que abre la solicitud de datos faltantes (el del expediente viene ya escrito)
@@ -70,7 +71,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
       {/* ESCRITO */}
       <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Escrito</h4>
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{tipoEscrito}</h4>
           <div className="flex flex-wrap gap-2">
             {puedeSubirEscrito && <SubirArchivos actuacionId={a.id} tipos={["ESCRITO", "ANEXO"]} />}
             {puedeTrabajar && enElaboracion && (
@@ -157,7 +158,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
           <ul className="divide-y divide-slate-100">
             {a.insumos.map(i => (
               <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
-                <span>{i.descripcion}{!i.minimo && <span className="text-xs text-slate-500"> (complementario)</span>}</span>
+                <span>{i.descripcion}</span>
                 <span className="text-xs">
                   {i.fechaRecepcion
                     ? <span className="text-emerald-700">Recibido {fechaHora(i.fechaRecepcion)}</span>
@@ -222,10 +223,8 @@ function FormInsumos({ pendiente, enviar }: { pendiente: boolean, enviar: (insum
     <div className="space-y-2">
       {filas.map((f, i) => (
         <div key={i} className="flex gap-2 items-center">
+          {/* D6: los insumos mínimos son los de la asignación (datos faltantes); estos son para preparar el escrito */}
           <input value={f.descripcion} onChange={e => cambiar(i, { descripcion: e.target.value })} placeholder={`Insumo ${i + 1}`} className="campo" />
-          <label className="flex items-center gap-1 text-xs whitespace-nowrap" title="Sin los insumos mínimos no empieza a contar el ANS">
-            <input type="checkbox" checked={f.minimo} onChange={e => cambiar(i, { minimo: e.target.checked })} /> Mínimo
-          </label>
         </div>
       ))}
       <div className="flex gap-2">

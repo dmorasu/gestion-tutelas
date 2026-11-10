@@ -1,6 +1,6 @@
 import { Op, type Transaction } from 'sequelize'
 import { db } from '../config/db'
-import { Caso, Parte, Actuacion, Correo, Archivo, RadicadoOtroOperador, SolicitudInsumo, Usuario } from '../models'
+import { Caso, Parte, Actuacion, Correo, Archivo, RadicadoOtroOperador, SolicitudInsumo, Usuario, Decision } from '../models'
 import { ErrorNegocio } from '../utils/errores'
 import { esRadicadoValido, normalizarRadicado } from '../utils/radicado'
 import { asignacionEfectiva, calcularCriticidad, fechaLimiteEntrega, vencimientoTermino } from './plazos'
@@ -169,6 +169,14 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
       fechaImpugnacion: datos.etapa === 'IMPUGNACION' ? fechaAsignacion : null,
       actuacionOrigenId: actuacionOrigen?.id ?? null
     }, { transaction })
+
+    // D12: el cumplimiento atiende los fallos desfavorables del caso que lo estaban esperando
+    if (datos.etapa === 'CUMPLIMIENTO') {
+      const delCaso = await Actuacion.findAll({ where: { casoId: caso.id }, attributes: ['id'], transaction })
+      await Decision.update({ actuacionCumplimientoId: actuacion.id }, {
+        where: { requiereCumplimiento: true, actuacionCumplimientoId: null, actuacionId: delCaso.map(x => x.id) }, transaction
+      })
+    }
 
     if (correo) {
       await correo.update({ estado: 'ASOCIADO', casoId: caso.id, actuacionId: actuacion.id, proposito: 'ASIGNACION', usuarioId }, { transaction })

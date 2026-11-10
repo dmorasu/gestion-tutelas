@@ -187,7 +187,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
             <label className="etiqueta">Quién impugna</label>
             <select name="origenImpugnacion" defaultValue="ACCIONADO" className="campo sm:w-72">
               <option value="ACCIONADO">La entidad (accionada)</option>
-              <option value="ACCIONANTE">El accionante</option>
+              <option value="ACCIONANTE">El accionante (se responde: descorre)</option>
             </select>
           </div>
         )}
