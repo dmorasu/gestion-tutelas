@@ -17,7 +17,7 @@ import archivosRouter from './routes/archivosRouter'
 import carguesRouter from './routes/carguesRouter'
 import seguimientoRouter from './routes/seguimientoRouter'
 import tableroRouter from './routes/tableroRouter'
-import { crearVistasTablero, refrescarAns } from './services/tablero'
+import { borrarVistasTablero, crearVistasTablero, refrescarAns } from './services/tablero'
 
 // Bitácora de cambios de los casos (hooks de los modelos): antes de atender peticiones
 activarHistorialCasos()
@@ -26,7 +26,9 @@ export async function conectarBase() {
   try {
     await db.authenticate()
     // sync() crea tablas y columnas nuevas; los cambios de tipo irán como ALTER idempotentes (patrón Nodex)
-    await db.sync({ alter: process.env.NODE_ENV !== 'production' })
+    const alterar = process.env.NODE_ENV !== 'production'
+    if (alterar) await borrarVistasTablero()
+    await db.sync({ alter: alterar })
     await sembrarBase()
     await cargarCalendario(true)
     // Vistas de Power BI y foto del ANS (D28): si fallan, la API sigue arriba

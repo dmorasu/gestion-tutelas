@@ -161,3 +161,33 @@ export class AnsPeriodo extends Model {
   @Column(DataType.DECIMAL(5, 2))
   declare descuento: number | null
 }
+
+// =====================================
+// ASISTENCIA DIARIA (D27, ANS-11): una fila por persona y día hábil. El equipo mínimo se mide por
+// rol contra el parámetro EQUIPO_MINIMO
+// =====================================
+@Table({ tableName: 'asistencias', indexes: [{ unique: true, fields: ['fecha', 'usuarioId'] }] })
+export class Asistencia extends Model {
+  @AllowNull(false)
+  @Column(DataType.DATEONLY)
+  declare fecha: string
+
+  @ForeignKey(() => Usuario)
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare usuarioId: number
+
+  @BelongsTo(() => Usuario, { foreignKey: 'usuarioId', onDelete: 'CASCADE' })
+  declare usuario?: Usuario
+
+  @AllowNull(false)
+  @Column(DataType.STRING(15))
+  declare estado: 'PRESENTE' | 'AUSENTE' | 'INCAPACIDAD' | 'VACACIONES' | 'PERMISO'
+
+  @Column(DataType.STRING(200))
+  declare observacion: string | null
+
+  // Quién la registró
+  @Column(DataType.INTEGER)
+  declare registradaPorId: number | null
+}

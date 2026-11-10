@@ -24,6 +24,7 @@ type Datos = {
     total: { suma: number, aplicado: number, topado: boolean, valor: number | null }
     reincidencia: string[]
     sinRemuneracion: { decision_id: number, caso_id: number, numero_interno: string | null, radicado: string, instancia: string, sentido: string }[]
+    reduccionEquipo: { corte: string, asignadas: number, mitad: number } | null
   }
 }
 
@@ -165,6 +166,11 @@ export default async function TableroPage() {
           {t.interno.reincidencia.length > 0 && (
             <p className="mb-3 rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
               Incumplimiento grave tres meses seguidos en {t.interno.reincidencia.join(", ")}: con requerimiento del supervisor y plan de mejora no cumplido, es incumplimiento reiterado.
+            </p>
+          )}
+          {t.interno.reduccionEquipo && (
+            <p className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              A los 10 días hábiles del inicio ({t.interno.reduccionEquipo.corte.split("-").reverse().join("/")}) se habían asignado {t.interno.reduccionEquipo.asignadas} casos, menos de la mitad del plan ({t.interno.reduccionEquipo.mitad}): según la cláusula segunda, el equipo mínimo puede disminuir.
             </p>
           )}
           {t.interno.descuentos.length === 0 ? <p className="text-sm text-slate-500">Sin descuentos en el mes.</p> : (

@@ -10,6 +10,7 @@ import { tableroDiario, calcularAns } from '../services/indicadores'
 import { detectarAlertas, emitirAlerta, descartarAlerta, NOMBRES_ALERTA } from '../services/alertas'
 import { generarInforme, periodoAnterior } from '../services/informes'
 import { cargarArchivoMaestro } from '../services/archivoMaestro'
+import { asistenciaDelDia, guardarAsistencia } from '../services/asistencia'
 import { ROLES } from '../services/constantes'
 import { enBogota } from '../utils/fechaColombia'
 import { responderError, ErrorNegocio } from '../utils/errores'
@@ -125,6 +126,24 @@ router.post('/archivo-maestro', coordinan, carga.single('archivo'), async (req, 
     if (!req.file) throw new ErrorNegocio('Adjunte el archivo maestro')
     const nombre = Buffer.from(req.file.originalname, 'latin1').toString('utf8')
     res.json(await cargarArchivoMaestro(req.file.buffer, nombre, String(req.body.operador ?? '').trim() || null))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// ── Asistencia diaria (D27, ANS-11) ──
+const registranAsistencia = requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE)
+router.get('/asistencia', registranAsistencia, query('fecha').optional().isISO8601(), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await asistenciaDelDia(String(req.query.fecha ?? enBogota(new Date()).dia).slice(0, 10)))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+router.put('/asistencia', registranAsistencia, body('fecha').isISO8601(), body('registros').isArray({ min: 1 }), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await guardarAsistencia({ fecha: String(req.body.fecha).slice(0, 10), registros: req.body.registros, usuarioId: req.usuario!.id }))
   } catch (error) {
     responderError(res, error)
   }

@@ -5,6 +5,7 @@ import { limiteSolicitudInsumos } from './plazos'
 import { enBogota, instanteBogota, sumarDias, textoFechaHora } from '../utils/fechaColombia'
 import { contarDiasHabiles, esDiaHabil, sumarDiasHabiles } from '../utils/diasHabiles'
 import { ESTADOS_ACTUACION, ETAPAS } from './constantes'
+import { medirEquipoMinimo } from './asistencia'
 
 // =====================================
 // INDICADORES (ANS) Y TABLERO DIARIO
@@ -12,7 +13,8 @@ import { ESTADOS_ACTUACION, ETAPAS } from './constantes'
 // menos de DIAS_MINIMOS_ANS01 días hábiles al vencimiento se miden solo por calidad; la espera de
 // insumos ya está descontada en la fecha límite (el ANS se suspende mientras se esperan).
 // Los plazos se comparan contra la fecha límite que había al entregar (escritos.limiteAns).
-// ANS-11 (equipo mínimo) y ANS-12 (incidentes de datos) no se llevan en la app.
+// ANS-11 (equipo mínimo) se mide con la asistencia diaria (services/asistencia). ANS-12 (incidentes
+// de datos) no se lleva en la app.
 // =====================================
 
 type Fila = { casoId: number, numeroInterno: string | null, radicado: string, detalle: string }
@@ -27,7 +29,7 @@ const fila = (caso: { id?: number, numeroInterno: string | null, radicado: strin
 
 export const rango = (desde: string, hasta: string) => ({ ini: instanteBogota(desde, '00:00'), fin: instanteBogota(sumarDias(hasta, 1), '00:00') })
 
-const META_POR_DEFECTO: Record<string, number> = { 'ANS-10': 100, 'ANS-13': 0 }
+const META_POR_DEFECTO: Record<string, number> = { 'ANS-10': 100, 'ANS-11': 100, 'ANS-13': 0 }
 const meta = (codigo: string) => parametro<Record<string, number>>('META_ANS')[codigo] ?? META_POR_DEFECTO[codigo] ?? null
 
 const armar = (codigo: string, nombre: string, regla: string, sentido: Indicador['sentido'], cumplen: number, total: number, incumplidos: Fila[]): Indicador => {
@@ -178,6 +180,13 @@ export const calcularAns = async (desde: string, hasta: string): Promise<Indicad
   const ans13 = armar('ANS-13', 'No duplicidad', 'Escritos sobre radicados que el archivo maestro asigna a otro operador', 'CERO',
     0, duplicados.length, duplicados.map(e => fila(e.actuacion?.caso, 'Escrito entregado sobre un radicado de otro operador')))
 
+  // ANS-11: días hábiles con el equipo mínimo completo (D27). Sin acta de inicio no se mide
+  const dias11 = await medirEquipoMinimo(desde, hasta)
+  const ans11 = dias11 === null
+    ? { ...armar('ANS-11', 'Equipo mínimo', 'Falta la fecha del acta de inicio (parámetro FECHA_INICIO_PLAN)', 'MIN', 0, 0, []), cumple: null }
+    : armar('ANS-11', 'Equipo mínimo', 'Días hábiles con el mínimo de personas por rol (las incapacidades no cuentan como falta)', 'MIN',
+      dias11.filter(x => x.cumple).length, dias11.length, dias11.filter(x => !x.cumple).map(x => ({ casoId: 0, numeroInterno: null, radicado: '', detalle: `${x.dia}: ${x.detalle}` })))
+
   const fuera = (codigo: string, nombre: string): Indicador => ({ codigo, nombre, regla: 'Se mide fuera de la app', meta: meta(codigo), sentido: 'MIN', cumplen: 0, total: 0, porcentaje: null, cumple: null, fueraDeApp: true, incumplidos: [] })
 
   return [
@@ -185,7 +194,7 @@ export const calcularAns = async (desde: string, hasta: string): Promise<Indicad
     armar('ANS-02', 'Oportunidad en términos críticos', 'Dentro del día hábil siguiente a la asignación con insumos y antes del vencimiento', 'MIN', ans02.cumplen, ans02.total, ans02.malos),
     armar('ANS-03', 'Oportunidad de impugnaciones', 'Al menos 1 día hábil antes del vencimiento', 'MIN', ans03.cumplen, ans03.total, ans03.malos),
     ans04, ans05, ans06, ans07, ans08, ans10,
-    fuera('ANS-11', 'Equipo mínimo'),
+    ans11,
     fuera('ANS-12', 'Incidentes de seguridad y datos'),
     ans13
   ]

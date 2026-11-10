@@ -55,6 +55,9 @@ export const PARAMETROS_BASE = {
   MINUTOS_ALERTA_SIN_ATENDER: { valor: 30, descripcion: 'Una asignación sin atender después de estos minutos se avisa al coordinador (en horario hábil)' },
   ACUSE_AUTOMATICO: { valor: true, descripcion: 'Enviar la confirmación de recibido con el número interno al registrar la asignación' },
   REPARTO_AUTOMATICO: { valor: true, descripcion: 'Asignar el auxiliar con menos casos abiertos del equipo que atiende la etapa' },
+  EQUIPO_MINIMO: { valor: { ASISTENTE: 5, AUXILIAR: 15, REVISOR: 3, COORDINADOR: 1 }, duda: 'D27', fuente: 'Dudas TI D27', descripcion: 'ANS-11: personas mínimas por rol cada día hábil (cláusula segunda). Puede bajar si a los 10 días hábiles del inicio no se ha asignado el 50 % de los casos' },
+  ASISTENCIA_JUSTIFICADA: { valor: ['INCAPACIDAD'], duda: 'D27', descripcion: 'Ausencias que no cuentan como incumplimiento del equipo mínimo (la persona se cuenta como si estuviera)' },
+  CASOS_TOTALES_PLAN: { valor: 10239, duda: 'D27', fuente: 'Dudas TI D27', descripcion: 'Casos totales del plan de choque: si a los 10 días hábiles del inicio no se ha asignado la mitad, el equipo mínimo puede disminuir' },
   DESCUENTOS_ANS: {
     valor: { leveHasta: 5, moderadoHasta: 10, leve: 0.5, moderado: 1.5, grave: 3, tope: 10, siempreGraves: ['ANS-12', 'ANS-13'], reincidencia: { codigos: ['ANS-01', 'ANS-02', 'ANS-03'], meses: 3 } },
     duda: 'D29', fuente: 'Dudas TI D29',

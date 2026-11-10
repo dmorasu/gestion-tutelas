@@ -6,6 +6,7 @@ import { nivelDe, reincidentes, totalDescuento } from './descuentos'
 import { parametro } from './parametros'
 import { NOMBRES_ETAPAS, TIPOS_ESCRITO } from './constantes'
 import { enBogota, sumarDias } from '../utils/fechaColombia'
+import { reduccionPosible } from './asistencia'
 
 // =====================================
 // TABLERO DE LA OPERACIÓN (D28)
@@ -125,6 +126,12 @@ const VISTAS: Record<string, string> = {
     JOIN actuaciones a ON a.id = d."actuacionId"
     JOIN casos c ON c.id = a."casoId"
     WHERE d."sancionAtribuible"`
+}
+
+// sync({ alter }) vuelve a alterar el tipo de todas las columnas y Postgres no lo deja en columnas
+// que usa una vista: en desarrollo se borran antes del sync y se recrean después
+export const borrarVistasTablero = async () => {
+  for (const nombre of Object.keys(VISTAS).reverse()) await db.query(`DROP VIEW IF EXISTS ${nombre} CASCADE`)
 }
 
 // Se rehacen en cada arranque: si cambió una columna, CREATE OR REPLACE no basta (no deja quitar
@@ -265,6 +272,8 @@ const avisosInternos = async (mes: string) => {
     descuentos: del.map(x => ({ ...x, porcentaje: numero(x.porcentaje), meta: numero(x.meta), descuento: Number(x.descuento) })),
     total: { ...total, valor: factura > 0 ? Math.round(factura * total.aplicado / 100) : null },
     reincidencia: reincidentes(historia),
-    sinRemuneracion
+    sinRemuneracion,
+    // D27: a los 10 días hábiles, con menos de la mitad de los casos asignados, el equipo puede bajar
+    reduccionEquipo: await reduccionPosible()
   }
 }
