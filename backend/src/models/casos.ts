@@ -327,6 +327,11 @@ export class Escrito extends Model {
   @Column(DataType.DATE)
   declare fechaEntregaEntidad: Date | null
 
+  // Fecha límite del ANS al momento de entregar: los indicadores se miden contra ella, no contra
+  // la de hoy (una devolución posterior la cambia)
+  @Column(DataType.DATE)
+  declare limiteAns: Date | null
+
   // Acuse o aprobación de la entidad. Sin acuse el mismo día hábil, la constancia de envío vale como recibo (§17)
   @Column(DataType.DATE)
   declare fechaAcuse: Date | null

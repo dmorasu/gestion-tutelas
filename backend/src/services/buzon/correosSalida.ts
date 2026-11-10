@@ -50,6 +50,10 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
     asunto: `${ASUNTO_BASE} [ENTREGA V1] [Vence: {{vence}}] Caso {{numeroInterno}}`,
     cuerpo: `Buen día.\n\nEntregamos el proyecto de escrito de este caso con sus anexos. Están en la carpeta del enlace.\n\nElaboró: {{auxiliar}}. Revisó: {{revisor}}.\n\n${FIRMA}`
   },
+  ALERTA: {
+    asunto: `${ASUNTO_BASE} [ALERTA: {{tipoAlerta}}] [Vence: {{vence}}] Caso {{numeroInterno}}`,
+    cuerpo: `Buen día.\n\nInformamos la siguiente alerta sobre este caso:\n\n{{detalle}}\n\nQuedamos atentos.\n\n${FIRMA}`
+  },
   ENTREGA_V2: {
     asunto: `${ASUNTO_BASE} [ENTREGA V{{version}}] [Vence: {{vence}}] Caso {{numeroInterno}}`,
     cuerpo: `Buen día.\n\nEntregamos el escrito de este caso ajustado según la devolución, con sus anexos. Están en la carpeta del enlace.\n\nElaboró: {{auxiliar}}. Revisó: {{revisor}}.\n\n${FIRMA}`
@@ -60,7 +64,7 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
 // ellos y nadie la editó, se actualiza sola al borrador nuevo
 const ASUNTOS_ANTERIORES = [/\[Vence: \{\{vence\}\}\]$/, /RECIBIDO - Caso \{\{numeroInterno\}\}$/, /^\[\{\{prefijo\}\}\] \[ASIGNACIÓN EN PAQUETE\]/]
 
-export const MARCADORES = ['prefijo', 'criticidad', 'radicado', 'radicadoFormato', 'numeroInterno', 'actuacion', 'etapa', 'vence', 'fechaAsignacion', 'auxiliar', 'revisor', 'enlace', 'detalle', 'version', 'cantidad'] as const
+export const MARCADORES = ['prefijo', 'criticidad', 'radicado', 'radicadoFormato', 'numeroInterno', 'actuacion', 'etapa', 'vence', 'fechaAsignacion', 'auxiliar', 'revisor', 'enlace', 'detalle', 'version', 'cantidad', 'tipoAlerta'] as const
 
 // Inserta las que falten y actualiza las que siguen siendo el borrador de la firma sin tocar
 export const sembrarPlantillas = async () => {
@@ -136,10 +140,12 @@ const ejemplo = (codigo: CodigoPlantilla): Record<string, string> => ({
   prefijo: parametro<string>('PREFIJO_ASUNTO'),
   criticidad: 'ALTO', radicado: '76001310300120260012300', radicadoFormato: '76001-31-03-001-2026-00123-00', numeroInterno: 'GPA-2026-00123',
   actuacion: 'TUTELA', etapa: 'Contestación', vence: '20/11/2026 17:00', fechaAsignacion: '17/11/2026 09:12', auxiliar: 'Laura Gómez',
-  revisor: 'Andrés Rojas', version: '2', cantidad: '3',
+  revisor: 'Andrés Rojas', version: '2', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER',
   // Solo las entregas llevan enlace (y con él, el botón)
   enlace: codigo.startsWith('ENTREGA') ? 'https://ejemplo.sharepoint.com/sites/Tutelas/Casos/GPA-2026-00123' : '',
-  detalle: codigo === 'ACUSE_PAQUETE'
+  detalle: codigo === 'ALERTA'
+    ? 'El término de la contestación vence el 20/11/2026 17:00 y el escrito aún no se ha entregado.'
+    : codigo === 'ACUSE_PAQUETE'
     ? '- 76001-31-03-001-2026-00123-00 → GPA-2026-00123\n- 76001-31-03-001-2026-00124-00 → GPA-2026-00124\n- 76001-31-03-001-2026-00125-00 → GPA-2026-00125'
     : '1. Historial de comparendos del accionante\n2. Guía de notificación del comparendo\n3. Estado de cuenta actualizado'
 })

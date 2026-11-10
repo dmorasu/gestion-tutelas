@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import clsx from "clsx"
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react"
-import { Home, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Settings2, ChevronDown, type LucideIcon } from "lucide-react"
+import { Home, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Settings2, ChevronDown, Gauge, Target, Bell, FileSpreadsheet, ListChecks, type LucideIcon } from "lucide-react"
 
 type Enlace = { href: string, nombre: string }
 
@@ -13,6 +13,11 @@ export const ICONOS: Record<string, LucideIcon> = {
   "/inicio": Home,
   "/correos": Inbox,
   "/casos": LayoutList,
+  "/seguimiento": Gauge,
+  "/indicadores": Target,
+  "/alertas": Bell,
+  "/informes": FileSpreadsheet,
+  "/archivo-maestro": ListChecks,
   "/equipos": UsersRound,
   "/plantillas": Mail,
   "/parametros": SlidersHorizontal,
@@ -21,7 +26,8 @@ export const ICONOS: Record<string, LucideIcon> = {
 
 // Agrupados en menús desplegables (igual que Nodex). Un grupo con un solo módulo permitido va como enlace
 const GRUPOS: { nombre: string, Icono: LucideIcon, modulos: string[] }[] = [
-  { nombre: "Configuración", Icono: Settings2, modulos: ["/equipos", "/plantillas", "/parametros", "/usuarios"] }
+  { nombre: "Seguimiento", Icono: Gauge, modulos: ["/seguimiento", "/indicadores", "/alertas", "/informes"] },
+  { nombre: "Configuración", Icono: Settings2, modulos: ["/equipos", "/plantillas", "/archivo-maestro", "/parametros", "/usuarios"] }
 ]
 
 const claseEnlace = (activo: boolean) => clsx(

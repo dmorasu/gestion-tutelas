@@ -1,4 +1,5 @@
 import type { Request } from 'express'
+import { Op, type WhereOptions } from 'sequelize'
 import { tieneRol } from '../middleware/auth'
 import { ROLES } from './constantes'
 import { ErrorNegocio } from '../utils/errores'
@@ -13,6 +14,19 @@ type Responsables = { auxiliarId: number | null, revisorId: number | null, equip
 
 const esRevisorDe = (req: Request, a: Responsables) =>
   tieneRol(req, ROLES.REVISOR) && (a.revisorId === req.usuario!.id || (!!a.equipoId && a.equipoId === req.usuario!.equipoId))
+
+// Lo que ve cada perfil en tableros y listados: coordinación y asistencia, todo; el revisor, lo de
+// su equipo y lo que revisa (seguimiento de las personas a cargo); el auxiliar, lo suyo
+export const alcanceActuaciones = (req: Request): WhereOptions => {
+  if (tieneRol(req, ROLES.COORDINADOR, ROLES.ASISTENTE)) return {}
+  const id = req.usuario!.id
+  const condiciones: WhereOptions[] = [{ auxiliarId: id }]
+  if (tieneRol(req, ROLES.REVISOR)) {
+    condiciones.push({ revisorId: id })
+    if (req.usuario!.equipoId) condiciones.push({ equipoId: req.usuario!.equipoId })
+  }
+  return { [Op.or]: condiciones }
+}
 
 export const exigirResponsable = (req: Request, a: Responsables) => {
   if (tieneRol(req, ROLES.COORDINADOR, ROLES.ASISTENTE)) return

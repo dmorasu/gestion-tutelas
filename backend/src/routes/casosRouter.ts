@@ -10,11 +10,11 @@ import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
 import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES } from '../services/constantes'
 import { normalizarRadicado } from '../utils/radicado'
-import { exigirResponsable, exigirRevisor } from '../services/permisosActuacion'
+import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
 import { modoEnvio } from '../services/buzon/correosSalida'
 import { proveedorAlmacen } from '../services/almacenamiento'
-import { MotivoDevolucion } from '../models'
+import { MotivoDevolucion, Alerta } from '../models'
 import { responderError, ErrorNegocio } from '../utils/errores'
 
 const router = Router()
@@ -36,18 +36,7 @@ const rangoSemaforo = (color: string) => {
   }
 }
 
-// Lo que ve cada perfil: coordinación y asistencia, todo; el revisor, lo de su equipo y lo que
-// revisa (seguimiento de las personas a cargo); el auxiliar, lo suyo
-const alcance = (req: Request): WhereOptions => {
-  if (tieneRol(req, ROLES.COORDINADOR, ROLES.ASISTENTE)) return {}
-  const id = req.usuario!.id
-  const condiciones: WhereOptions[] = [{ auxiliarId: id }]
-  if (tieneRol(req, ROLES.REVISOR)) {
-    condiciones.push({ revisorId: id })
-    if (req.usuario!.equipoId) condiciones.push({ equipoId: req.usuario!.equipoId })
-  }
-  return { [Op.or]: condiciones }
-}
+const alcance = alcanceActuaciones
 
 // Mientras se esperan insumos el ANS está suspendido (sin fecha límite), pero el término judicial
 // sigue corriendo: el semáforo cae al vencimiento para no esconder la urgencia
@@ -116,13 +105,14 @@ router.get('/resumen', async (req, res) => {
     const propias = alcance(req)
     const colores = ['VENCIDO', 'ROJO', 'AMARILLO', 'VERDE', 'SIN_FECHA']
     const conteos = await Promise.all(colores.map(c => Actuacion.count({ where: { ...propias, estado: ABIERTA, fechaLimiteEntrega: rangoSemaforo(c) } })))
-    const [porEtapa, porCriticidad, porRegistrar, porRevisar] = await Promise.all([
+    const [porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes] = await Promise.all([
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['etapa'] }),
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['criticidad'] }),
       Correo.count({ where: { direccion: 'ENTRANTE', estado: 'POR_REGISTRAR' } }),
-      Correo.count({ where: { direccion: 'ENTRANTE', porRevisar: true } })
+      Correo.count({ where: { direccion: 'ENTRANTE', porRevisar: true } }),
+      Alerta.count({ where: { estado: 'PENDIENTE' } })
     ])
-    res.json({ semaforo: Object.fromEntries(colores.map((c, i) => [c, conteos[i]])), porEtapa, porCriticidad, porRegistrar, porRevisar })
+    res.json({ semaforo: Object.fromEntries(colores.map((c, i) => [c, conteos[i]])), porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes })
   } catch (error) {
     responderError(res, error)
   }

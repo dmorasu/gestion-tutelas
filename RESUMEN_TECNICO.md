@@ -62,7 +62,8 @@ Los puertos (4100/3100) no chocan con Nodex (4000, 3000-3002).
   - `expediente.ts`: carpetas del caso (`Casos/<número> <radicado>/<etapa>/Entrada|Insumos|Soportes|Escritos/Vn`) y paso de los adjuntos de la bandeja al expediente al asociar.
   - `flujoEscritos.ts`: datos faltantes, insumos (solicitud y confirmación), escrito por versiones, revisión, entrega, respuesta de la entidad (acuse, aprobación, devolución), radicación y cierre.
   - `cargueExcel.ts`: lectura de Excel o CSV sin estructura fija (exceljs), emparejamiento sugerido de columnas, registro por tandas y acuse único del paquete.
-  - `permisosActuacion.ts`: quién puede cada paso (auxiliar, revisor del equipo, coordinador).
+  - `permisosActuacion.ts`: quién puede cada paso (auxiliar, revisor del equipo, coordinador) y `alcanceActuaciones` (qué ve cada perfil en tableros y listados).
+  - `indicadores.ts`: ANS por periodo y tablero diario. `alertas.ts`: detección (worker cada 30 min) y emisión. `informes.ts`: Excel semanal y mensual. `archivoMaestro.ts`: radicados de otros operadores.
 - `utils/`: `asunto.ts` (lee `[Prefijo] [Criticidad] [Radicado] [Actuación] [Vence: …]` en cualquier orden y con o sin tildes), `radicado.ts` (23 dígitos con guiones, puntos o espacios), `fechaColombia.ts` (UTC-5 fijo), `politicaContrasena.ts`, `intentosLogin.ts` y `contrasenas.ts` (copiados de Nodex).
 - `routes/`:
   - `authRouter` (login, me, cambiar-contraseña, salir);
@@ -71,7 +72,8 @@ Los puertos (4100/3100) no chocan con Nodex (4000, 3000-3002).
   - `catalogosRouter` (parámetros, días no hábiles, juzgados, motivos, usuarios con equipo, equipos y sus integrantes, plantillas);
   - `casosRouter` también tiene los pasos del flujo: `POST /actuaciones/:id/{datos-faltantes|insumos|insumos/recibidos|revision|devolver-auxiliar|entregar|respuesta|radicacion|cerrar}`;
   - `archivosRouter` (ver o descargar; subir al expediente con multer en memoria, hasta 60 MB por archivo);
-  - `carguesRouter` (`analizar`, `registrar` por tandas de hasta 50 filas, `acuse`).
+  - `carguesRouter` (`analizar`, `registrar` por tandas de hasta 50 filas, `acuse`);
+  - `seguimientoRouter` (`tablero`, `ans`, `alertas` con detectar, emitir y descartar, `informes`, `archivo-maestro`).
 - `worker.ts` y `queues/buzonQueue.ts`: lectura programada (`upsertJobScheduler`, concurrencia 1).
 - `scripts/`:
   - `crearAdmin.ts` (`npm run crear-admin -- correo "Nombre"`);
@@ -118,6 +120,7 @@ Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificac
   - `casos/nuevo` (asignación manual o desde Excel; desde un correo con Excel adjunto abre ya leído);
   - en `casos/[id]`, `PanelTrabajo` por actuación: escrito por versiones, revisión, entrega, respuesta, insumos, datos faltantes, radicación y cierre. Los botones siguen las mismas reglas de `permisosActuacion` del backend;
   - en `correos/[id]`, `AtenderRespuesta`: clasificar la respuesta a una entrega, marcar insumos recibidos o confirmar datos faltantes desde el correo;
+  - grupo Seguimiento: `seguimiento` (tablero diario por perfil), `indicadores` (ANS por periodo), `alertas` e `informes`; en Configuración, `archivo-maestro`;
   - `equipos` (etapas e integrantes) y `plantillas` (correos de salida), las dos del coordinador;
   - `parametros` (editor y días no hábiles; las listas se escriben separadas por comas);
   - `usuarios` (perfiles y equipo);
@@ -140,6 +143,8 @@ Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificac
 
 **Después (misma noche):** correos con diseño corporativo y vista previa; identificación de respuestas por número interno; documentos de insumos y de respuestas de la entidad agrupados en el caso; medición del tamaño de los buzones y limpieza de adjuntos. Probado: vista previa (capturas con Chrome sin ventana), respuestas en un hilo nuevo y sin radicado identificadas por el número (también en minúsculas) y archivadas en su carpeta. La limpieza de adjuntos y la medición necesitan Graph real: sin probar.
 
+**Bloque 3 (misma noche):** tablero diario, indicadores ANS, alertas, informes en Excel y archivo maestro. Probado con un escenario de 5 casos (a tiempo, próximo, vencido, desacato y devuelto): alertas sin repetirse, ANS esperados, informes con sus hojas y la relación de facturación, archivo maestro que marca el duplicado y hace saltar ANS-13; pantallas capturadas con Chrome sin ventana (se ven bien) y permisos por perfil. Datos de prueba borrados.
+
 **Ojo al probar:** un archivo nuevo en `backend/src` reinicia el `nodemon` (y el arranque contra la base remota tarda cerca de un minuto). Los scripts de prueba, mejor fuera de `src`.
 
 **En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las 8 plantillas en borrador y los 2 casos de prueba de la mañana (GPA-2026-00001 y 00002).
@@ -150,7 +155,7 @@ Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificac
 
 1. **Infraestructura de 365** (guía en `Docs/CONFIGURAR_BUZON_M365.md`): tres buzones compartidos, app de Entra con `Mail.ReadWrite`, `Mail.Send` y `Sites.Selected`, política de acceso limitada a los tres buzones y permiso de escritura sobre el sitio de SharePoint. Después: `npm run leer-buzon` y una entrega de prueba.
 2. **En la app:** escribir `GPA-SDM-PST` en el parámetro `PREFIJO_ASUNTO`, los destinatarios (`CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA`), crear revisores y auxiliares y armar los equipos.
-3. **Bloque 3** (ver `Docs/PLAN.md` §4 y, para los buzones, §7): tablero diario, alertas inmediatas, informes semanal y mensual, ANS calculados y archivo maestro de otros operadores. Del bloque 2 quedan la solicitud de expedientes a juzgados y un correo libre desde el caso.
+3. **En Parámetros para el bloque 3:** `FECHA_INICIO_PLAN` (acta de inicio, para ANS-04 y ANS-10), `CORREOS_ALERTAS` y revisar `META_DIARIA_PLAN`. Del bloque 2 quedan la solicitud de expedientes a juzgados y un correo libre desde el caso.
 4. **Decisiones tomadas:** SharePoint como único repositorio y envío por Graph, no por SendGrid (razones en `Docs/PLAN.md` §6). Pendiente: plantillas definitivas del cliente.
 5. **Producción:** servidor propio con Nginx y PM2, usuario propio de base, `alter` apagado con ajustes de esquema, HTTPS y `CORREO_ENVIO_ACTIVO=true` cuando las plantillas estén aprobadas.
 6. Decidir dónde usar el logo de la firma (`Docs/logogpa.png`).

@@ -6,6 +6,7 @@ import { conexionRedis } from './config/redis'
 import { colaBuzon, NOMBRE_COLA_BUZON } from './queues/buzonQueue'
 import { sincronizarBuzon } from './services/buzon/sincronizarBuzon'
 import { limpiarAdjuntos } from './services/buzon/limpiezaBuzon'
+import { detectarAlertas } from './services/alertas'
 import { cargarParametros } from './services/parametros'
 import { cargarCalendario } from './services/calendario'
 import { activarHistorialCasos } from './services/historialCasos'
@@ -28,11 +29,18 @@ const iniciar = async () => {
   // Una sola programación repetida (si ya existe, se actualiza)
   await colaBuzon().upsertJobScheduler('buzon-periodico', { every: segundos * 1000 }, { name: 'leer', opts: { removeOnComplete: true, removeOnFail: 100 } })
   // Una vez al día, de madrugada (2:00 de Bogotá), se quitan del buzón los adjuntos ya guardados en SharePoint
+  // Alertas: términos próximos o vencidos, desacatos, insumos vencidos y duplicidad
+  await colaBuzon().upsertJobScheduler('alertas', { every: 30 * 60 * 1000 }, { name: 'alertas', opts: { removeOnComplete: true, removeOnFail: 20 } })
   await colaBuzon().upsertJobScheduler('limpieza-adjuntos', { pattern: '0 2 * * *', tz: 'America/Bogota' }, { name: 'limpiar', opts: { removeOnComplete: true, removeOnFail: 20 } })
 
   // concurrency 1: dos lecturas a la vez repetirían el mismo delta
   new Worker(NOMBRE_COLA_BUZON, async trabajo => {
     await Promise.all([cargarParametros(), cargarCalendario()])
+    if (trabajo.name === 'alertas') {
+      const nuevas = await detectarAlertas()
+      if (nuevas) console.log(colors.yellow(`🔔 ${nuevas} alertas nuevas`))
+      return
+    }
     if (trabajo.name === 'limpiar') {
       const r = await limpiarAdjuntos()
       if (r.retirados || r.omitidos) console.log(colors.cyan(`🧹 Adjuntos: ${r.retirados} retirados del buzón, ${r.omitidos} omitidos`))

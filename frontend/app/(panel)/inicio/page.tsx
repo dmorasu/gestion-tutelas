@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, type LucideIcon } from "lucide-react"
 import { fetchApi } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { NOMBRES_ROLES, modulosPermitidos, tieneRol, type CodigoRol } from "@/src/auth/permisos"
@@ -9,6 +9,11 @@ import { BUZONES, CRITICIDADES, ETAPAS, fechaHora } from "@/src/lib/formato"
 const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string, borde: string, halo: string }> = {
   "/correos": { Icono: Inbox, fondo: "from-cyan-400 to-sky-600", sombra: "shadow-cyan-500/30", borde: "hover:border-cyan-300", halo: "bg-cyan-400" },
   "/casos": { Icono: LayoutList, fondo: "from-orange-400 to-red-600", sombra: "shadow-orange-500/30", borde: "hover:border-orange-300", halo: "bg-orange-400" },
+  "/seguimiento": { Icono: Gauge, fondo: "from-slate-600 to-slate-900", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-500" },
+  "/indicadores": { Icono: Target, fondo: "from-emerald-400 to-teal-600", sombra: "shadow-emerald-500/30", borde: "hover:border-emerald-300", halo: "bg-emerald-400" },
+  "/alertas": { Icono: Bell, fondo: "from-red-400 to-rose-600", sombra: "shadow-red-500/30", borde: "hover:border-red-300", halo: "bg-red-400" },
+  "/informes": { Icono: FileSpreadsheet, fondo: "from-sky-400 to-blue-600", sombra: "shadow-sky-500/30", borde: "hover:border-sky-300", halo: "bg-sky-400" },
+  "/archivo-maestro": { Icono: ListChecks, fondo: "from-amber-400 to-orange-500", sombra: "shadow-amber-500/30", borde: "hover:border-amber-300", halo: "bg-amber-400" },
   "/equipos": { Icono: UsersRound, fondo: "from-violet-400 to-indigo-600", sombra: "shadow-violet-500/30", borde: "hover:border-violet-300", halo: "bg-violet-400" },
   "/plantillas": { Icono: Mail, fondo: "from-teal-400 to-emerald-600", sombra: "shadow-teal-500/30", borde: "hover:border-teal-300", halo: "bg-teal-400" },
   "/parametros": { Icono: SlidersHorizontal, fondo: "from-slate-500 to-slate-700", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-400" },
@@ -17,7 +22,7 @@ const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string
 
 type Resumen = {
   semaforo: Record<string, number>, porEtapa: { etapa: string, count: number }[], porCriticidad: { criticidad: string, count: number }[],
-  porRegistrar: number, porRevisar: number
+  porRegistrar: number, porRevisar: number, alertasPendientes: number
 }
 type EstadoBuzon = {
   activo: boolean, envio: string,
@@ -57,6 +62,7 @@ export default async function InicioPage() {
       { cantidad: resumen?.porRegistrar ?? 0, texto: "por registrar" },
       { cantidad: resumen?.porRevisar ?? 0, texto: "respuestas por revisar" }
     ].filter(p => p.cantidad > 0),
+    "/alertas": resumen?.alertasPendientes ? [{ cantidad: resumen.alertasPendientes, texto: "por emitir" }] : [],
     "/casos": [
       { cantidad: resumen?.semaforo.VENCIDO ?? 0, texto: "vencidas" },
       { cantidad: resumen?.semaforo.ROJO ?? 0, texto: "urgentes" },

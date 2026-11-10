@@ -166,7 +166,7 @@ export const entregar = async (d: { actuacionId: number, usuarioId: number }) =>
   })
   exigirEnviado(correo)
   await escrito.update({
-    estado: 'ENTREGADO', enlace, fechaEntregaEntidad: correo.fechaCorreo, correoEntregaId: correo.id,
+    estado: 'ENTREGADO', enlace, fechaEntregaEntidad: correo.fechaCorreo, correoEntregaId: correo.id, limiteAns: a.fechaLimiteEntrega,
     revisadoPorId: d.usuarioId, fechaRevision: escrito.fechaRevision ?? correo.fechaCorreo
   })
   // Si es la corrección de una devolución, cierra el plazo de ANS-06

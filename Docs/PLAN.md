@@ -61,13 +61,22 @@ Pendiente del bloque: solicitud de expedientes a juzgados (asistente) y un corre
 - **Identificación por número de caso**: los asuntos de salida llevan "Caso GPA-AAAA-NNNNN" y la app asocia la respuesta por el hilo, por ese número (aunque llegue en otro hilo y sin radicado) o por el radicado. Los insumos quedan en `Insumos` y se ven en el caso como "Insumos recibidos"; lo que adjunta la entidad al responder una entrega queda en la carpeta de esa versión y ligado a ella.
 - **Espacio de los buzones**: ver §7.
 
-### Bloque 3: seguimiento y reportes (siguiente)
+### Bloque 3: seguimiento y reportes (hecho el 2026-11-09)
+- **Tablero diario** (Seguimiento → Tablero diario) por perfil: el auxiliar ve sus casos, el revisor los de su equipo y los que revisa, coordinación y asistencia toda la operación. Indicadores del día (abiertas, asignadas hoy, críticas, vencidas sin entregar, esperando insumos, entregadas en 7 días, sin auxiliar, de otro operador), matriz etapa × estado (cada celda abre el listado filtrado), carga por auxiliar y por equipo.
+- **Indicadores ANS** por periodo (este mes, mes anterior, semana anterior o rango): ANS-01 a 08, 10 y 13 calculados con las reglas y exclusiones del manual; 11 y 12 se miden fuera de la app. Cada uno con su regla y los casos que no cumplen. Las entregas guardan la fecha límite vigente al entregar (`escritos.limiteAns`).
+- **Alertas** (términos próximos o vencidos, desacato o requerimiento, insumos vencidos, duplicidad): las detecta el worker cada 30 minutos; el coordinador las emite al cliente con la plantilla ALERTA o las descarta con motivo. ANS-08 mide la emisión el mismo día hábil.
+- **Informes** semanal y mensual en Excel (resumen y ANS, por equipo, matriz de casos abiertos, entregas, devoluciones, ANS incumplidos y, en el mensual, la relación para la factura), guardados en SharePoint. Sin datos personales de los accionantes.
+- **Archivo maestro** de otros operadores: carga en Excel, marca los casos, alerta de duplicidad y ANS-13.
+
+Lo anterior del bloque 3 que estaba planeado y no se hizo: cargue masivo (ya está desde el bloque 2) y asistencia del equipo (ANS-11) y descuentos (D29), que se llevan fuera de la app.
+
+### Bloque 3 original (referencia)
 - Tablero diario del manual (asignados, en análisis, pendientes de insumos, entregados, devueltos, aprobados, radicados, críticos y duplicados).
 - Alertas inmediatas por escrito (términos vencidos o próximos, desacatos, sanciones, falta de insumos, duplicidad) y ANS-08.
 - Informe semanal (segundo día hábil) y mensual (quinto día hábil) con la matriz de casos abiertos; exportación a Excel para el Power BI de la firma.
 - ANS-01 a ANS-13 calculados; cargue masivo y archivo maestro de otros operadores (ANS-13).
 
-### Bloque 4: producción
+### Bloque 4: producción (siguiente)
 Servidor propio, usuario propio de base, ajustes de esquema sin `alter`, HTTPS, almacenamiento de adjuntos (ver §6) y encender el envío real.
 
 ## 5. Supuestos que siguen abiertos

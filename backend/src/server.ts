@@ -15,6 +15,7 @@ import casosRouter from './routes/casosRouter'
 import catalogosRouter from './routes/catalogosRouter'
 import archivosRouter from './routes/archivosRouter'
 import carguesRouter from './routes/carguesRouter'
+import seguimientoRouter from './routes/seguimientoRouter'
 
 // Bitácora de cambios de los casos (hooks de los modelos): antes de atender peticiones
 activarHistorialCasos()
@@ -59,5 +60,6 @@ app.use('/api/casos', autenticacion, casosRouter)
 app.use('/api/catalogos', autenticacion, catalogosRouter)
 app.use('/api/archivos', autenticacion, archivosRouter)
 app.use('/api/cargues', autenticacion, carguesRouter)
+app.use('/api/seguimiento', autenticacion, seguimientoRouter)
 
 export default app
