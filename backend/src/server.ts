@@ -4,6 +4,7 @@ import morgan from 'morgan'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import { db } from './config/db'
+import { aplicarAjustesEsquema } from './config/ajustesEsquema'
 import { autenticacion } from './middleware/auth'
 import { activarHistorialCasos } from './services/historialCasos'
 import { cargarParametros } from './services/parametros'
@@ -25,10 +26,12 @@ activarHistorialCasos()
 export async function conectarBase() {
   try {
     await db.authenticate()
-    // sync() crea tablas y columnas nuevas; los cambios de tipo irán como ALTER idempotentes (patrón Nodex)
-    const alterar = process.env.NODE_ENV !== 'production'
-    if (alterar) await borrarVistasTablero()
-    await db.sync({ alter: alterar })
+    // Desarrollo: sync con alter. Producción: sync crea lo nuevo y los ajustes idempotentes cambian lo
+    // existente. En los dos casos las vistas del tablero se quitan antes y se recrean después
+    const produccion = process.env.NODE_ENV === 'production'
+    await borrarVistasTablero()
+    await db.sync({ alter: !produccion })
+    if (produccion) await aplicarAjustesEsquema()
     await sembrarBase()
     await cargarCalendario(true)
     // Vistas de Power BI y foto del ANS (D28): si fallan, la API sigue arriba
