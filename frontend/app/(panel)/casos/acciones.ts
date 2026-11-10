@@ -7,7 +7,16 @@ export async function actualizarActuacion(casoId: number, actuacionId: number, c
   const r = await fetchApi(`/casos/actuaciones/${actuacionId}`, { method: "PATCH", body: JSON.stringify(cambios) })
   if (!r.ok) return { ok: false, errores: await leerErrores(r) }
   revalidatePath(`/casos/${casoId}`)
+  revalidatePath("/casos")
   return { ok: true }
+}
+
+// Actuación registrada por error (solo el coordinador, y solo si no se ha entregado nada a la entidad)
+export async function eliminarActuacion(actuacionId: number, motivo: string): Promise<Resultado> {
+  const r = await fetchApi(`/casos/actuaciones/${actuacionId}`, { method: "DELETE", body: JSON.stringify({ motivo }) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath("/casos")
+  return { ok: true, datos: await r.json() }
 }
 
 export async function asumirActuacion(casoId: number, actuacionId: number): Promise<Resultado> {

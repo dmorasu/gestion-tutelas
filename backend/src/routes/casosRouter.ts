@@ -272,6 +272,45 @@ router.patch('/actuaciones/:id',
     }
   })
 
+// Eliminar una actuación registrada por error (asignación duplicada, mal digitada). Solo si no se ha
+// entregado nada a la entidad: lo entregado es parte del servicio y se cierra, no se borra. Si era la
+// única actuación, se va el caso. El correo de la asignación vuelve a la bandeja para registrarlo bien
+router.delete('/actuaciones/:id', requiereRol(ROLES.COORDINADOR), param('id').isInt(),
+  body('motivo').isString().trim().notEmpty().withMessage('Indique por qué se elimina'), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const actuacion = await Actuacion.findByPk(Number(req.params.id), { attributes: ['id', 'casoId', 'etapa'] })
+      if (!actuacion) throw new ErrorNegocio('La actuación no existe', 404)
+      const entregados = await Escrito.count({ where: { actuacionId: actuacion.id, fechaEntregaEntidad: { [Op.ne]: null } } })
+      if (entregados) throw new ErrorNegocio('Ya se entregó un escrito a la entidad: la actuación se cierra con su causal, no se elimina')
+      const casoId = actuacion.casoId
+      const otras = await Actuacion.count({ where: { casoId, id: { [Op.ne]: actuacion.id } } })
+      // Los correos de la asignación vuelven a la bandeja; los demás quedan solo sin asociar
+      await Correo.update({ estado: 'POR_REGISTRAR', casoId: null, actuacionId: null, proposito: null }, { where: { actuacionId: actuacion.id, proposito: 'ASIGNACION', direccion: 'ENTRANTE' } })
+      await Correo.update({ actuacionId: null, ...(otras ? {} : { casoId: null }) }, { where: { actuacionId: actuacion.id } })
+      await Alerta.destroy({ where: { actuacionId: actuacion.id } })
+      // El hook de la bitácora registra la eliminación; el motivo va aparte
+      await actuacion.destroy()
+      if (otras) {
+        await HistorialCaso.create({
+          casoId, actuacionId: null, seccion: 'ACTUACION', accion: 'ELIMINADO',
+          cambios: [{ campo: 'Motivo de la eliminación', antes: null, despues: String(req.body.motivo).trim().slice(0, 500) }],
+          usuarioId: req.usuario!.id, nombreUsuario: req.usuario!.nombre, origen: 'Casos'
+        })
+      }
+      if (!otras) {
+        await Alerta.destroy({ where: { casoId } })
+        await Correo.update({ casoId: null }, { where: { casoId } })
+        await Archivo.update({ casoId: null }, { where: { casoId } })
+        await HistorialCaso.destroy({ where: { casoId } })
+        await Caso.destroy({ where: { id: casoId } })
+      }
+      res.json({ ok: true, casoEliminado: !otras })
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
 // El auxiliar toma la actuación y empieza a revisar el expediente
 router.post('/actuaciones/:id/asumir', param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {

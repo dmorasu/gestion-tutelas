@@ -20,16 +20,19 @@ export default async function EquiposPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="titulo-pagina">Equipos</h1>
-        <p className="mt-1 text-xs text-slate-400">
-          {equipos.length} equipos · {personas.filter(p => p.rol === "REVISOR").length} revisores · {personas.filter(p => p.rol === "AUXILIAR").length} auxiliares
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="titulo-pagina">Equipos</h1>
+          <p className="mt-1 text-xs text-slate-400">
+            {equipos.length} equipos · {personas.filter(p => p.rol === "REVISOR").length} revisores · {personas.filter(p => p.rol === "AUXILIAR").length} auxiliares
+          </p>
+        </div>
+        <NuevoEquipo />
       </div>
 
       {sinEquipo.length > 0 && (
-        <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Sin equipo: {sinEquipo.map(p => p.nombre).join(", ")}. El reparto los usa solo si ningún equipo atiende la etapa.
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Sin equipo: <b>{sinEquipo.map(p => p.nombre).join(", ")}</b>
         </p>
       )}
 
@@ -39,7 +42,6 @@ export default async function EquiposPage() {
         ))}
       </div>
 
-      <NuevoEquipo />
     </div>
   )
 }

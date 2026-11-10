@@ -14,6 +14,11 @@ body {
   @apply bg-slate-50 text-slate-800;
 }
 
+/* Casillas y radios en grafito, no en el azul del navegador */
+input[type="checkbox"], input[type="radio"] {
+  @apply h-4 w-4 cursor-pointer accent-slate-800;
+}
+
 @layer components {
   /* Formularios y botones: mismas medidas que Nodex (components/ui/estilos.ts de Gastos) */
   .campo {
@@ -39,6 +44,24 @@ body {
   }
   .tarjeta {
     @apply rounded-xl border border-slate-200 bg-white shadow-sm;
+  }
+  /* Botones de ícono de las filas (ver, editar, eliminar), como en las bandejas de Nodex */
+  .boton-icono {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:opacity-30 disabled:hover:bg-transparent;
+  }
+  .boton-icono-peligro {
+    @apply boton-icono hover:bg-red-50 hover:text-red-600;
+  }
+  /* Etiquetas de estado (activo, temporal, perfiles) */
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold;
+  }
+  /* Opciones que se prenden y apagan (etapas, perfiles) en vez de casillas sueltas */
+  .opcion {
+    @apply inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-medium text-slate-500 transition hover:border-slate-300 hover:text-slate-700;
+  }
+  .opcion[aria-pressed="true"] {
+    @apply border-slate-800 bg-slate-800 text-white hover:text-white;
   }
   .titulo-pagina {
     @apply text-lg font-semibold tracking-tight text-slate-800;
