@@ -1,14 +1,16 @@
 # Nodex Tutelas: resumen técnico para continuar
 
-_Actualizado: 2026-11-10 · rama `desarrollo`, último commit `271dd2c`_
+_Actualizado: 2026-11-10 (noche) · rama `desarrollo`_
 
-App para recibir, repartir, trabajar, entregar y medir las tutelas y acciones de cumplimiento que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
+App para recibir, repartir, trabajar, entregar y medir las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
 
-La app está completa en funciones (bloques 1 a 3 del plan y la bandeja de trabajo) y probada con envío de correo **simulado** y almacenamiento **local**. Falta conectarla a Microsoft 365 y llevarla a producción.
+La app está completa en funciones (bloques 1 a 3, bandeja de trabajo, respuestas D1–D30: fallos, tablero para Power BI, descuentos, asistencia y PQRS) y probada con envío de correo **simulado** y almacenamiento **local**. Falta conectarla a Microsoft 365 y montar el servidor de producción (guía lista).
 
 Documentos:
 - `Docs/PLAN.md`: qué cambió con la información del cliente, flujo por buzón, bloques, respuestas a D1–D30 y lo que sigue abierto (§5), decisiones (SharePoint, no SendGrid) y el límite de 50 GB de los buzones.
 - `Docs/CONFIGURAR_BUZON_M365.md`: guía para el administrador de 365 (tres buzones, app de Entra, política de acceso, sitio de SharePoint, retención).
+- `Docs/tablero/POWER_BI.md` y `USUARIO_LECTURA.sql`: vistas del tablero, conexión de Power BI y usuario de solo lectura.
+- `Docs/PRODUCCION.md`: servidor, PM2 (`ecosystem.config.cjs`), Nginx con HTTPS, variables y verificación antes de abrir.
 - Fuentes del cliente (no se modifican): `Docs/Flujo proceso - sabana.xlsx`, `Docs/informacion_correo.txt`, `Docs/cuerpo_correo_informacion_2.txt` y el manual operativo v1.1 (`Docs/20261103_Manual_Operativo_…docx`) y las respuestas a las dudas (`Docs/Dudas TI .docx`).
 - Manual de funcionamiento para leer (no técnico): documento "Nodex Tutelas · Cómo funciona" en claude.ai.
 
@@ -28,7 +30,7 @@ Independiente de Nodex (repositorio, backend, base y servidor propios), con el m
 
 Los puertos no chocan con Nodex (4000, 3000-3002).
 
-**Arranque del backend** (`server.ts`): `activarHistorialCasos()` → `authenticate` → `db.sync({ alter: true })` fuera de producción → `sembrarBase()` → `cargarCalendario`. La semilla es idempotente: roles, parámetros, plantillas (actualiza los borradores que nadie editó), los 4 equipos iniciales si no hay ninguno, la secuencia del número interno y el número de los casos que no lo tengan. Contra la base remota el arranque tarda cerca de un minuto. Si algo falla imprime "Falló la conexión a la base de datos" y **el servidor sigue arriba**: revisar el log. En producción `alter` está apagado: hará falta un mecanismo de ajustes de esquema (ALTER idempotentes, como en Nodex).
+**Arranque del backend** (`server.ts`): `activarHistorialCasos()` → `authenticate` → se quitan las vistas del tablero → `db.sync({ alter: true })` fuera de producción (en producción `sync()` y los ALTER idempotentes de `config/ajustesEsquema.ts`) → `sembrarBase()` → `cargarCalendario` → se recrean las vistas del tablero y se refresca la foto del ANS (cada 30 min). La semilla es idempotente: roles, parámetros, plantillas (actualiza los borradores que nadie editó), los 4 equipos iniciales si no hay ninguno, la secuencia del número interno y el número de los casos que no lo tengan. Contra la base remota el arranque tarda cerca de un minuto. Si algo falla imprime "Falló la conexión a la base de datos" y **el servidor sigue arriba**: revisar el log. Una columna nueva en una tabla existente se agrega también en `ajustesEsquema.ts`; las vistas se quitan antes del sync porque Postgres no deja alterar columnas que usa una vista.
 
 ## Reglas del proyecto
 
@@ -45,10 +47,10 @@ Convenciones heredadas de Nodex:
 ## Modelo de datos (`backend/src/models`)
 
 - `usuarios.ts`: **Equipo** (va antes de Usuario: los decoradores leen su tipo al cargar), Usuario (con `equipoId` y `capacidadDiaria`), Rol, UsuarioRol.
-- `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador (archivo maestro), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo.
-- `casos.ts`: Caso (radicado y `numeroInterno` GPA-AAAA-NNNNN), Parte, Actuacion (etapa, estado, criticidad, vencimiento informado o calculado, fecha límite ANS, auxiliar, revisor, equipo), SolicitudInsumo (con `fechaLimite` del cliente), Escrito (versiones V1, V2…, estado, enlace, `limiteAns` al entregar), Devolucion (tipo, plazo de corrección, extemporánea), RadicacionJuzgado, Decision.
+- `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil (con `medioDia`), Parametro, RadicadoOtroOperador (archivo maestro, judicial o PQRS), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo.
+- `casos.ts`: Caso (radicado judicial o de PQRS, `numeroInterno` GPA-AAAA-NNNNN, `porDerechoPeticion` y `casoRelacionadoId` de la PQRS ligada), Parte, Actuacion (etapa, estado, criticidad, vencimiento informado o calculado, fecha límite ANS, auxiliar, revisor, equipo, datos faltantes pendientes, tipo de petición), SolicitudInsumo (con `fechaLimite` del cliente), Escrito (versiones V1, V2…, estado, enlace, `limiteAns` al entregar), Devolucion (tipo, plazo de corrección, extemporánea), RadicacionJuzgado, Decision (sentido, favorable, término de impugnación, cumplimiento pendiente o ligado, sanción atribuible).
 - `correos.ts`: Correo (buzón, lo leído del asunto, enlaces, `porRevisar`, `responsableId`, aviso sin atender), **EnlaceCorreo** (enlaces de SharePoint como pendientes), Archivo (SharePoint o local: `ruta`, `itemId`, `webUrl`, `adjuntoGraphId`), HistorialCaso (bitácora).
-- `seguimiento.ts`: Alerta (tipo, detección, plazo y emisión) e Informe (semanal o mensual, con su Excel y resumen).
+- `seguimiento.ts`: Alerta (tipo, detección, plazo y emisión), Informe (semanal o mensual, con su Excel y resumen), AnsPeriodo (foto mensual del ANS con nivel y descuento) y Asistencia (por persona y día).
 
 ## Backend (`backend/src`)
 
@@ -71,7 +73,12 @@ Convenciones heredadas de Nodex:
 | `indicadores.ts` | ANS por periodo con reglas y exclusiones del manual, y tablero diario |
 | `alertas.ts` | Detección (términos, desacato, insumos vencidos, duplicidad) y emisión al cliente |
 | `informes.ts` | Excel semanal y mensual (con relación para la factura) |
-| `archivoMaestro.ts` | Radicados de otros operadores, marca de casos y ANS-13 |
+| `archivoMaestro.ts` | Radicados judiciales o PQRS de otro operador o equipo (D26), marca de casos y ANS-13 |
+| `fallos.ts` | Fallo: favorable según D13, término de impugnación (D5), cumplimiento pendiente (D12) y abrirlo a mano |
+| `pqrs.ts` | PQRS ligada a la tutela por derecho de petición (D24) |
+| `tablero.ts` | Vistas `tablero.*` (Power BI) y `tablero_interno.*`, foto mensual del ANS con descuentos, datos de la pantalla |
+| `descuentos.ts` | Nivel y descuento por ANS, tope mensual y reincidencia (D29) |
+| `asistencia.ts` | Asistencia diaria, ANS-11 y aviso de reducción del equipo (D27) |
 
 **Correo y buzones** (`services/buzon/`):
 
@@ -90,11 +97,12 @@ Convenciones heredadas de Nodex:
 **Rutas** (`routes/`):
 - `authRouter`: login, me (con `equipoId`), cambiar contraseña, salir.
 - `correosRouter`: bandeja (`POR_ATENDER`, `MIOS`, `ASOCIADO`, `DESCARTADO`), detalle con sugerencias y contexto, registrar, asociar con propósito, tomar, trasladar, soltar, enlaces (descargar, subir, descartar), datos faltantes recibidos, atendido, descartar, estado de los buzones, sincronizar.
-- `casosRouter`: listado con filtros, resumen del inicio, registro manual, búsqueda por radicado, detalle, historial, PATCH de actuación, asumir, borrador y envío de correo libre, y los pasos del flujo (`POST /actuaciones/:id/{datos-faltantes|insumos|insumos/recibidos|revision|devolver-auxiliar|entregar|respuesta|radicacion|cerrar|correo}`).
-- `catalogosRouter`: parámetros, días no hábiles, juzgados, motivos, usuarios, equipos e integrantes, plantillas (con vista previa y prueba).
+- `casosRouter`: listado con filtros, resumen del inicio, registro manual, búsqueda por radicado, detalle (con relacionados), historial, fallos (`POST /actuaciones/:id/decision`, `PATCH /decisiones/:id`, `POST /decisiones/:id/cumplimiento`), PQRS ligada (`POST /:id/pqrs-ligada`), PATCH de actuación, asumir, borrador y envío de correo libre, y los pasos del flujo (`POST /actuaciones/:id/{datos-faltantes|insumos|insumos/recibidos|revision|devolver-auxiliar|entregar|respuesta|radicacion|cerrar|correo}`).
+- `catalogosRouter`: ámbito de PQRS, parámetros, días no hábiles, juzgados, motivos, usuarios, equipos e integrantes, plantillas (con vista previa y prueba).
 - `archivosRouter`: ver o descargar; subir al expediente (multer en memoria, 60 MB por archivo).
 - `carguesRouter`: analizar Excel, cargar los radicados de un correo, registrar por tandas, acuse del paquete.
-- `seguimientoRouter`: tablero diario, ANS, alertas (detectar, emitir, descartar), informes, archivo maestro.
+- `seguimientoRouter`: tablero diario, ANS, alertas (detectar, emitir, descartar), informes, archivo maestro, asistencia.
+- `tableroRouter`: tablero de la operación (lo interno solo para la firma) y refresco del ANS.
 
 **Tareas programadas** (worker, una sola cola, concurrencia 1):
 - Cada `BUZON_INTERVALO_SEGUNDOS` (120): leer los buzones y, después, avisar las asignaciones sin atender.
@@ -107,7 +115,7 @@ Convenciones heredadas de Nodex:
 
 - **Login propio** con correo y contraseña (bcrypt). Sin registro público: el administrador crea al usuario y la app muestra la contraseña temporal una sola vez; se cambia al primer ingreso.
 - Bloqueo de 15 minutos tras 5 fallos por cuenta (30 por IP). JWT de 10 horas con `versionSesion`.
-- Perfiles: ADMIN, COORDINADOR, ASISTENTE (administrativo), AUXILIAR (jurídico), REVISOR. El auxiliar ve lo suyo; el revisor, su equipo y lo que revisa; asistencia, coordinación y administrador, todo.
+- Perfiles: ADMIN, COORDINADOR, ASISTENTE (administrativo), AUXILIAR (jurídico), REVISOR y CONSULTA (PST y la entidad: solo el tablero, sin descuentos; el backend le niega todo lo demás). El auxiliar ve lo suyo; el revisor, su equipo y lo que revisa; asistencia, coordinación y administrador, todo.
 - Solo el coordinador reasigna responsables de un caso, entrega junto con el revisor, emite alertas y genera informes. El asistente toma y traslada correos.
 
 ## Frontend (`frontend/`)
@@ -124,9 +132,10 @@ Pantallas:
 | `correos` | Bandeja de trabajo: por atender (qué falta, quién lo atiende, espera en rojo a los 30 min), mis pendientes, asociados, descartados; uso de cada buzón |
 | `correos/[id]` | Barra de quién lo atiende (tomar, trasladar, soltar), el correo, enlaces de SharePoint, registro por pasos, asociar a cualquier caso, descartar, atender respuestas |
 | `casos` | Listado con número interno, criticidad, equipo y semáforo |
-| `casos/nuevo` | Un caso a mano (formulario por pasos con resumen) o varios casos (Excel o radicados de un correo) |
+| `casos/nuevo` | Un caso a mano (formulario por pasos con resumen), varios casos (Excel o radicados de un correo) o una PQRS (con el ámbito activo) |
 | `casos/[id]` | Pestañas Actuación (`PanelTrabajo`), Información, Documentos, Correos, Historial (`?tab=…&actuacion=id`) y columna de plazos y responsables |
-| `seguimiento`, `indicadores`, `alertas`, `informes` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel |
+| `tablero` | Tablero de la operación (mismas vistas que Power BI); descuentos internos |
+| `seguimiento`, `indicadores`, `alertas`, `informes`, `asistencia` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel, asistencia del equipo |
 | `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración |
 
 ## Estado (2026-11-10)
@@ -137,59 +146,54 @@ Pantallas:
 - Bloque 3: tablero diario, indicadores ANS, alertas, informes y archivo maestro.
 - Bandeja de trabajo: por atender, tomar y trasladar, aviso a los 30 minutos y enlaces de SharePoint.
 - Diseño: correos corporativos con vista previa, detalle del caso como Nodex, formulario de asignación por pasos.
-- Respuestas de las dudas de TI aplicadas a parámetros y plazos (D1–D6, D11–D13, D20). Ver `Docs/PLAN.md` §5.
+- Respuestas de las dudas de TI (`Docs/PLAN.md` §5):
+  - Parámetros y plazos: corte y fin del día a las 3 p. m., medios días del 24 y el 31, términos en días hábiles, ANS desde los datos completos, devoluciones sin corte.
+  - Flujo del fallo: favorable, impugnación, cumplimiento pendiente con alerta, descorre y tipo de escrito.
+  - Tablero para Power BI y en la app, con perfil de consulta del cliente.
+  - Descuentos por ANS, informes con novedades procesales y bloqueos.
+  - Asistencia y ANS-11.
+  - PQRS (con el ámbito apagado por parámetro) y PQRS ligada.
+  - Archivo maestro de PQRS.
+- Producción preparada: ajustes de esquema sin `alter`, PM2 y guía de Nginx.
 
 **Probado** con datos temporales (borrados después): flujo completo del escrito de V1 a cierre, cargue de 30 casos en Excel, 3 radicados de un correo, respuestas identificadas por hilo, número interno o radicado, alertas, ANS, informes, archivo maestro, bandeja (tomar, trasladar, enlaces, aviso). Pantallas revisadas con capturas de Chrome sin ventana y permisos por perfil.
 
 **Sin probar** (necesitan 365): lectura y envío reales por Graph, SharePoint (subir, mover, compartir, descargar enlaces del cliente), medición y limpieza de los buzones, y el worker con Redis.
 
-**En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las plantillas en borrador y los 2 casos de prueba del 2026-11-09 (GPA-2026-00001 y 00002). Hay un registro de archivo huérfano (id 18, un informe semanal cuyo informe y archivo se borraron por error en una limpieza): se puede eliminar.
+**En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las plantillas en borrador, los medios días de diciembre, las vistas `tablero.*` y los 2 casos de prueba del 2026-11-09 (GPA-2026-00001 y 00002; la secuencia quedó en 2). Hay un registro de archivo huérfano (id 18, un informe semanal cuyo informe y archivo se borraron por error en una limpieza): se puede eliminar.
 
-**Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo); los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon.
+**Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo), devolver la secuencia del número interno al mayor que exista, y no cargar el archivo maestro en la base real (reemplaza la tabla). Los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon.
 
-## Pendientes (en orden)
+## Pendientes
 
-0. **Commit** de las respuestas de las dudas de TI ya aplicadas (parámetros, medios días, datos faltantes).
-1. **Flujo del fallo** (antes de salir en vivo):
-   - Registrar el fallo y calcular si es favorable (D13).
-   - Si es desfavorable, abrir el cumplimiento aunque se impugne (D12).
-   - Separar el memorial de cumplimiento de la respuesta a requerimiento previo (D9).
-   - Impugnación de la entidad o descorre de la del accionante (D14).
-   - Etiqueta "Fecha asignación impugnación" (D7).
-2. **Tablero** (D28):
-   - Vistas en Postgres (esquema `tablero`) para Power BI con un usuario de solo lectura.
-   - La misma vista como pantalla de la app.
-   - Perfil de consulta para PST y la entidad, para ofrecerles después el acceso directo.
-   - Informes semanal y mensual con el contenido acordado.
-3. **Descuentos por ANS** (D29): niveles, tope del 10 %, sanción atribuible y reincidencia, en alertas internas y en el tablero.
-4. **Equipo mínimo y asistencia diaria** para ANS-11 (D27): 5 asistentes, 15 auxiliares, 3 revisores y 1 coordinador.
-5. **PQRS (ámbito 2, D21–D24)**:
-   - Término de 15, 10 o 30 días.
-   - Entrega a la entidad.
-   - PQRS ligada a la tutela por derecho de petición.
-   - Con ellas, el **archivo maestro reorientado a PQRS** de otro equipo (D26).
-6. **Producción:** servidor propio con Nginx y PM2 (API, worker y frontend), usuario propio de base, ajustes de esquema sin `alter`, HTTPS y `CORREO_ENVIO_ACTIVO=true` cuando las plantillas estén aprobadas.
+Lo que dependía del desarrollo está hecho. Falta:
 
-En paralelo (no depende del desarrollo):
-- **Microsoft 365** (guía `Docs/CONFIGURAR_BUZON_M365.md`):
-  - Tres buzones compartidos: `asignacionsdmc@`, `insumosdmc@` y `entregasdmc@`.
-  - App de Entra con `Mail.ReadWrite`, `Mail.Send` y `Sites.Selected`.
-  - Política de acceso limitada a los buzones.
-  - Sitio de SharePoint con permiso de escritura y revisión de la retención.
-  - Después: `npm run leer-buzon`, una entrega de prueba y la descarga de un enlace del cliente.
-- **Configuración en la app:**
-  - `PREFIJO_ASUNTO` = GPA-SDM-PST.
-  - Destinatarios: `CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA` y `CORREOS_ALERTAS`, con PST incluido (D25).
-  - `FECHA_INICIO_PLAN` y `META_DIARIA_PLAN`.
-  - Usuarios y equipos.
-  - Plantillas definitivas.
-- **Del cliente** (`Docs/PLAN.md` §5):
-  - Hora del medio día.
-  - 2 días más por notificación por correo.
-  - Metas definitivas y si se elimina ANS-09.
-  - Lineamientos de fondo.
-  - Archivo maestro de PQRS.
-  - Enlaces de SharePoint de "cualquier persona con el vínculo" con vencimiento.
+1. **Microsoft 365** (`Docs/CONFIGURAR_BUZON_M365.md`):
+   - Tres buzones: `asignacionsdmc@`, `insumosdmc@` y `entregasdmc@`.
+   - App de Entra y política de acceso.
+   - Sitio de SharePoint.
+   - Después: `npm run leer-buzon`, una entrega de prueba y la descarga de un enlace del cliente.
+2. **Servidor de producción** (`Docs/PRODUCCION.md`):
+   - Usuario propio de base y `tablero_lectura` para Power BI.
+   - PM2, Nginx y HTTPS.
+   - Puerta de enlace de Power BI en la red de la oficina.
+   - El `next build` del frontend no se ha corrido en esta sesión (el servidor de desarrollo estaba encendido): correrlo antes de publicar.
+3. **Configuración en la app:**
+   - `FECHA_INICIO_PLAN` (sin ella no se miden ANS-04 ni ANS-11 ni hay descuentos).
+   - Destinatarios `CORREOS_*`, con PST (D25).
+   - `PREFIJO_ASUNTO`, `VALOR_FACTURA_MENSUAL`.
+   - Usuarios, equipos y asistencia.
+   - Plantillas definitivas.
+   - Activar `AMBITO_PQRS_ACTIVO` cuando el cliente lo pida.
+4. **Del cliente** (`Docs/PLAN.md` §5, "Abierto"):
+   - Hora del medio día.
+   - Días extra por notificación por correo.
+   - Si los insumos del escrito suspenden el ANS.
+   - Metas definitivas y ANS-09.
+   - Lineamientos de fondo.
+   - Archivo maestro de PQRS.
+   - Política unificada de términos de PQRS.
+   - Reglas de ANS-14/15 (PQRS), que la app aún no mide.
 
 ## Variables de entorno (`backend/.env`, ver `.env.example`)
 
@@ -203,6 +207,7 @@ En paralelo (no depende del desarrollo):
 | `SHAREPOINT_SITIO`, `SHAREPOINT_BIBLIOTECA` | Sitio de los expedientes |
 | `ALMACEN_LOCAL` | Carpeta de desarrollo sin SharePoint |
 | `PREFIJO_ASUNTO` | Solo al crear el parámetro la primera vez |
+| `TABLERO_USUARIO_LECTURA` | Usuario de Postgres de Power BI (permisos sobre `tablero.*`) |
 
 En el frontend: `API_URL=http://localhost:4100/api`.
 

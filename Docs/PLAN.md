@@ -104,6 +104,15 @@ Fuente: `Docs/Dudas TI .docx` (respuestas del abogado, 2026-11-10). Todo está e
 | D16 | Todos los casos los revisa un abogado | Ya era así en el flujo |
 | D20 | Las devoluciones no usan la hora de corte | ANS-06 cuenta desde la hora del correo de devolución |
 | D10, D15, D17, D18, D19, D30 | Coinciden con lo propuesto | Ya construido |
+| D7 | La etiqueta es "Fecha de asignación impugnación" | Solo en el Excel del cliente; la app muestra la asignación de cada actuación |
+| D9, D14 | Memorial de cumplimiento ≠ respuesta al requerimiento previo; la impugnación puede ser de la entidad o un descorre | Tipo de escrito por etapa y origen |
+| D12, D13 | Registro del fallo | Favorable, término de impugnación, cumplimiento pendiente con alerta y botón para abrirlo |
+| D21–D24 | PQRS | Registro con tipo de petición y término; PQRS ligada a la tutela por derecho de petición; entrega a la entidad |
+| D25 | PST es contratante, fideicomitente y supervisor | Va en los destinatarios de insumos y alertas |
+| D26 | El archivo maestro trae PQRS de otro equipo | Acepta radicados de PQRS y judiciales |
+| D27 | Equipo mínimo 5/15/3/1 | Asistencia diaria y ANS-11 (`EQUIPO_MINIMO`) |
+| D28 | Tablero en Power BI y en la app; contenido de los informes | Vistas `tablero.*`, pantalla Tablero, perfil de consulta; informes con novedades y bloqueos |
+| D29 | Descuentos por ANS | Nivel, descuento y tope en la foto mensual; reincidencia; sanción atribuible (internos) |
 
 **Abierto:**
 
@@ -112,15 +121,16 @@ Fuente: `Docs/Dudas TI .docx` (respuestas del abogado, 2026-11-10). Todo está e
 | D3 | Hora exacta del medio día | `HORA_CORTE_MEDIO_DIA` = 12:00 (supuesto) |
 | D5 | Si se suman 2 días cuando el fallo se notifica por correo (Ley 2213 de 2022) | `DIAS_ADICIONALES_NOTIFICACION_CORREO` = 0 |
 | D6 | Si los insumos para preparar el escrito también suspenden el ANS | `ANS_INICIO_CON_INSUMOS` = último insumo |
-| D7, D9, D14 | Etiqueta "Fecha asignación impugnación"; separar memorial de cumplimiento y respuesta a requerimiento previo; impugnación de la entidad o respuesta a la del accionante (descorre) | Por construir |
+| D14 | Si el descorre cuenta para ANS-03 | `ANS03_INCLUYE_DESCORRE` = sí (supuesto) |
+| D12 | Días de espera de la asignación de cumplimiento antes de alertar | `DIAS_ESPERA_CUMPLIMIENTO` = 1 (supuesto) |
 | D11 | Porcentajes definitivos y si se elimina ANS-09 | `META_ANS` |
 | D19 | Lineamientos de fondo de la entidad (aún no comunicados) | Catálogo de motivos cuando lleguen |
-| D21–D24 | PQRS: no está en la fase inicial, pero se puede activar en cualquier momento | Por construir (término de 15, 10 o 30 días; tutela por derecho de petición crea PQRS ligada) |
-| D25 | PST (contratante, fideicomitente y supervisor) también da insumos y recibe alertas | `CORREOS_INSUMOS`, `CORREOS_ALERTAS` |
-| D26 | El archivo maestro es de **PQRS** que responde otro equipo, no de tutelas. Aún no lo entregan | Reorientar el archivo maestro |
-| D27 | Equipo mínimo: 5 asistentes, 15 auxiliares, 3 revisores y 1 coordinador | Asistencia diaria para ANS-11 |
-| D28 | Tablero en Power BI para PST y la entidad, y el mismo tablero dentro de la app | Vistas en Postgres y pantalla del tablero |
-| D29 | Descuentos: leve 0,5 %, moderado 1,5 %, grave 3 %, tope 10 %; sanción atribuible y reincidencia | Parámetros, alertas internas y tablero |
+| D21–D24 | Activar el ámbito de PQRS; política unificada de términos; reglas de ANS-14/15 | `AMBITO_PQRS_ACTIVO` = no; `TERMINOS_PQRS` |
+| D25 | Los correos de PST (contratante, fideicomitente y supervisor), que también da insumos y recibe alertas | `CORREOS_INSUMOS`, `CORREOS_ALERTAS` |
+| D26 | La entidad aún no entrega el archivo maestro de PQRS | La carga ya acepta radicados de PQRS |
+| D27 | Si las incapacidades cuentan como falta del equipo mínimo | `ASISTENCIA_JUSTIFICADA` = incapacidad (supuesto) |
+| D28 | Montar Power BI con la puerta de enlace | `Docs/tablero/POWER_BI.md` |
+| D29 | Valores definitivos (están entre corchetes) y el valor de la factura | `DESCUENTOS_ANS`, `VALOR_FACTURA_MENSUAL` |
 | Destinatarios | Los define el cliente en la fase inicial | `CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA` |
 
 ## 6. Decisiones pendientes
