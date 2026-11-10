@@ -2,13 +2,13 @@ import { Op, type Transaction } from 'sequelize'
 import { db } from '../config/db'
 import { Caso, Parte, Actuacion, Correo, Archivo, RadicadoOtroOperador, SolicitudInsumo, Usuario, Decision } from '../models'
 import { ErrorNegocio } from '../utils/errores'
-import { esRadicadoValido, normalizarRadicado } from '../utils/radicado'
+import { esRadicadoPqrsValido, esRadicadoValido, normalizarSegunTipo } from '../utils/radicado'
 import { asignacionEfectiva, calcularCriticidad, fechaLimiteEntrega, vencimientoTermino } from './plazos'
 import { parametro } from './parametros'
 import { repartir, revisorDeEquipo } from './reparto'
 import { enviarPlantilla } from './buzon/correosSalida'
 import { archivarAdjuntos } from './expediente'
-import type { Criticidad, Etapa, TipoSolicitud, UnidadTermino } from './constantes'
+import { TIPOS_PETICION, type Criticidad, type Etapa, type TipoPeticion, type TipoSolicitud, type UnidadTermino } from './constantes'
 
 export type DatosRegistro = {
   correoId?: number | null
@@ -35,6 +35,12 @@ export type DatosRegistro = {
   revisorId?: number | null
   origenImpugnacion?: 'ACCIONANTE' | 'ACCIONADO' | null
   observaciones?: string | null
+  // PQRS (D23): tipo de petición; la fecha de radicación de la petición va en fechaNotificacion
+  tipoPeticion?: TipoPeticion | null
+  // D24: la tutela es por un derecho de petición sin responder
+  porDerechoPeticion?: boolean
+  // D24: la PQRS ligada a esa tutela
+  casoRelacionadoId?: number | null
 }
 
 type DatosCalculo = {
@@ -94,8 +100,15 @@ const fecha = (valor?: string | null) => {
 // La fecha de asignación es la llegada del correo, no la hora en que se registra (protege el ANS).
 // =====================================
 export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: number) => {
-  const radicado = normalizarRadicado(datos.radicado)
-  if (!esRadicadoValido(radicado)) throw new ErrorNegocio('El radicado debe tener 23 dígitos')
+  const esPqrs = datos.tipoSolicitud === 'PQRS'
+  const radicado = normalizarSegunTipo(datos.radicado, datos.tipoSolicitud)
+  if (esPqrs ? !esRadicadoPqrsValido(radicado) : !esRadicadoValido(radicado)) {
+    throw new ErrorNegocio(esPqrs ? 'Indique el radicado de la petición' : 'El radicado debe tener 23 dígitos')
+  }
+  if (esPqrs !== (datos.etapa === 'PQRS')) throw new ErrorNegocio('Una PQRS va en la etapa PQRS, y la etapa PQRS solo es para PQRS')
+  // D21: las PQRS sueltas solo con el ámbito 2 activo; las ligadas a una tutela (D24), siempre
+  if (esPqrs && !datos.casoRelacionadoId && !parametro<boolean>('AMBITO_PQRS_ACTIVO')) throw new ErrorNegocio('El ámbito de PQRS no está activo (parámetro AMBITO_PQRS_ACTIVO)')
+  if (esPqrs && !(datos.tipoPeticion && datos.tipoPeticion in TIPOS_PETICION)) throw new ErrorNegocio('Indique el tipo de petición')
 
   const resultado = await db.transaction(async transaction => {
     const correo = datos.correoId ? await Correo.findByPk(datos.correoId, { transaction, lock: transaction.LOCK.UPDATE }) : null
@@ -123,6 +136,8 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
         etapaActual: datos.etapa,
         derechosInvolucrados: datos.derechosInvolucrados ?? null,
         observaciones: datos.observaciones ?? null,
+        porDerechoPeticion: !!datos.porDerechoPeticion,
+        casoRelacionadoId: datos.casoRelacionadoId ?? null,
         deOtroOperador,
         registradoPorId: usuarioId
       }, { transaction })
@@ -145,12 +160,14 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
     // D5: la impugnación sin término indicado usa el legal (parámetro DIAS_TERMINO_IMPUGNACION)
     const impugnacionSinTermino = datos.etapa === 'IMPUGNACION' && !datos.terminoValor
     const informado = fecha(datos.fechaVencimiento) ?? correo?.vencimientoDetectado ?? null
+    // D23: la PQRS sin término indicado usa el de su tipo de petición, desde la radicación
+    const terminoPqrs = esPqrs && !datos.terminoValor && !informado ? parametro<Record<string, number>>('TERMINOS_PQRS')[datos.tipoPeticion!] ?? null : null
     const base = {
       etapa: datos.etapa,
       fechaAsignacion,
       fechaNotificacion: fecha(datos.fechaNotificacion),
-      terminoValor: impugnacionSinTermino && !informado ? parametro<number>('DIAS_TERMINO_IMPUGNACION') : datos.terminoValor ?? null,
-      terminoUnidad: impugnacionSinTermino && !informado ? 'DIAS_HABILES' as const : datos.terminoUnidad ?? null,
+      terminoValor: terminoPqrs ?? (impugnacionSinTermino && !informado ? parametro<number>('DIAS_TERMINO_IMPUGNACION') : datos.terminoValor ?? null),
+      terminoUnidad: terminoPqrs ? 'DIAS_HABILES' as const : impugnacionSinTermino && !informado ? 'DIAS_HABILES' as const : datos.terminoUnidad ?? null,
       fechaVencimientoInformada: informado,
       requiereInsumos: !!datos.requiereInsumos,
       criticidad: 'ORDINARIO' as Criticidad,
@@ -165,6 +182,7 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
       estado: 'POR_ASUMIR',
       ...reparto,
       origenImpugnacion: datos.etapa === 'IMPUGNACION' ? datos.origenImpugnacion ?? null : null,
+      tipoPeticion: esPqrs ? datos.tipoPeticion : null,
       // D15: la impugnación nace del correo de la entidad; esa es la fecha de solicitud (ANS-03)
       fechaImpugnacion: datos.etapa === 'IMPUGNACION' ? fechaAsignacion : null,
       actuacionOrigenId: actuacionOrigen?.id ?? null

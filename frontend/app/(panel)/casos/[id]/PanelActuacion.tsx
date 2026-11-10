@@ -7,7 +7,7 @@ import Semaforo from "@/components/ui/Semaforo"
 import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
-import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal } from "@/src/lib/formato"
+import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal } from "@/src/lib/formato"
 
 export type Responsable = { id: number, nombre: string }
 export type ActuacionDetalle = {
@@ -15,7 +15,7 @@ export type ActuacionDetalle = {
   fechaAsignacion: string, fechaAsignacionEfectiva: string | null, fechaNotificacion: string | null,
   terminoValor: number | null, terminoUnidad: string | null, fechaVencimientoInformada: string | null, fechaVencimiento: string | null, fechaLimiteEntrega: string | null,
   auxiliarId: number | null, revisorId: number | null, requiereInsumos: boolean, loQueSePide: string | null,
-  origenImpugnacion: string | null, datosFaltantesPendientes: boolean, decisiones: DecisionFila[],
+  origenImpugnacion: string | null, datosFaltantesPendientes: boolean, decisiones: DecisionFila[], tipoPeticion: string | null,
   auxiliar: Responsable | null, revisor: Responsable | null, equipo: { id: number, nombre: string } | null
   insumos: Insumo[], escritos: EscritoFila[]
 }
@@ -23,12 +23,12 @@ export type ActuacionDetalle = {
 type Props = {
   casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number,
   auxiliares: Responsable[], revisores: Responsable[], archivos: ArchivoCaso[]
-  puedeTrabajar: boolean, puedeRevisar: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>
+  puedeTrabajar: boolean, puedeRevisar: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, sentidos }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
@@ -93,6 +93,10 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />
           <Dato nombre="Insumos" valor={a.requiereInsumos ? "Requiere" : "No requiere"} />
           <Dato nombre="Escrito" valor={tipoEscrito(a)} />
+          {a.tipoPeticion && <Dato nombre="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
+          {porDerechoPeticion && a.etapa === "ACCION" && (
+            <p className="sm:col-span-3 text-xs text-slate-600">Tutela por derecho de petición: la contestación pide al juez hecho superado con la respuesta de la PQRS ligada (pestaña Información).</p>
+          )}
           {a.loQueSePide && <div className="sm:col-span-3"><Dato nombre="Lo que se pide al juez" valor={a.loQueSePide} /></div>}
           {a.datosFaltantesPendientes && (
             <p className="sm:col-span-3 text-xs text-amber-700">El ANS está suspendido hasta que lleguen los datos faltantes de la asignación. El término judicial sigue corriendo.</p>

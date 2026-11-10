@@ -8,9 +8,10 @@ import type { Criticidad, Etapa, EstadoActuacion, TipoSolicitud, UnidadTermino }
 // =====================================
 @Table({ tableName: 'casos' })
 export class Caso extends Model {
+  // Judicial de 23 dígitos; en una PQRS, el radicado de la entidad (alfanumérico)
   @Unique
   @AllowNull(false)
-  @Column(DataType.STRING(23))
+  @Column(DataType.STRING(40))
   declare radicado: string
 
   // Número interno de la firma (GPA-AAAA-NNNNN). Va en el acuse de la asignación: el cliente puede
@@ -60,6 +61,18 @@ export class Caso extends Model {
 
   @Column(DataType.TEXT)
   declare observaciones: string | null
+
+  // D24: tutela por un derecho de petición sin responder. Se crea la PQRS ligada, se responde y en la
+  // contestación se pide al juez hecho superado
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare porDerechoPeticion: boolean
+
+  // En la PQRS ligada: la tutela de la que nace
+  @ForeignKey(() => Caso)
+  @Column(DataType.INTEGER)
+  declare casoRelacionadoId: number | null
 
   // El archivo maestro de la entidad asigna este radicado a otro operador (ANS-13)
   @Default(false)
@@ -223,6 +236,10 @@ export class Actuacion extends Model {
 
   @Column(DataType.DATE)
   declare fechaImpugnacion: Date | null
+
+  // PQRS (D23): general (15 días hábiles), documentos e información (10) o consulta (30)
+  @Column(DataType.STRING(15))
+  declare tipoPeticion: string | null
 
   // Cumplimiento: responsable (entidad, PST, ambos, otro)
   @Column(DataType.STRING(15))

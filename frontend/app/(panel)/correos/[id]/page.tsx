@@ -5,6 +5,7 @@ import { requiereRol } from "@/src/auth/dal"
 import { BUZONES, ETAPAS, PROPOSITOS, fechaHora, radicado } from "@/src/lib/formato"
 import Criticidad from "@/components/ui/Criticidad"
 import FormRegistro, { type Juzgado } from "./FormRegistro"
+import FormPqrs from "@/components/pqrs/FormPqrs"
 import AccionesCorreo from "./AccionesCorreo"
 import AtenderRespuesta, { type Contexto } from "./AtenderRespuesta"
 import Documento from "@/components/ui/Documento"
@@ -35,13 +36,17 @@ const esExcel = (nombre: string) => /\.(xlsx|csv)$/i.test(nombre)
 // Enlaces de SharePoint del correo (los demás, de firmas o avisos, se muestran aparte y no son pendientes)
 const esSharepoint = (url: string) => /^https?:\/\/([^/]+\.sharepoint\.com|1drv\.ms|[^/]*onedrive\.live\.com)\//i.test(url)
 
-export default async function CorreoPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CorreoPage({ params, searchParams }: { params: Promise<{ id: string }>, searchParams: Promise<{ como?: string }> }) {
   const sesion = await requiereRol("ASISTENTE", "COORDINADOR")
   const { id } = await params
-  const [{ correo, sugerencia, deOtroOperador, contexto, sugerenciaRespuesta, enlaces, responsable, personas }, juzgados] = await Promise.all([
+  const { como } = await searchParams
+  const [{ correo, sugerencia, deOtroOperador, contexto, sugerenciaRespuesta, enlaces, responsable, personas }, juzgados, pqrs] = await Promise.all([
     obtener<Detalle>(`/correos/${id}`),
-    obtener<Juzgado[]>("/catalogos/juzgados")
+    obtener<Juzgado[]>("/catalogos/juzgados"),
+    obtener<{ activo: boolean, tiposPeticion: Record<string, string> }>("/catalogos/pqrs")
   ])
+  // D21: con el ámbito de PQRS activo, el correo se puede registrar como PQRS
+  const comoPqrs = pqrs.activo && (como === "pqrs" || (como !== "tutela" && sugerencia.etapa === "PQRS"))
 
   return (
     <div className="space-y-4">
@@ -114,7 +119,16 @@ export default async function CorreoPage({ params }: { params: Promise<{ id: str
         <section className="lg:col-span-2 space-y-4">
           {correo.estado === "POR_REGISTRAR" ? (
             <>
-              <FormRegistro correoId={correo.id} sugerencia={sugerencia} juzgados={juzgados} casoExistente={correo.caso ? { id: correo.caso.id, radicado: correo.caso.radicado } : null} />
+              {pqrs.activo && (
+                <div className="flex justify-end">
+                  <Link href={comoPqrs ? `/correos/${correo.id}?como=tutela` : `/correos/${correo.id}?como=pqrs`} className="text-xs enlace">
+                    {comoPqrs ? "Registrar como tutela o acción" : "Registrar como PQRS"}
+                  </Link>
+                </div>
+              )}
+              {comoPqrs
+                ? <FormPqrs modo="correo" correoId={correo.id} tiposPeticion={pqrs.tiposPeticion} />
+                : <FormRegistro correoId={correo.id} sugerencia={sugerencia} juzgados={juzgados} casoExistente={correo.caso ? { id: correo.caso.id, radicado: correo.caso.radicado } : null} />}
               <AccionesCorreo correoId={correo.id} actuaciones={(correo.caso?.actuaciones ?? []).filter(a => a.estado !== "CERRADA").map(a => ({
                 ...a, caso: { id: correo.caso!.id, numeroInterno: correo.caso!.numeroInterno, radicado: correo.caso!.radicado, partes: [] }
               }))} />

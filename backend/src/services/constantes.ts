@@ -107,6 +107,15 @@ export const PLANTILLAS = {
 } as const satisfies Record<string, { buzon: Buzon, nombre: string, titulo: string }>
 export type CodigoPlantilla = keyof typeof PLANTILLAS
 
+// PQRS (D23): tipo de petición y su término legal (Ley 1755 de 2015). El número de días sale del
+// parámetro TERMINOS_PQRS
+export const TIPOS_PETICION = {
+  GENERAL: 'Petición general',
+  DOCUMENTOS: 'Documentos e información',
+  CONSULTA: 'Consulta'
+} as const
+export type TipoPeticion = keyof typeof TIPOS_PETICION
+
 // Tipo de escrito de cada actuación (D9 y D14). El memorial de cumplimiento (fallo desfavorable) y
 // la respuesta al requerimiento previo son escritos distintos: el requerimiento puede llegar con o
 // sin memorial enviado. En la impugnación, la entidad impugna o responde la del accionante (descorre)

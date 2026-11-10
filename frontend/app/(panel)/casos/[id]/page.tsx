@@ -14,11 +14,13 @@ import type { ArchivoCaso } from "./PanelTrabajo"
 import HistorialCaso, { type EventoCaso } from "./componentes/HistorialCaso"
 import DocumentosCaso, { type DocumentoCaso } from "./componentes/DocumentosCaso"
 import CorreosCaso, { type CorreoCaso } from "./componentes/CorreosCaso"
+import PqrsLigada, { type CasoRelacionado } from "./componentes/PqrsLigada"
 
 type Detalle = {
   caso: {
     id: number, radicado: string, numeroInterno: string | null, tipoSolicitud: string, calidadEntidad: string, etapaInicial: string, etapaActual: string, estado: string,
     derechosInvolucrados: string | null, observaciones: string | null, deOtroOperador: boolean, createdAt: string, motivoCierre: string | null,
+    porDerechoPeticion: boolean, casoRelacionadoId: number | null,
     juzgado: { nombre: string } | null, registradoPor: { nombre: string } | null,
     partes: { id: number, rol: string, tipoDocumento: string | null, numeroDocumento: string | null, nombre: string }[]
     actuaciones: ActuacionDetalle[]
@@ -27,6 +29,8 @@ type Detalle = {
   archivos: (ArchivoCaso & DocumentoCaso)[]
   motivosCierre: string[]
   sentidos: Record<string, string[]>
+  relacionados: CasoRelacionado[]
+  tiposPeticion: Record<string, string>
   envio: string
   almacen: string
 }
@@ -41,7 +45,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, sentidos, envio, almacen }, historial, usuarios] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
     obtener<Usuario[]>("/catalogos/usuarios")
@@ -147,6 +151,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
               puedeCerrar={gestiona || revisa(actual)}
               motivosCierre={motivosCierre}
               sentidos={sentidos}
+              porDerechoPeticion={caso.porDerechoPeticion}
             />
           )}
 
@@ -164,6 +169,9 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
                   {caso.observaciones && <Dato etiqueta="Observaciones" valor={<span className="whitespace-pre-line">{caso.observaciones}</span>} className="sm:col-span-3" />}
                   {caso.motivoCierre && <Dato etiqueta="Causal de cierre" valor={caso.motivoCierre} className="sm:col-span-3" />}
                 </dl>
+              </Seccion>
+              <Seccion titulo={caso.tipoSolicitud === "PQRS" ? "Tutela relacionada" : "PQRS ligada"}>
+                <PqrsLigada casoId={caso.id} esPqrs={caso.tipoSolicitud === "PQRS"} relacionados={relacionados} tiposPeticion={tiposPeticion} puedeCrear={gestiona && caso.estado !== "CERRADO"} />
               </Seccion>
               <Seccion titulo="Partes">
                 {caso.partes.length === 0 ? <p className="text-xs text-slate-500">Sin partes registradas.</p> : (

@@ -11,6 +11,15 @@ export const normalizarRadicado = (texto: string) => texto.replace(/\D/g, '')
 
 export const esRadicadoValido = (radicado: string) => /^\d{23}$/.test(radicado)
 
+// PQRS (D21–D26): el radicado es el de la entidad, alfanumérico y sin formato fijo. Se guarda en
+// mayúsculas y sin espacios ni separadores, para que el del correo y el del archivo maestro coincidan
+export const normalizarRadicadoPqrs = (texto: string) => texto.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 40)
+export const esRadicadoPqrsValido = (radicado: string) => radicado.length >= 4
+
+// El radicado según el tipo de caso
+export const normalizarSegunTipo = (texto: string, tipoSolicitud: string) =>
+  tipoSolicitud === 'PQRS' ? normalizarRadicadoPqrs(texto) : normalizarRadicado(texto)
+
 // Radicados distintos en el orden en que aparecen
 export const buscarRadicados = (...textos: (string | null | undefined)[]): string[] => {
   const encontrados = new Set<string>()

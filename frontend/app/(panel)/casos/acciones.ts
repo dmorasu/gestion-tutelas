@@ -41,6 +41,14 @@ export async function marcarSancion(casoId: number, decisionId: number, sancionA
   return { ok: true }
 }
 
+// D24: PQRS ligada a una tutela por derecho de petición
+export async function crearPqrsLigada(casoId: number, datos: Record<string, unknown>): Promise<Resultado> {
+  const r = await fetchApi(`/casos/${casoId}/pqrs-ligada`, { method: "POST", body: JSON.stringify(datos) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true, datos: await r.json() }
+}
+
 export async function registrarManual(datos: Record<string, unknown>): Promise<Resultado> {
   const r = await fetchApi("/casos", { method: "POST", body: JSON.stringify(datos) })
   if (!r.ok) return { ok: false, errores: await leerErrores(r) }

@@ -3,9 +3,9 @@ import { body, param } from 'express-validator'
 import { Parametro, DiaNoHabil, Juzgado, Usuario, Rol, MotivoDevolucion, Equipo, PlantillaCorreo } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
-import { cargarParametros, PARAMETROS_BASE } from '../services/parametros'
+import { cargarParametros, parametro, PARAMETROS_BASE } from '../services/parametros'
 import { cargarCalendario } from '../services/calendario'
-import { ROLES, ETAPAS, PLANTILLAS } from '../services/constantes'
+import { ROLES, ETAPAS, PLANTILLAS, TIPOS_PETICION } from '../services/constantes'
 import { MARCADORES, PLANTILLAS_BASE, vistaPrevia, enviarPrueba } from '../services/buzon/correosSalida'
 import type { CodigoPlantilla } from '../services/constantes'
 import { responderError, ErrorNegocio } from '../utils/errores'
@@ -17,6 +17,11 @@ const router = Router()
 const administran = requiereRol(ROLES.COORDINADOR)
 
 // ── Parámetros (supuestos de las dudas pendientes) ──
+// D21: si el ámbito de PQRS está activo y los tipos de petición (para los formularios)
+router.get('/pqrs', (_req, res) => {
+  res.json({ activo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), tiposPeticion: TIPOS_PETICION })
+})
+
 router.get('/parametros', async (_req, res) => {
   res.json(await Parametro.findAll({ order: [['duda', 'ASC NULLS LAST'], ['clave', 'ASC']] }))
 })

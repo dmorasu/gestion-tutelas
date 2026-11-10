@@ -91,6 +91,9 @@ export const SENTIDOS: Record<string, string> = {
   CONFIRMA: "Confirma", REVOCA: "Revoca", MODIFICA: "Modifica", SANCIONA: "Sanciona", NO_SANCIONA: "No sanciona"
 }
 
+// PQRS (D23)
+export const TIPOS_PETICION: Record<string, string> = { GENERAL: "Petición general", DOCUMENTOS: "Documentos e información", CONSULTA: "Consulta" }
+
 // El escrito de cada actuación (D9 y D14)
 export const TIPOS_ESCRITO: Record<string, string> = {
   ACCION: "Contestación de la acción", IMPUGNACION: "Escrito de impugnación", DESCORRE: "Respuesta a la impugnación del accionante (descorre)",

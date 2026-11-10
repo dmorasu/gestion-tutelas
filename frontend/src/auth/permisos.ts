@@ -28,7 +28,7 @@ export const MODULOS: Modulo[] = [
   { href: "/asistencia", nombre: "Asistencia", descripcion: "Equipo mínimo del día (ANS-11)", roles: ["COORDINADOR", "ASISTENTE"] },
   { href: "/equipos", nombre: "Equipos", descripcion: "Revisores, auxiliares y etapas", roles: ["COORDINADOR"] },
   { href: "/plantillas", nombre: "Plantillas de correo", descripcion: "Textos de los correos de salida", roles: ["COORDINADOR"] },
-  { href: "/archivo-maestro", nombre: "Archivo maestro", descripcion: "Radicados de otros operadores", roles: ["COORDINADOR"] },
+  { href: "/archivo-maestro", nombre: "Archivo maestro", descripcion: "PQRS y radicados que atiende otro equipo", roles: ["COORDINADOR"] },
   { href: "/parametros", nombre: "Parámetros", descripcion: "Plazos, ANS y días no hábiles", roles: ["COORDINADOR"] },
   { href: "/usuarios", nombre: "Usuarios", descripcion: "Cuentas y perfiles", roles: ["ADMIN"] }
 ]

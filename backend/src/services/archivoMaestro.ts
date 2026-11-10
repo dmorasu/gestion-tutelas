@@ -2,7 +2,7 @@ import { Op } from 'sequelize'
 import { Caso, RadicadoOtroOperador } from '../models'
 import { analizarExcel } from './cargueExcel'
 import { detectarAlertas } from './alertas'
-import { esRadicadoValido, normalizarRadicado } from '../utils/radicado'
+import { esRadicadoPqrsValido, esRadicadoValido, normalizarRadicado, normalizarRadicadoPqrs } from '../utils/radicado'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -11,6 +11,9 @@ import { ErrorNegocio } from '../utils/errores'
 // equipos internos. Se guardan los radicados de los OTROS operadores: un caso nuestro con uno de esos
 // radicados queda marcado, sale la alerta de duplicidad y ANS-13 cuenta cualquier escrito entregado
 // sobre él. Cada carga reemplaza la anterior (el archivo maestro vigente es la fuente de control).
+// D26: el archivo que entregará la entidad trae las PQRS que responde otro equipo, para no dar una
+// respuesta doble. Se aceptan los dos: radicados judiciales (23 dígitos) y radicados de PQRS
+// (alfanuméricos, normalizados igual que al registrar la PQRS).
 // =====================================
 
 const plano = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
@@ -20,27 +23,32 @@ const ES_NUESTRO = /\bgpa\b|gomez pineda/
 
 export const cargarArchivoMaestro = async (contenido: Buffer, nombreArchivo: string, operadorPorDefecto: string | null) => {
   const { encabezados, filas, mapeo } = await analizarExcel(contenido, nombreArchivo)
-  if (mapeo.radicado === null) throw new ErrorNegocio('No se encontró la columna de radicados')
+  // Sin radicados judiciales, la columna se busca por su nombre (radicado, número, PQRS, petición)
+  const colRadicado = mapeo.radicado ?? (() => { const i = encabezados.findIndex(h => /radicad|numero|pqrs|peticion|solicitud/.test(plano(h))); return i >= 0 ? i : null })()
+  if (colRadicado === null) throw new ErrorNegocio('No se encontró la columna de radicados')
   const colOperador = encabezados.findIndex(h => /operador|contratista|asignad|responsable|firma/.test(plano(h)))
   if (colOperador < 0 && !operadorPorDefecto) throw new ErrorNegocio('No hay columna de operador: indique de qué operador son los radicados')
 
-  const registros = new Map<string, string>()
+  const registros = new Map<string, { operador: string, tipo: 'JUDICIAL' | 'PQRS' }>()
   let nuestros = 0
   for (const f of filas) {
-    const radicado = normalizarRadicado(f[mapeo.radicado] ?? '')
-    if (!esRadicadoValido(radicado)) continue
+    const texto = f[colRadicado] ?? ''
+    const judicial = normalizarRadicado(texto)
+    const pqrs = normalizarRadicadoPqrs(texto)
+    const [radicado, tipo] = esRadicadoValido(judicial) ? [judicial, 'JUDICIAL' as const] : esRadicadoPqrsValido(pqrs) ? [pqrs, 'PQRS' as const] : [null, null]
+    if (!radicado || !tipo) continue
     const operador = (colOperador >= 0 ? f[colOperador]?.trim() : '') || operadorPorDefecto || ''
     if (ES_NUESTRO.test(plano(operador))) { nuestros++; continue }
-    registros.set(radicado, operador.slice(0, 150))
+    registros.set(radicado, { operador: operador.slice(0, 150), tipo })
   }
   const nombre = `${nombreArchivo} (${new Date().toISOString().slice(0, 10)})`.slice(0, 150)
   await RadicadoOtroOperador.destroy({ where: {} })
-  await RadicadoOtroOperador.bulkCreate([...registros].map(([radicado, operador]) => ({ radicado, operador, archivoMaestro: nombre })))
+  await RadicadoOtroOperador.bulkCreate([...registros].map(([radicado, r]) => ({ radicado, operador: r.operador, tipo: r.tipo, archivoMaestro: nombre })))
 
   // Los casos se marcan o desmarcan según el archivo vigente
   const radicados = [...registros.keys()]
   const [marcados] = await Caso.update({ deOtroOperador: true }, { where: { radicado: radicados, deOtroOperador: false }, individualHooks: true })
   await Caso.update({ deOtroOperador: false }, { where: { deOtroOperador: true, radicado: { [Op.notIn]: radicados.length ? radicados : [''] } }, individualHooks: true })
   const alertas = await detectarAlertas()
-  return { otrosOperadores: registros.size, nuestros, filas: filas.length, casosMarcados: marcados, alertas }
+  return { otrosOperadores: registros.size, pqrs: [...registros.values()].filter(r => r.tipo === 'PQRS').length, nuestros, filas: filas.length, casosMarcados: marcados, alertas }
 }

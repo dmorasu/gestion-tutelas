@@ -108,14 +108,16 @@ router.post('/informes', coordinan, body('tipo').isIn(['SEMANAL', 'MENSUAL']), b
 // ── Archivo maestro de otros operadores ──
 router.get('/archivo-maestro', supervisan, async (req, res) => {
   try {
-    const q = String(req.query.q ?? '').replace(/\D/g, '')
-    const [total, muestra, ultima, marcados] = await Promise.all([
+    // Judicial (solo dígitos) o PQRS (alfanumérico normalizado)
+    const q = String(req.query.q ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+    const [total, muestra, ultima, marcados, pqrs] = await Promise.all([
       RadicadoOtroOperador.count(),
-      RadicadoOtroOperador.findAll({ where: q.length >= 5 ? { radicado: { [Op.like]: `%${q}%` } } : {}, order: [['radicado', 'ASC']], limit: 100 }),
+      RadicadoOtroOperador.findAll({ where: q.length >= 4 ? { radicado: { [Op.like]: `%${q}%` } } : {}, order: [['radicado', 'ASC']], limit: 100 }),
       RadicadoOtroOperador.findOne({ order: [['createdAt', 'DESC']], attributes: ['archivoMaestro', 'createdAt'] }),
-      Caso.findAll({ where: { deOtroOperador: true }, attributes: ['id', 'numeroInterno', 'radicado', 'estado'], limit: 200 })
+      Caso.findAll({ where: { deOtroOperador: true }, attributes: ['id', 'numeroInterno', 'radicado', 'estado'], limit: 200 }),
+      RadicadoOtroOperador.count({ where: { tipo: 'PQRS' } })
     ])
-    res.json({ total, muestra, ultima, marcados })
+    res.json({ total, pqrs, muestra, ultima, marcados })
   } catch (error) {
     responderError(res, error)
   }

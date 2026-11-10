@@ -6,6 +6,7 @@ import CargarMaestro from "./CargarMaestro"
 
 type Datos = {
   total: number
+  pqrs: number
   muestra: { id: number, radicado: string, operador: string | null }[]
   ultima: { archivoMaestro: string | null, createdAt: string } | null
   marcados: { id: number, numeroInterno: string | null, radicado: string, estado: string }[]
@@ -21,14 +22,14 @@ export default async function ArchivoMaestroPage({ searchParams }: { searchParam
       <div>
         <h1 className="titulo-pagina">Archivo maestro</h1>
         <p className="mt-1 text-xs text-slate-400">
-          {d.total} radicados de otros operadores{d.ultima && ` · ${d.ultima.archivoMaestro} · cargado ${fechaHora(d.ultima.createdAt)}`}
+          {d.total} radicados de otros operadores o equipos ({d.pqrs} PQRS){d.ultima && ` · ${d.ultima.archivoMaestro} · cargado ${fechaHora(d.ultima.createdAt)}`}
         </p>
       </div>
       <CargarMaestro />
 
       {d.marcados.length > 0 && (
         <section className="tarjeta p-4 space-y-2">
-          <h2 className="text-sm font-semibold text-red-800">Casos nuestros con radicado de otro operador ({d.marcados.length})</h2>
+          <h2 className="text-sm font-semibold text-red-800">Casos nuestros que otro operador o equipo ya atiende ({d.marcados.length})</h2>
           <div className="flex flex-wrap gap-2">
             {d.marcados.map(c => (
               <Link key={c.id} href={`/casos/${c.id}`} className="rounded border border-red-200 bg-red-50 px-2 py-1 text-xs text-red-900 hover:bg-red-100">
@@ -41,7 +42,7 @@ export default async function ArchivoMaestroPage({ searchParams }: { searchParam
 
       <section className="tarjeta p-4 space-y-3">
         <form className="flex gap-2">
-          <input name="q" defaultValue={q} placeholder="Buscar radicado" className="campo" />
+          <input name="q" defaultValue={q} placeholder="Buscar radicado o PQRS" className="campo" />
           <button className="boton-secundario">Buscar</button>
         </form>
         <table className="tabla w-full">

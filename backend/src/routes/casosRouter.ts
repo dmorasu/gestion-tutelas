@@ -8,8 +8,9 @@ import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO } from '../services/constantes'
-import { normalizarRadicado } from '../utils/radicado'
+import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
+import { normalizarRadicado, normalizarRadicadoPqrs } from '../utils/radicado'
+import { crearPqrsLigada } from '../services/pqrs'
 import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
@@ -67,8 +68,12 @@ router.get('/', async (req, res) => {
     const q = String(req.query.q ?? '').trim()
     if (q) {
       const digitos = normalizarRadicado(q)
+      // El de una PQRS es alfanumérico: se busca también normalizado como tal
+      const alfanumerico = normalizarRadicadoPqrs(q)
       const [porRadicado, porNumero, porParte] = await Promise.all([
-        digitos.length >= 5 ? Caso.findAll({ where: { radicado: { [Op.like]: `%${digitos}%` } }, attributes: ['id'], limit: 500 }) : [],
+        digitos.length >= 5 || alfanumerico.length >= 4
+          ? Caso.findAll({ where: { radicado: { [Op.or]: [...(digitos.length >= 5 ? [{ [Op.like]: `%${digitos}%` }] : []), { [Op.like]: `%${alfanumerico}%` }] } }, attributes: ['id'], limit: 500 })
+          : [],
         Caso.findAll({ where: { numeroInterno: { [Op.iLike]: `%${q}%` } }, attributes: ['id'], limit: 500 }),
         Parte.findAll({ where: { [Op.or]: [{ nombre: { [Op.iLike]: `%${q}%` } }, { numeroDocumento: q }] }, attributes: ['casoId'], limit: 500 })
       ])
@@ -145,8 +150,9 @@ router.post('/',
 // ¿Ya existe el caso? El formulario lo consulta mientras se escribe el radicado
 router.get('/radicado/:radicado', async (req, res) => {
   try {
-    const radicado = normalizarRadicado(String(req.params.radicado))
-    const caso = radicado.length === 23
+    const texto = String(req.params.radicado)
+    const radicado = req.query.tipo === 'PQRS' ? normalizarRadicadoPqrs(texto) : normalizarRadicado(texto)
+    const caso = radicado.length === 23 || (req.query.tipo === 'PQRS' && radicado.length >= 4)
       ? await Caso.findOne({ where: { radicado }, attributes: ['id', 'numeroInterno', 'estado'], include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado'] }] })
       : null
     res.json({ caso })
@@ -193,7 +199,13 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     ])
     const datos = caso.toJSON() as Record<string, unknown> & { actuaciones?: Record<string, unknown>[] }
     datos.actuaciones = (caso.actuaciones ?? []).map(a => ({ ...a.toJSON(), semaforo: a.estado === 'CERRADA' ? null : semaforoDe(a) }))
-    res.json({ caso: datos, correos, archivos, motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    // D24: la PQRS ligada a esta tutela, o la tutela de la que nace esta PQRS
+    const relacionados = await Caso.findAll({
+      where: { [Op.or]: [{ casoRelacionadoId: caso.id }, ...(caso.casoRelacionadoId ? [{ id: caso.casoRelacionadoId }] : [])] },
+      attributes: ['id', 'numeroInterno', 'radicado', 'tipoSolicitud', 'estado'],
+      include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado', 'fechaLimiteEntrega', 'tipoPeticion'] }]
+    })
+    res.json({ caso: datos, correos, archivos, relacionados, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
@@ -351,6 +363,22 @@ router.post('/actuaciones/:id/radicacion', param('id').isInt(), body('fecha').is
 
 router.post('/actuaciones/:id/cerrar', requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE, ROLES.REVISOR), param('id').isInt(), body('motivo').isString(), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.cerrarActuacion({ actuacionId: a.id, motivo: req.body.motivo })))
+
+// ── PQRS ligada a la tutela por derecho de petición (D24) ──
+router.post('/:id/pqrs-ligada', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(),
+  body('radicado').isString().trim().notEmpty().withMessage('Indique el radicado de la petición'),
+  body('tipoPeticion').isIn(Object.keys(TIPOS_PETICION)).withMessage('Indique el tipo de petición'),
+  body('fechaRadicacionPeticion').optional({ values: 'falsy' }).isISO8601(), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      res.status(201).json(await crearPqrsLigada({
+        casoId: Number(req.params.id), radicado: req.body.radicado, tipoPeticion: req.body.tipoPeticion,
+        fechaRadicacionPeticion: req.body.fechaRadicacionPeticion || null, observaciones: req.body.observaciones ?? null, usuarioId: req.usuario!.id
+      }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
 
 // ── Fallos (D12, D13): se registran aunque la actuación esté cerrada ──
 router.post('/actuaciones/:id/decision', param('id').isInt(), body('instancia').isIn(INSTANCIAS), body('sentido').isString(),

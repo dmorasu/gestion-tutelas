@@ -94,10 +94,16 @@ export class Parametro extends Model {
 // Radicados que el archivo maestro de la entidad asigna a otros operadores (ANS-13, meta 0)
 @Table({ tableName: 'radicados_otros_operadores' })
 export class RadicadoOtroOperador extends Model {
+  // Judicial (23 dígitos) o de PQRS (alfanumérico, normalizado). D26: el archivo maestro trae las
+  // PQRS que responde otro equipo de la entidad
   @Unique
   @AllowNull(false)
-  @Column(DataType.STRING(23))
+  @Column(DataType.STRING(40))
   declare radicado: string
+
+  @Default('JUDICIAL')
+  @Column(DataType.STRING(10))
+  declare tipo: 'JUDICIAL' | 'PQRS'
 
   @Column(DataType.STRING(150))
   declare operador: string | null

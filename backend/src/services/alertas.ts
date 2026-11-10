@@ -43,7 +43,7 @@ export const detectarAlertas = async () => {
   const horas = parametro<number>('HORAS_ALERTA_TERMINO')
   const abiertas = await Actuacion.findAll({
     where: { estado: { [Op.ne]: 'CERRADA' } },
-    include: [{ model: Caso, attributes: ['id', 'numeroInterno', 'radicado', 'deOtroOperador'] }]
+    include: [{ model: Caso, attributes: ['id', 'numeroInterno', 'radicado', 'deOtroOperador', 'tipoSolicitud'] }]
   })
   existentes = new Set((await Alerta.findAll({ attributes: ['tipo', 'actuacionId'], raw: true })).map(x => `${x.tipo}:${x.actuacionId}`))
   let nuevas = 0
@@ -59,7 +59,9 @@ export const detectarAlertas = async () => {
       nuevas += await crear('DESACATO', a, `Se asignó un trámite de ${etapa}. Requiere atención inmediata y el cumplimiento material de la orden corresponde a la entidad.`, ahora)
     }
     if (a.caso?.deOtroOperador) {
-      nuevas += await crear('DUPLICIDAD', a, 'El archivo maestro asigna este radicado a otro operador. Se suspende la elaboración hasta que el supervisor defina el operador.', ahora)
+      nuevas += await crear('DUPLICIDAD', a, a.caso.tipoSolicitud === 'PQRS'
+        ? 'Según el archivo maestro, otro equipo de la entidad ya responde esta PQRS. Se suspende la respuesta para no dar una respuesta doble hasta que la entidad lo defina.'
+        : 'El archivo maestro asigna este radicado a otro operador. Se suspende la elaboración hasta que el supervisor defina el operador.', ahora)
     }
   }
   // Insumos cuyo plazo para el cliente ya pasó sin llegar
