@@ -33,9 +33,10 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
     terminoUnidad: { etiqueta: 'Unidad del término' },
     fechaVencimiento: { etiqueta: 'Vencimiento', formato: 'fechaHora' },
     fechaLimiteEntrega: { etiqueta: 'Fecha límite ANS', formato: 'fechaHora' },
+    criticidad: { etiqueta: 'Criticidad' },
+    fechaVencimientoInformada: { etiqueta: 'Vencimiento informado', formato: 'fechaHora' },
     auxiliarId: { etiqueta: 'Auxiliar', referencia: nombreUsuario },
-    abogadoId: { etiqueta: 'Abogado', referencia: nombreUsuario },
-    requiereRevisionAbogado: { etiqueta: 'Requiere revisión de abogado', formato: 'siNo' },
+    revisorId: { etiqueta: 'Revisor', referencia: nombreUsuario },
     requiereInsumos: { etiqueta: 'Requiere insumos', formato: 'siNo' },
     loQueSePide: { etiqueta: 'Lo que se pide al juez' }
   },
@@ -45,12 +46,18 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
     fechaRecepcion: { etiqueta: 'Recibido', formato: 'fechaHora' }
   },
   ESCRITO: {
+    version: { etiqueta: 'Versión' },
     estado: { etiqueta: 'Estado del escrito' },
-    fechaEntregaEntidad: { etiqueta: 'Entregado a la entidad', formato: 'fechaHora' }
+    observacionRevision: { etiqueta: 'Observación del revisor' },
+    fechaEntregaEntidad: { etiqueta: 'Entregado a la entidad', formato: 'fechaHora' },
+    fechaAcuse: { etiqueta: 'Acuse de la entidad', formato: 'fechaHora' },
+    fechaAprobacion: { etiqueta: 'Aprobado por la entidad', formato: 'fechaHora' }
   },
   DEVOLUCION: {
     tipo: { etiqueta: 'Tipo de devolución' },
     observacion: { etiqueta: 'Observación' },
+    fechaLimiteCorreccion: { etiqueta: 'Corregir a más tardar', formato: 'fechaHora' },
+    extemporanea: { etiqueta: 'Extemporánea', formato: 'siNo' },
     fechaNuevaEntrega: { etiqueta: 'Nueva entrega', formato: 'fechaHora' }
   },
   RADICACION: { fechaRadicacion: { etiqueta: 'Radicado en el juzgado', formato: 'fechaHora' }, fuente: { etiqueta: 'Fuente' } },

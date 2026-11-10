@@ -1,12 +1,14 @@
-import { Op } from 'sequelize'
+import { Op, type Transaction } from 'sequelize'
 import { db } from '../config/db'
-import { Caso, Parte, Actuacion, Correo, Archivo, RadicadoOtroOperador, SolicitudInsumo } from '../models'
+import { Caso, Parte, Actuacion, Correo, Archivo, RadicadoOtroOperador, SolicitudInsumo, Usuario } from '../models'
 import { ErrorNegocio } from '../utils/errores'
 import { esRadicadoValido, normalizarRadicado } from '../utils/radicado'
-import { asignacionEfectiva, fechaLimiteEntrega, vencimientoTermino } from './plazos'
+import { asignacionEfectiva, calcularCriticidad, fechaLimiteEntrega, vencimientoTermino } from './plazos'
 import { parametro } from './parametros'
-import { elegirResponsable } from './reparto'
-import { ROLES, type Etapa, type TipoSolicitud, type UnidadTermino } from './constantes'
+import { repartir, revisorDeEquipo } from './reparto'
+import { enviarPlantilla } from './buzon/correosSalida'
+import { archivarAdjuntos } from './expediente'
+import type { Criticidad, Etapa, TipoSolicitud, UnidadTermino } from './constantes'
 
 export type DatosRegistro = {
   correoId?: number | null
@@ -22,33 +24,58 @@ export type DatosRegistro = {
   fechaNotificacion?: string | null
   terminoValor?: number | null
   terminoUnidad?: UnidadTermino | null
+  // "Vence" que informa la entidad (del asunto o escrito por el asistente)
+  fechaVencimiento?: string | null
+  // La que marcó la entidad en el asunto; la app calcula la suya y deja la mayor
+  criticidad?: Criticidad | null
   requiereInsumos?: boolean
-  requiereRevisionAbogado?: boolean
+  // Cargue de Excel: no se manda un acuse por caso (sale uno solo con todo el paquete)
+  sinAcuse?: boolean
   auxiliarId?: number | null
-  abogadoId?: number | null
+  revisorId?: number | null
   origenImpugnacion?: 'ACCIONANTE' | 'ACCIONADO' | null
   observaciones?: string | null
 }
 
-// Vencimiento y fecha límite ANS de una actuación con sus datos actuales
-export const calcularPlazos = (a: {
-  etapa: Etapa, fechaAsignacion: Date, fechaNotificacion: Date | null, terminoValor: number | null, terminoUnidad: UnidadTermino | null, requiereInsumos: boolean
-}, insumos: { minimo: boolean, fechaRecepcion: Date | null }[] = []) => {
-  const fechaVencimiento = a.fechaNotificacion && a.terminoValor && a.terminoUnidad
+type DatosCalculo = {
+  etapa: Etapa, fechaAsignacion: Date, fechaNotificacion: Date | null, terminoValor: number | null, terminoUnidad: UnidadTermino | null,
+  fechaVencimientoInformada: Date | null, requiereInsumos: boolean, criticidad: Criticidad, criticidadFuente: string | null
+}
+
+// Vencimiento, criticidad y fecha límite ANS de una actuación con sus datos actuales.
+// El vencimiento informado por la entidad manda sobre el calculado con el término (manual §12.1).
+// La criticidad marcada a mano no se recalcula
+export const calcularPlazos = (a: DatosCalculo, insumos: { minimo: boolean, fechaRecepcion: Date | null }[] = [], delAsunto?: Criticidad | null) => {
+  const fechaVencimiento = a.fechaVencimientoInformada ?? (a.fechaNotificacion && a.terminoValor && a.terminoUnidad
     ? vencimientoTermino(a.fechaNotificacion, a.terminoValor, a.terminoUnidad, a.etapa)
-    : null
+    : null)
+  const manual = a.criticidadFuente === 'MANUAL'
+  const criticidad = manual ? a.criticidad : calcularCriticidad({ etapa: a.etapa, fechaAsignacion: a.fechaAsignacion, fechaVencimiento }, delAsunto)
+  const criticidadFuente = manual ? 'MANUAL' as const : delAsunto && criticidad === delAsunto ? 'ASUNTO' as const : 'CALCULADA' as const
   return {
     fechaAsignacionEfectiva: asignacionEfectiva(a.fechaAsignacion, a.etapa),
     fechaVencimiento,
-    fechaLimiteEntrega: fechaLimiteEntrega({ ...a, fechaVencimiento, insumos })
+    criticidad,
+    criticidadFuente,
+    // Campos uno a uno: "a" puede ser una instancia de Sequelize y {...a} no copia sus valores
+    fechaLimiteEntrega: fechaLimiteEntrega({ etapa: a.etapa, fechaAsignacion: a.fechaAsignacion, requiereInsumos: a.requiereInsumos, criticidad, fechaVencimiento, insumos })
   }
 }
 
-// Después de cambiar notificación, término o insumos
+// Después de cambiar notificación, término, vencimiento, criticidad o insumos
 export const recalcularPlazos = async (actuacionId: number) => {
   const a = await Actuacion.findByPk(actuacionId, { include: [{ model: SolicitudInsumo, attributes: ['minimo', 'fechaRecepcion'] }] })
   if (!a) return
-  await a.update(calcularPlazos(a, a.insumos ?? []))
+  // La que vino del asunto se conserva como piso
+  await a.update(calcularPlazos(a, a.insumos ?? [], a.criticidadFuente === 'ASUNTO' ? a.criticidad : null))
+}
+
+// Consecutivo sin huecos por concurrencia: secuencia de Postgres (se crea en la semilla)
+export const SECUENCIA_NUMERO_INTERNO = 'casos_numero_interno_seq'
+export const siguienteNumeroInterno = async (transaction?: Transaction, fecha = new Date()) => {
+  const [filas] = await db.query(`SELECT nextval('${SECUENCIA_NUMERO_INTERNO}') AS n`, { transaction })
+  const n = Number((filas as { n: string }[])[0].n)
+  return `GPA-${fecha.getFullYear()}-${String(n).padStart(5, '0')}`
 }
 
 const fecha = (valor?: string | null) => {
@@ -66,7 +93,7 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
   const radicado = normalizarRadicado(datos.radicado)
   if (!esRadicadoValido(radicado)) throw new ErrorNegocio('El radicado debe tener 23 dígitos')
 
-  return db.transaction(async transaction => {
+  const resultado = await db.transaction(async transaction => {
     const correo = datos.correoId ? await Correo.findByPk(datos.correoId, { transaction, lock: transaction.LOCK.UPDATE }) : null
     if (datos.correoId && !correo) throw new ErrorNegocio('El correo no existe', 404)
     if (correo && correo.estado !== 'POR_REGISTRAR') throw new ErrorNegocio('Este correo ya fue registrado o descartado')
@@ -84,6 +111,7 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
     } else {
       caso = await Caso.create({
         radicado,
+        numeroInterno: await siguienteNumeroInterno(transaction),
         tipoSolicitud: datos.tipoSolicitud,
         juzgadoId: datos.juzgadoId ?? null,
         calidadEntidad: datos.calidadEntidad ?? 'ACCIONADO',
@@ -98,31 +126,40 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
       if (partes.length) await Parte.bulkCreate(partes.map(p => ({ ...p, rol: p.rol ?? 'ACCIONANTE', casoId: caso!.id })), { transaction })
     }
 
-    // D16: en algunas etapas siempre revisa un abogado; en las demás lo marca el asistente
-    const requiereRevisionAbogado = datos.requiereRevisionAbogado || parametro<string[]>('ETAPAS_REVISION_OBLIGATORIA').includes(datos.etapa)
-    const automatico = parametro<boolean>('REPARTO_AUTOMATICO')
-    const auxiliarId = datos.auxiliarId ?? (automatico ? await elegirResponsable(ROLES.AUXILIAR, transaction) : null)
-    const abogadoId = datos.abogadoId ?? (requiereRevisionAbogado && automatico ? await elegirResponsable(ROLES.ABOGADO, transaction) : null)
+    // Reparto por equipo: el auxiliar del equipo de la etapa y el revisor de su equipo. Si el asistente
+    // eligió el auxiliar, el revisor y el equipo salen de ese auxiliar
+    let reparto: { auxiliarId: number | null, revisorId: number | null, equipoId: number | null } = { auxiliarId: null, revisorId: null, equipoId: null }
+    if (datos.auxiliarId) {
+      const elegido = await Usuario.findByPk(datos.auxiliarId, { attributes: ['id', 'equipoId'], transaction })
+      if (!elegido) throw new ErrorNegocio('El auxiliar no existe')
+      reparto = { auxiliarId: elegido.id, equipoId: elegido.equipoId, revisorId: await revisorDeEquipo(elegido.equipoId, transaction) }
+    } else if (parametro<boolean>('REPARTO_AUTOMATICO')) {
+      reparto = await repartir(datos.etapa, transaction)
+    }
+    if (datos.revisorId) reparto.revisorId = datos.revisorId
 
     // D5: la impugnación sin término indicado usa el legal (parámetro DIAS_TERMINO_IMPUGNACION)
     const impugnacionSinTermino = datos.etapa === 'IMPUGNACION' && !datos.terminoValor
+    const informado = fecha(datos.fechaVencimiento) ?? correo?.vencimientoDetectado ?? null
     const base = {
       etapa: datos.etapa,
       fechaAsignacion,
       fechaNotificacion: fecha(datos.fechaNotificacion),
-      terminoValor: impugnacionSinTermino ? parametro<number>('DIAS_TERMINO_IMPUGNACION') : datos.terminoValor ?? null,
-      terminoUnidad: impugnacionSinTermino ? 'DIAS_HABILES' as const : datos.terminoUnidad ?? null,
-      requiereInsumos: !!datos.requiereInsumos
+      terminoValor: impugnacionSinTermino && !informado ? parametro<number>('DIAS_TERMINO_IMPUGNACION') : datos.terminoValor ?? null,
+      terminoUnidad: impugnacionSinTermino && !informado ? 'DIAS_HABILES' as const : datos.terminoUnidad ?? null,
+      fechaVencimientoInformada: informado,
+      requiereInsumos: !!datos.requiereInsumos,
+      criticidad: 'ORDINARIO' as Criticidad,
+      criticidadFuente: null
     }
+    const delAsunto = datos.criticidad ?? correo?.criticidadDetectada ?? null
     const actuacionOrigen = await Actuacion.findOne({ where: { casoId: caso.id }, order: [['fechaAsignacion', 'DESC']], attributes: ['id'], transaction })
     const actuacion = await Actuacion.create({
       ...base,
-      ...calcularPlazos(base),
+      ...calcularPlazos(base, [], delAsunto),
       casoId: caso.id,
       estado: 'POR_ASUMIR',
-      auxiliarId,
-      abogadoId,
-      requiereRevisionAbogado,
+      ...reparto,
       origenImpugnacion: datos.etapa === 'IMPUGNACION' ? datos.origenImpugnacion ?? null : null,
       // D15: la impugnación nace del correo de la entidad; esa es la fecha de solicitud (ANS-03)
       fechaImpugnacion: datos.etapa === 'IMPUGNACION' ? fechaAsignacion : null,
@@ -133,6 +170,19 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
       await correo.update({ estado: 'ASOCIADO', casoId: caso.id, actuacionId: actuacion.id, proposito: 'ASIGNACION', usuarioId }, { transaction })
       await Archivo.update({ casoId: caso.id, actuacionId: actuacion.id }, { where: { correoId: correo.id }, transaction })
     }
-    return { casoId: caso.id, actuacionId: actuacion.id, deOtroOperador }
+    return { casoId: caso.id, actuacionId: actuacion.id, numeroInterno: caso.numeroInterno, deOtroOperador, remitente: correo?.remitente ?? null, correoId: correo?.id ?? null }
   })
+
+  // Confirmación de recibido con el número interno (fuera de la transacción: si el correo falla,
+  // el registro queda hecho y el error se ve en el caso para reenviarlo)
+  // Los adjuntos pasan de la bandeja al expediente (fuera de la transacción: es SharePoint)
+  if (resultado.correoId) await archivarAdjuntos(resultado.correoId, resultado.actuacionId, 'Entrada').catch(error => console.error('❌ Adjuntos al expediente', error))
+  let acuse: { estado: string, error: string | null } | null = null
+  if (resultado.remitente && !datos.sinAcuse && parametro<boolean>('ACUSE_AUTOMATICO')) {
+    const enviado = await enviarPlantilla({
+      codigo: 'ACUSE_ASIGNACION', actuacionId: resultado.actuacionId, para: [resultado.remitente], responderACorreoId: resultado.correoId, usuarioId
+    }).catch(error => ({ estado: 'ERROR', error: String(error instanceof Error ? error.message : error) }))
+    acuse = { estado: enviado.estado, error: enviado.error ?? null }
+  }
+  return { casoId: resultado.casoId, actuacionId: resultado.actuacionId, numeroInterno: resultado.numeroInterno, deOtroOperador: resultado.deOtroOperador, acuse }
 }

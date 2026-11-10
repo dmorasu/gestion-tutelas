@@ -1,7 +1,7 @@
 import { enBogota, instanteBogota, minutosDeHora, sumarDias } from '../utils/fechaColombia'
 import { esDiaHabil, habilDesde, restarDiasHabiles, sumarDiasHabiles } from '../utils/diasHabiles'
 import { parametro } from './parametros'
-import type { Etapa, UnidadTermino } from './constantes'
+import type { Criticidad, Etapa, UnidadTermino } from './constantes'
 
 // =====================================
 // PLAZOS: vencimiento judicial, fecha límite del ANS y semáforo.
@@ -50,6 +50,7 @@ const menor = (...fechas: (Date | null | undefined)[]) => {
 
 export type DatosPlazo = {
   etapa: Etapa
+  criticidad?: Criticidad
   fechaAsignacion: Date
   fechaVencimiento: Date | null
   requiereInsumos: boolean
@@ -72,23 +73,49 @@ export const inicioAns = (d: DatosPlazo): Date | null => {
   return recepcion > base ? recepcion : base
 }
 
-// Fecha límite para entregar el escrito a la entidad y cumplir el ANS. Nunca después del vencimiento
+// ANS-01 y ANS-03: N días hábiles antes del vencimiento si median al menos DIAS_MINIMOS_ANS01
+// días hábiles; si no, dentro del día hábil siguiente y antes del vencimiento (manual §21)
+const conAntelacionOSiguiente = (d: DatosPlazo, antelacion: number): Date | null => {
+  if (!d.fechaVencimiento) return null
+  const inicio = inicioAns(d)
+  if (!inicio) return null // esperando insumos: el ANS está suspendido
+  const minimos = parametro<number>('DIAS_MINIMOS_ANS01')
+  const holgado = sumarDiasHabiles(enBogota(inicio).dia, minimos, d.etapa) <= enBogota(d.fechaVencimiento).dia
+  return holgado
+    ? conAntelacion(d.fechaVencimiento, antelacion, d.etapa)
+    : menor(finDeDiasHabilesSiguientes(inicio, 1, d.etapa), d.fechaVencimiento)
+}
+
+// Fecha límite para entregar el escrito a la entidad y cumplir el ANS. Nunca después del vencimiento.
+// Lo crítico (desacato, requerimiento, cumplimiento o término de menos de 24 h) va por ANS-02
 export const fechaLimiteEntrega = (d: DatosPlazo): Date | null => {
-  switch (d.etapa) {
-    case 'ACCION':
-      return d.fechaVencimiento ? conAntelacion(d.fechaVencimiento, parametro<number>('DIAS_ANTELACION_ANS01'), d.etapa) : null
-    case 'IMPUGNACION':
-      return d.fechaVencimiento ? conAntelacion(d.fechaVencimiento, parametro<number>('DIAS_ANTELACION_ANS03'), d.etapa) : null
-    case 'CUMPLIMIENTO':
-    case 'REQUERIMIENTO_PREVIO':
-    case 'DESACATO': {
-      const inicio = inicioAns(d)
-      const ans = inicio ? finDeDiasHabilesSiguientes(inicio, parametro<number>('DIAS_ANS02'), d.etapa) : null
-      return menor(ans, d.fechaVencimiento)
-    }
-    default:
-      return d.fechaVencimiento
+  const critico = d.criticidad === 'CRITICO' || parametro<string[]>('ETAPAS_CRITICAS').includes(d.etapa)
+  if (critico) {
+    const inicio = inicioAns(d)
+    const ans = inicio ? finDeDiasHabilesSiguientes(inicio, parametro<number>('DIAS_ANS02'), d.etapa) : null
+    return menor(ans, d.fechaVencimiento)
   }
+  switch (d.etapa) {
+    case 'ACCION': return conAntelacionOSiguiente(d, parametro<number>('DIAS_ANTELACION_ANS01'))
+    case 'IMPUGNACION': return conAntelacionOSiguiente(d, parametro<number>('DIAS_ANTELACION_ANS03'))
+    default: return d.fechaVencimiento
+  }
+}
+
+// Nivel de riesgo (manual §13). Crítico: etapa crítica o término vencido o de menos de HORAS_CRITICO
+// al asignarse; alto: menos de HORAS_ALTO; si no, ordinario. Si la entidad lo marcó en el asunto, se
+// toma el mayor de los dos: la clasificación de la entidad nunca baja
+const ORDEN_CRITICIDAD: Criticidad[] = ['ORDINARIO', 'ALTO', 'CRITICO']
+export const calcularCriticidad = (d: { etapa: Etapa, fechaAsignacion: Date, fechaVencimiento: Date | null }, delAsunto?: Criticidad | null): Criticidad => {
+  let calculada: Criticidad = 'ORDINARIO'
+  if (parametro<string[]>('ETAPAS_CRITICAS').includes(d.etapa)) calculada = 'CRITICO'
+  else if (d.fechaVencimiento) {
+    const horas = (d.fechaVencimiento.getTime() - d.fechaAsignacion.getTime()) / HORA
+    if (horas < parametro<number>('HORAS_CRITICO')) calculada = 'CRITICO'
+    else if (horas < parametro<number>('HORAS_ALTO')) calculada = 'ALTO'
+  }
+  if (!delAsunto) return calculada
+  return ORDEN_CRITICIDAD.indexOf(delAsunto) > ORDEN_CRITICIDAD.indexOf(calculada) ? delAsunto : calculada
 }
 
 // ANS-07: hasta cuándo se pueden pedir los insumos faltantes

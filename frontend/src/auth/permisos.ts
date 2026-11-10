@@ -1,11 +1,11 @@
-export type CodigoRol = "ADMIN" | "COORDINADOR" | "ASISTENTE" | "AUXILIAR" | "ABOGADO"
+export type CodigoRol = "ADMIN" | "COORDINADOR" | "ASISTENTE" | "AUXILIAR" | "REVISOR"
 
 export const NOMBRES_ROLES: Record<CodigoRol, string> = {
   ADMIN: "Administrador",
   COORDINADOR: "Coordinador",
-  ASISTENTE: "Asistente",
+  ASISTENTE: "Asistente administrativo",
   AUXILIAR: "Auxiliar jurídico",
-  ABOGADO: "Abogado revisor"
+  REVISOR: "Revisor"
 }
 
 // El Administrador entra a todo
@@ -17,8 +17,10 @@ export type Modulo = { href: string, nombre: string, descripcion: string, roles:
 
 // roles vacío = todos los perfiles. Inicio va aparte (siempre está en el menú)
 export const MODULOS: Modulo[] = [
-  { href: "/correos", nombre: "Correos por registrar", descripcion: "Asignaciones que llegan al buzón", roles: ["ASISTENTE", "COORDINADOR"] },
+  { href: "/correos", nombre: "Correos", descripcion: "Asignaciones, insumos y respuestas de los buzones", roles: ["ASISTENTE", "COORDINADOR"] },
   { href: "/casos", nombre: "Tablero", descripcion: "Actuaciones abiertas y sus plazos", roles: [] },
+  { href: "/equipos", nombre: "Equipos", descripcion: "Revisores, auxiliares y etapas", roles: ["COORDINADOR"] },
+  { href: "/plantillas", nombre: "Plantillas de correo", descripcion: "Textos de los correos de salida", roles: ["COORDINADOR"] },
   { href: "/parametros", nombre: "Parámetros", descripcion: "Plazos, ANS y días no hábiles", roles: ["COORDINADOR"] },
   { href: "/usuarios", nombre: "Usuarios", descripcion: "Cuentas y perfiles", roles: ["ADMIN"] }
 ]

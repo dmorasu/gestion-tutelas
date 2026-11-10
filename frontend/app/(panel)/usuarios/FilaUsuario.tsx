@@ -9,21 +9,24 @@ import ContrasenaTemporal from "@/components/ui/ContrasenaTemporal"
 type Props = {
   usuario: {
     id: number, nombre: string, correo: string, activo: boolean, capacidadDiaria: number | null, ultimoIngreso: string,
-    roles: string[], debeCambiarContrasena: boolean, minutosBloqueo?: number
+    roles: string[], debeCambiarContrasena: boolean, minutosBloqueo?: number, equipoId: number | null
   }
   esUsted: boolean
+  equipos: { id: number, nombre: string }[]
 }
 
-export default function FilaUsuario({ usuario: u, esUsted }: Props) {
+export default function FilaUsuario({ usuario: u, esUsted, equipos }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [roles, setRoles] = useState(u.roles)
   const [activo, setActivo] = useState(u.activo)
   const [capacidad, setCapacidad] = useState(u.capacidadDiaria ? String(u.capacidadDiaria) : "")
+  const [equipo, setEquipo] = useState(u.equipoId ? String(u.equipoId) : "")
   const [temporal, setTemporal] = useState<string | null>(null)
-  const cambiado = roles.join() !== u.roles.join() || activo !== u.activo || capacidad !== (u.capacidadDiaria ? String(u.capacidadDiaria) : "")
+  const cambiado = roles.join() !== u.roles.join() || activo !== u.activo || capacidad !== (u.capacidadDiaria ? String(u.capacidadDiaria) : "") ||
+    equipo !== (u.equipoId ? String(u.equipoId) : "")
 
   const guardar = () => iniciar(async () => {
-    const r = await guardarUsuario(u.id, { roles, activo, capacidadDiaria: capacidad ? Number(capacidad) : null })
+    const r = await guardarUsuario(u.id, { roles, activo, capacidadDiaria: capacidad ? Number(capacidad) : null, equipoId: equipo ? Number(equipo) : null })
     if (!r.ok) return void toast.error(r.errores.join(". "))
     toast.success(esUsted ? "Guardado. Vuelva a entrar para ver sus perfiles nuevos." : "Usuario guardado")
   })
@@ -59,6 +62,12 @@ export default function FilaUsuario({ usuario: u, esUsted }: Props) {
             ))}
           </div>
         </td>
+        <td>
+          <select value={equipo} onChange={e => setEquipo(e.target.value)} className="campo w-44">
+            <option value="">Sin equipo</option>
+            {equipos.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+        </td>
         <td><input type="number" min={1} value={capacidad} onChange={e => setCapacidad(e.target.value)} placeholder="Sin límite" className="campo w-28" /></td>
         <td><input type="checkbox" checked={activo} disabled={esUsted} onChange={e => setActivo(e.target.checked)} /></td>
         <td className="text-xs whitespace-nowrap">{u.ultimoIngreso}</td>
@@ -71,7 +80,7 @@ export default function FilaUsuario({ usuario: u, esUsted }: Props) {
         </td>
       </tr>
       {temporal && (
-        <tr><td colSpan={6}><ContrasenaTemporal correo={u.correo} contrasena={temporal} alCerrar={() => setTemporal(null)} /></td></tr>
+        <tr><td colSpan={7}><ContrasenaTemporal correo={u.correo} contrasena={temporal} alCerrar={() => setTemporal(null)} /></td></tr>
       )}
     </>
   )

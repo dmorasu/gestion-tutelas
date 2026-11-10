@@ -6,11 +6,14 @@ import { guardarParametro } from "./acciones"
 
 export type ParametroFila = { clave: string, valor: unknown, descripcion: string | null, duda: string | null, confirmado: boolean }
 
-// Texto, número o sí/no se editan directo; listas y objetos como JSON
-const aTexto = (v: unknown) => (typeof v === "string" ? v : JSON.stringify(v))
+// Texto, número o sí/no se editan directo; las listas de textos (correos, etapas) separadas por comas;
+// los objetos como JSON
+const esListaDeTextos = (v: unknown): v is string[] => Array.isArray(v) && v.every(x => typeof x === "string")
+const aTexto = (v: unknown) => (typeof v === "string" ? v : esListaDeTextos(v) ? v.join(", ") : JSON.stringify(v))
 const desdeTexto = (texto: string, original: unknown) => {
   if (typeof original === "number") return Number(texto)
   if (typeof original === "string") return texto
+  if (esListaDeTextos(original)) return texto.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean)
   return JSON.parse(texto)
 }
 

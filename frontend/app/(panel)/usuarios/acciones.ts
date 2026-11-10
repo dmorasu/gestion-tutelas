@@ -10,7 +10,7 @@ const enviar = async (ruta: string, metodo: string, cuerpo?: unknown): Promise<R
   return { ok: true, datos: await r.json().catch(() => null) }
 }
 
-export async function guardarUsuario(id: number, datos: { roles: string[], activo: boolean, capacidadDiaria: number | null }) {
+export async function guardarUsuario(id: number, datos: { roles: string[], activo: boolean, capacidadDiaria: number | null, equipoId: number | null }) {
   return enviar(`/catalogos/usuarios/${id}`, "PUT", datos)
 }
 

@@ -33,8 +33,8 @@ export class MotivoDevolucion extends Model {
   declare nombre: string
 
   @Default('FONDO')
-  @Column(DataType.STRING(10))
-  declare tipo: 'FORMA' | 'FONDO'
+  @Column(DataType.STRING(15))
+  declare tipo: 'FONDO' | 'SOPORTE' | 'CRITERIO' | 'ESTILO'
 
   // Lineamiento de la entidad del que sale (documento y numeral)
   @Column(DataType.STRING(200))
@@ -120,4 +120,39 @@ export class SincronizacionBuzon extends Model {
   @Default(0)
   @Column(DataType.INTEGER)
   declare correosLeidos: number
+
+  // Tamaño del buzón (todas sus carpetas) en la última lectura: el compartido sin licencia tiene 50 GB
+  @Column(DataType.BIGINT)
+  declare tamanoBytes: string | null
+
+  @Column(DataType.DATE)
+  declare tamanoMedidoEn: Date | null
+}
+
+// Plantillas de los correos de salida. Texto con marcadores {{radicado}}, {{numeroInterno}}...
+// El cliente aún no envía las suyas: se editan en la app sin tocar el código
+@Table({ tableName: 'plantillas_correo' })
+export class PlantillaCorreo extends Model {
+  @Unique
+  @AllowNull(false)
+  @Column(DataType.STRING(40))
+  declare codigo: string
+
+  @AllowNull(false)
+  @Column(DataType.STRING(500))
+  declare asunto: string
+
+  // Encabezado grande del correo. null = el de constantes (PLANTILLAS)
+  @Column(DataType.STRING(200))
+  declare titulo: string | null
+
+  // HTML sencillo: párrafos y saltos de línea
+  @AllowNull(false)
+  @Column(DataType.TEXT)
+  declare cuerpo: string
+
+  // false = borrador de la firma; true = la plantilla definitiva del cliente
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  declare confirmada: boolean
 }

@@ -38,7 +38,7 @@ router.post('/login',
 
 router.get('/me', autenticacion, (req, res) => {
   const u = req.usuario!
-  res.json({ id: u.id, nombre: u.nombre, correo: u.correo, roles: req.roles ?? [], debeCambiarContrasena: u.debeCambiarContrasena })
+  res.json({ id: u.id, nombre: u.nombre, correo: u.correo, roles: req.roles ?? [], equipoId: u.equipoId ?? null, debeCambiarContrasena: u.debeCambiarContrasena })
 })
 
 // Cambio de contraseña (obligatorio con la temporal). Cierra las demás sesiones: devuelve un token nuevo

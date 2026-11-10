@@ -1,7 +1,7 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasMany, Default, Unique, AllowNull, Index } from 'sequelize-typescript'
 import { Caso, Actuacion, Escrito } from './casos'
 import { Usuario } from './usuarios'
-import type { Etapa, EstadoCorreo } from '../services/constantes'
+import type { Buzon, Criticidad, Etapa, EstadoCorreo } from '../services/constantes'
 
 // =====================================
 // CORREOS DEL BUZÓN DE TUTELAS (entrantes y salientes)
@@ -27,13 +27,23 @@ export class Correo extends Model {
   @Column(DataType.STRING(10))
   declare direccion: 'ENTRANTE' | 'SALIENTE'
 
-  // Etapa según el encabezado X-Tutelas-Etapa o el alias al que llegó
+  // Buzón por el que entró o salió: asignaciones, insumos o entregas
+  @Index
+  @Column(DataType.STRING(15))
+  declare buzon: Buzon | null
+
+  // Lo que se leyó del asunto normalizado de la asignación (o, sin él, del texto)
   @Column(DataType.STRING(25))
   declare etapaDetectada: Etapa | null
 
-  // Alias o encabezado del que salió la etapa (para revisar la regla de Exchange)
-  @Column(DataType.STRING(30))
-  declare fuenteEtapa: 'ENCABEZADO' | 'ALIAS' | null
+  @Column(DataType.STRING(10))
+  declare fuenteEtapa: 'ASUNTO' | 'TEXTO' | null
+
+  @Column(DataType.STRING(10))
+  declare criticidadDetectada: Criticidad | null
+
+  @Column(DataType.DATE)
+  declare vencimientoDetectado: Date | null
 
   @Column(DataType.STRING(255))
   declare remitente: string | null
@@ -60,6 +70,18 @@ export class Correo extends Model {
   @AllowNull(false)
   @Column(DataType.DATE)
   declare fechaCorreo: Date
+
+  // Enlaces del cuerpo: el cliente puede mandar los documentos como enlace en vez de adjunto
+  @Default([])
+  @Column(DataType.ARRAY(DataType.TEXT))
+  declare enlaces: string[]
+
+  // Respuesta que alguien debe atender: insumos recibidos, acuse o devolución de una entrega,
+  // datos faltantes. Se apaga cuando se clasifica
+  @Index
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  declare porRevisar: boolean
 
   // Radicados de 23 dígitos encontrados en asunto, cuerpo y PDF
   @Default([])
@@ -105,7 +127,7 @@ export class Correo extends Model {
   declare archivos?: Archivo[]
 }
 
-// Adjuntos de correos y escritos, guardados en Azure Blob
+// Documentos del expediente (adjuntos de correos, escritos, anexos, insumos), guardados en SharePoint
 @Table({ tableName: 'archivos' })
 export class Archivo extends Model {
   @AllowNull(false)
@@ -118,9 +140,36 @@ export class Archivo extends Model {
   @Column(DataType.INTEGER)
   declare tamano: number | null
 
-  // Ruta dentro del contenedor. null = no se pudo subir (queda el registro para reintentar)
-  @Column(DataType.STRING(500))
-  declare rutaBlob: string | null
+  // CORREO: adjunto de un correo que llegó. ESCRITO y ANEXO: del paquete que se entrega.
+  // INSUMO: lo que mandó el cliente. RESPUESTA: lo que adjuntó la entidad al acusar, aprobar o
+  // devolver una entrega. SOPORTE: otro documento del expediente
+  @Default('CORREO')
+  @Column(DataType.STRING(10))
+  declare tipo: 'CORREO' | 'ESCRITO' | 'ANEXO' | 'INSUMO' | 'SOPORTE' | 'RESPUESTA'
+
+  // SHAREPOINT o LOCAL (desarrollo sin SharePoint). null = no se pudo guardar: queda el registro
+  @Column(DataType.STRING(10))
+  declare proveedor: 'SHAREPOINT' | 'LOCAL' | null
+
+  // Ruta dentro de la biblioteca (Casos/GPA-2026-00001 .../Contestación/Escritos/V1/escrito.docx)
+  @Column(DataType.STRING(800))
+  declare ruta: string | null
+
+  // Id del archivo en SharePoint (sobrevive a que lo muevan o renombren) y su dirección para
+  // abrirlo en Word o el visor de SharePoint
+  @Column(DataType.STRING(100))
+  declare itemId: string | null
+
+  @Column(DataType.STRING(1000))
+  declare webUrl: string | null
+
+  // Adjunto de un correo: su id en el buzón. Con la copia ya verificada en SharePoint, la limpieza
+  // lo quita del buzón (el correo queda) para no llenar los 50 GB
+  @Column(DataType.STRING(300))
+  declare adjuntoGraphId: string | null
+
+  @Column(DataType.DATE)
+  declare retiradoDelBuzon: Date | null
 
   @ForeignKey(() => Correo)
   @Column(DataType.INTEGER)

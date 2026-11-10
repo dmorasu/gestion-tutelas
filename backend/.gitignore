@@ -1,3 +1,5 @@
 node_modules
 dist
 .env
+# Archivos de desarrollo sin SharePoint (son documentos de los casos: nunca a git)
+almacen-local/

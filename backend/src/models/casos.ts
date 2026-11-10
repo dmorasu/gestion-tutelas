@@ -1,7 +1,7 @@
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo, HasMany, Default, Unique, AllowNull, Index } from 'sequelize-typescript'
-import { Usuario } from './usuarios'
+import { Usuario, Equipo } from './usuarios'
 import { Juzgado, MotivoDevolucion } from './catalogos'
-import type { Etapa, EstadoActuacion, TipoSolicitud, UnidadTermino } from '../services/constantes'
+import type { Criticidad, Etapa, EstadoActuacion, TipoSolicitud, UnidadTermino } from '../services/constantes'
 
 // =====================================
 // CASO: un radicado. Agrupa las actuaciones de todas sus etapas.
@@ -12,6 +12,12 @@ export class Caso extends Model {
   @AllowNull(false)
   @Column(DataType.STRING(23))
   declare radicado: string
+
+  // Número interno de la firma (GPA-AAAA-NNNNN). Va en el acuse de la asignación: el cliente puede
+  // usarlo cuando no tenga el radicado a mano (correo del cliente, punto 3.3)
+  @Unique
+  @Column(DataType.STRING(20))
+  declare numeroInterno: string | null
 
   @AllowNull(false)
   @Column(DataType.STRING(25))
@@ -123,6 +129,14 @@ export class Actuacion extends Model {
   @Column(DataType.STRING(20))
   declare estado: EstadoActuacion
 
+  // Nivel de riesgo (manual §13): el del asunto de la asignación o el calculado, el que sea mayor
+  @Default('ORDINARIO')
+  @Column(DataType.STRING(10))
+  declare criticidad: Criticidad
+
+  @Column(DataType.STRING(10))
+  declare criticidadFuente: 'ASUNTO' | 'CALCULADA' | 'MANUAL' | null
+
   // Hora de llegada del correo de la entidad: protege el ANS aunque se registre después
   @AllowNull(false)
   @Column(DataType.DATE)
@@ -143,7 +157,12 @@ export class Actuacion extends Model {
   @Column(DataType.STRING(20))
   declare terminoUnidad: UnidadTermino | null
 
-  // Vencimiento del término judicial (cálculo automático)
+  // Vencimiento que informa la entidad en la asignación ([Vence: fecha y hora] del asunto).
+  // Si está, manda sobre el cálculo con el término (manual §12.1)
+  @Column(DataType.DATE)
+  declare fechaVencimientoInformada: Date | null
+
+  // Vencimiento del término judicial: el informado o el calculado con notificación y término
   @Column(DataType.DATE)
   declare fechaVencimiento: Date | null
 
@@ -158,16 +177,20 @@ export class Actuacion extends Model {
   @BelongsTo(() => Usuario, 'auxiliarId')
   declare auxiliar?: Usuario
 
+  // Todo escrito lo revisa el revisor del equipo antes de entregarlo (roles del cliente)
   @ForeignKey(() => Usuario)
   @Column(DataType.INTEGER)
-  declare abogadoId: number | null
+  declare revisorId: number | null
 
-  @BelongsTo(() => Usuario, 'abogadoId')
-  declare abogado?: Usuario
+  @BelongsTo(() => Usuario, 'revisorId')
+  declare revisor?: Usuario
 
-  @Default(false)
-  @Column(DataType.BOOLEAN)
-  declare requiereRevisionAbogado: boolean
+  @ForeignKey(() => Equipo)
+  @Column(DataType.INTEGER)
+  declare equipoId: number | null
+
+  @BelongsTo(() => Equipo)
+  declare equipo?: Equipo
 
   @Default(false)
   @Column(DataType.BOOLEAN)
@@ -176,8 +199,9 @@ export class Actuacion extends Model {
   @Column(DataType.DATE)
   declare fechaAsumida: Date | null
 
+  // El auxiliar envió el paquete al revisor (la última vez)
   @Column(DataType.DATE)
-  declare fechaEntregaAbogado: Date | null
+  declare fechaEnvioRevision: Date | null
 
   // Lo que se pide al juez (tipificado por etapa)
   @Column(DataType.TEXT)
@@ -238,6 +262,10 @@ export class SolicitudInsumo extends Model {
   @Column(DataType.DATE)
   declare fechaSolicitud: Date | null
 
+  // Hasta cuándo tiene el cliente para entregarlo: 2 días hábiles, el mismo día si es crítico (§11)
+  @Column(DataType.DATE)
+  declare fechaLimite: Date | null
+
   // Hora de llegada de la respuesta de la entidad (automática, por el hilo)
   @Column(DataType.DATE)
   declare fechaRecepcion: Date | null
@@ -267,12 +295,48 @@ export class Escrito extends Model {
   @Column(DataType.STRING(30))
   declare tipo: string
 
-  @Default('PENDIENTE')
+  // BORRADOR: el auxiliar lo está armando. EN_REVISION: con el revisor. AJUSTE_INTERNO: el revisor lo devolvió al auxiliar.
+  // ENTREGADO, DEVUELTO o APROBADO: según la respuesta de la entidad
+  @Default('BORRADOR')
   @Column(DataType.STRING(15))
-  declare estado: 'PENDIENTE' | 'ENTREGADO' | 'DEVUELTO' | 'AJUSTADO'
+  declare estado: 'BORRADOR' | 'EN_REVISION' | 'AJUSTE_INTERNO' | 'ENTREGADO' | 'DEVUELTO' | 'APROBADO'
+
+  // Enlace al paquete (escrito y anexos) en el repositorio autorizado: se entrega por enlace,
+  // no por adjunto (correo del cliente, punto 3.2, y manual §23)
+  @Column(DataType.STRING(1000))
+  declare enlace: string | null
+
+  @ForeignKey(() => Usuario)
+  @Column(DataType.INTEGER)
+  declare elaboradoPorId: number | null
+
+  @Column(DataType.DATE)
+  declare fechaEnvioRevision: Date | null
+
+  @ForeignKey(() => Usuario)
+  @Column(DataType.INTEGER)
+  declare revisadoPorId: number | null
+
+  @Column(DataType.DATE)
+  declare fechaRevision: Date | null
+
+  // Lo que pidió corregir el revisor (devolución interna, no cuenta para ANS-05)
+  @Column(DataType.TEXT)
+  declare observacionRevision: string | null
 
   @Column(DataType.DATE)
   declare fechaEntregaEntidad: Date | null
+
+  // Acuse o aprobación de la entidad. Sin acuse el mismo día hábil, la constancia de envío vale como recibo (§17)
+  @Column(DataType.DATE)
+  declare fechaAcuse: Date | null
+
+  @Column(DataType.DATE)
+  declare fechaAprobacion: Date | null
+
+  // Correo con el que salió la entrega: su hilo empareja el acuse o la devolución
+  @Column(DataType.INTEGER)
+  declare correoEntregaId: number | null
 
   // Se adjunta respuesta a un derecho de petición (se relaciona con PQRS)
   @Default(false)
@@ -297,10 +361,20 @@ export class Devolucion extends Model {
   @Column(DataType.DATE)
   declare fechaDevolucion: Date
 
-  // Forma o fondo (ANS-05 cuenta solo fondo). Quién la clasifica está pendiente (D19)
+  // Clasificación del manual (§17): fondo, falta de soporte, criterio institucional o estilo.
+  // ANS-05 cuenta solo las de fondo; las de estilo no reinician el proceso
   @Default('SIN_CLASIFICAR')
   @Column(DataType.STRING(15))
-  declare tipo: 'FORMA' | 'FONDO' | 'SIN_CLASIFICAR'
+  declare tipo: 'FONDO' | 'SOPORTE' | 'CRITERIO' | 'ESTILO' | 'SIN_CLASIFICAR'
+
+  // Correo de la entidad con la devolución (capturado del buzón de entregas)
+  @Column(DataType.INTEGER)
+  declare correoId: number | null
+
+  // Llegó después de los días hábiles que tiene la entidad para devolver (manual §17)
+  @Default(false)
+  @Column(DataType.BOOLEAN)
+  declare extemporanea: boolean
 
   @ForeignKey(() => MotivoDevolucion)
   @Column(DataType.INTEGER)

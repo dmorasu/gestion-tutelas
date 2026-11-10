@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import clsx from "clsx"
 import { Menu, MenuButton, MenuItem, MenuItems } from "@headlessui/react"
-import { Home, Inbox, LayoutList, SlidersHorizontal, Users, Settings2, ChevronDown, type LucideIcon } from "lucide-react"
+import { Home, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Settings2, ChevronDown, type LucideIcon } from "lucide-react"
 
 type Enlace = { href: string, nombre: string }
 
@@ -13,13 +13,15 @@ export const ICONOS: Record<string, LucideIcon> = {
   "/inicio": Home,
   "/correos": Inbox,
   "/casos": LayoutList,
+  "/equipos": UsersRound,
+  "/plantillas": Mail,
   "/parametros": SlidersHorizontal,
   "/usuarios": Users
 }
 
 // Agrupados en menús desplegables (igual que Nodex). Un grupo con un solo módulo permitido va como enlace
 const GRUPOS: { nombre: string, Icono: LucideIcon, modulos: string[] }[] = [
-  { nombre: "Configuración", Icono: Settings2, modulos: ["/parametros", "/usuarios"] }
+  { nombre: "Configuración", Icono: Settings2, modulos: ["/equipos", "/plantillas", "/parametros", "/usuarios"] }
 ]
 
 const claseEnlace = (activo: boolean) => clsx(

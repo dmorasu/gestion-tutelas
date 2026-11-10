@@ -1,13 +1,15 @@
 # Nodex Tutelas: resumen técnico para continuar
 
-_Actualizado: 2026-11-09_
+_Actualizado: 2026-11-09 (noche, bloques 1 y 2 del plan replanteado)_
 
 App para gestionar las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM (Secretaría Distrital de Movilidad), pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla la app se llama **Nodex Tutelas** y en el pie dice "GPA Legal".
 
 Fuentes del negocio:
 - `Docs/Flujo proceso - sabana.xlsx`: flujo, campos por etapa, ANS y volumen del plan de choque. Es documento del cliente: no se modifica.
-- `Docs/PLAN.md`: fases, modelo y la tabla de **supuestos** en uso (§5).
-- `Docs/CONFIGURAR_BUZON_M365.md`: guía para el administrador de 365 (buzón, alias, reglas, app de Entra, política de acceso).
+- `Docs/informacion_correo.txt` y `Docs/cuerpo_correo_informacion_2.txt`: roles, los tres buzones, convención de asuntos, informes y equipos (respuesta del cliente).
+- `Docs/20261103_Manual_Operativo_…docx`: manual operativo v1.1 (flujo, criticidad, insumos, entregas, devoluciones, ANS). Respondió varias dudas (D1, D16, D19).
+- `Docs/PLAN.md`: **plan replanteado** (qué cambió, flujo por buzón, bloques de trabajo, supuestos abiertos y decisiones pendientes).
+- `Docs/CONFIGURAR_BUZON_M365.md`: guía para el administrador de 365 (tres buzones, app de Entra, política de acceso).
 
 ## Arquitectura
 
@@ -20,12 +22,12 @@ Independiente de Nodex (repositorio, backend, base y servidor propios), con el m
 | Frontend | `frontend/` | 3100 | Next 16.4 (Turbopack) + React 19 + Tailwind 3 + headlessui + lucide |
 | Base | servidor Postgres de Nodex (10.0.4.4), base **`gpa_legal`** | 5432 | Usuario de desarrollo de Nodex por ahora |
 | Redis | el de cada equipo, `REDIS_DB=5` (Nodex usa 0) | 6379 | Solo el worker y el botón "Leer buzón ahora" |
-| Archivos | Azure Blob (contenedor propio) | — | **Sin configurar** aún: los adjuntos quedan con `rutaBlob` null |
-| Correo | Microsoft Graph sobre un buzón compartido con 3 alias | — | **Sin configurar** aún (ver la guía de 365) |
+| Archivos | **SharePoint** (sitio de los expedientes, Graph con `Sites.Selected`) | — | **Sin configurar** aún: en desarrollo van a `backend/almacen-local` (en `.gitignore`). Azure Blob se retiró |
+| Correo | Microsoft Graph sobre **tres buzones** (asignaciones, insumos, entregas) | — | **Sin configurar** aún (ver la guía de 365). Sin él, los correos de salida quedan simulados |
 
 Los puertos (4100/3100) no chocan con Nodex (4000, 3000-3002).
 
-**Arranque del backend** (`server.ts`): `activarHistorialCasos()` → `authenticate` → `db.sync({ alter: true })` fuera de producción → `sembrarBase()` (roles y parámetros, idempotente) → `cargarCalendario`. Si algo falla, imprime "Falló la conexión a la base de datos" y **el servidor sigue arriba**: revisar el log. En producción `alter` está apagado: hará falta un mecanismo de ajustes de esquema (ALTER idempotentes, como en Nodex).
+**Arranque del backend** (`server.ts`): `activarHistorialCasos()` → `authenticate` → `db.sync({ alter: true })` fuera de producción → `sembrarBase()` (roles, parámetros, plantillas, equipos iniciales, secuencia y número interno de los casos viejos; idempotente) → `cargarCalendario`. Contra la base remota el arranque tarda cerca de un minuto. Si algo falla, imprime "Falló la conexión a la base de datos" y **el servidor sigue arriba**: revisar el log. En producción `alter` está apagado: hará falta un mecanismo de ajustes de esquema (ALTER idempotentes, como en Nodex).
 
 ## Convenciones (las de Nodex)
 
@@ -42,50 +44,53 @@ Los puertos (4100/3100) no chocan con Nodex (4000, 3000-3002).
 ## Backend (`backend/src`)
 
 - `config/`: `db.ts` (lista explícita de modelos), `redis.ts`, `entra.ts` (**solo para el buzón**).
-- `models/`: `usuarios.ts` (Usuario, Rol, UsuarioRol), `catalogos.ts` (Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon), `casos.ts` (Caso, Parte, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision), `correos.ts` (Correo, Archivo, HistorialCaso).
+- `models/`: `usuarios.ts` (Equipo, Usuario, Rol, UsuarioRol; **Equipo va antes de Usuario** porque los decoradores leen su tipo al cargar), `catalogos.ts` (Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo), `casos.ts` (Caso, Parte, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision), `correos.ts` (Correo, Archivo, HistorialCaso).
 - `services/`
-  - `constantes.ts`: roles, etapas, estados, unidades de término y sentidos de decisión.
-  - `parametros.ts`: `PARAMETROS_BASE` con los supuestos D1–D20, en caché de 1 minuto.
-  - `plazos.ts`: asignación efectiva (hora de corte), vencimiento judicial (horas, días hábiles o calendario), fecha límite ANS por etapa y semáforo. **Toda regla sale de parámetros.**
+  - `constantes.ts`: roles, etapas, criticidades, buzones, estados, plantillas, unidades de término y sentidos de decisión.
+  - `parametros.ts`: `PARAMETROS_BASE`, en caché de 1 minuto. Los que respondió el cliente llevan `fuente` y reemplazan solos el supuesto si nadie lo editó.
+  - `plazos.ts`: asignación efectiva (corte de las 15:00), vencimiento judicial, criticidad (§13), fecha límite ANS (ANS-01/03 con el mínimo de días, ANS-02 para lo crítico) y semáforo. **Toda regla sale de parámetros.**
   - `calendario.ts` y `utils/diasHabiles.ts`: festivos de Colombia (copiado de Nodex) más la tabla de días no hábiles por etapa (D3).
-  - `registroCasos.ts`: `registrarAsignacion` (correo o manual → caso + actuación + reparto + plazos, en transacción) y `recalcularPlazos`.
-  - `reparto.ts`: el auxiliar o abogado activo con menos actuaciones abiertas, respetando su capacidad diaria.
+  - `registroCasos.ts`: `registrarAsignacion` (correo o manual → caso con número interno + actuación + reparto + plazos, en transacción; después, el acuse) y `recalcularPlazos`.
+  - `reparto.ts`: el auxiliar con menos actuaciones abiertas entre los equipos que atienden la etapa (respetando su capacidad diaria) y el revisor de su equipo.
   - `historialCasos.ts`: bitácora por hooks (patrón de `historialTramites` de Nodex). El usuario sale de `utils/contextoPeticion.ts`.
-  - `buzon/graph.ts`: cliente de Graph con credenciales de la app; `enviarCorreo` crea el borrador para tener el id y el hilo.
-  - `buzon/sincronizarBuzon.ts`: consulta delta del inbox; guarda el correo y los adjuntos; busca el radicado en asunto, cuerpo y PDF (3 páginas); toma la etapa del encabezado `X-Tutelas-Etapa` o del alias. `asociarCorreo` empareja por hilo (respuesta de insumos → fecha de recepción) o por radicado.
-  - `almacenamiento.ts`: Azure Blob. Sin la cadena de conexión no sube nada.
-- `utils/`: `radicado.ts` (23 dígitos con guiones, puntos o espacios), `fechaColombia.ts` (UTC-5 fijo), `politicaContrasena.ts`, `intentosLogin.ts` y `contrasenas.ts` (copiados de Nodex).
+  - `buzon/graph.ts`: cliente de Graph con credenciales de la app; `enviarCorreo(buzon, …)` crea el borrador (o la respuesta en el hilo) para tener el id y el `conversationId`.
+  - `buzon/sincronizarBuzon.ts`: consulta delta del inbox de cada buzón; guarda el correo, adjuntos y enlaces; lee el asunto normalizado (etapa, criticidad, radicado, vencimiento). `asociarCorreo` empareja por hilo (insumos → fecha de recepción; entrega → respuesta "por revisar") o por radicado según el buzón.
+  - `buzon/correosSalida.ts`: plantillas con marcadores `{{…}}`, `enviarPlantilla` desde el buzón de su función, `vistaPrevia` y `enviarPrueba`, y modo **simulado** (sin 365 o con `CORREO_ENVIO_ACTIVO` distinto de `true`). Los borradores de la firma que nadie editó se actualizan solos al sembrar.
+  - `buzon/disenoCorreo.ts`: HTML corporativo de correo (tablas y estilos en línea para Outlook), logo incrustado por `cid` desde `backend/recursos/logo-correo.png` (16 KB).
+  - `buzon/limpiezaBuzon.ts`: quita del buzón los adjuntos con copia verificada en SharePoint (worker diario y `npm run limpiar-buzon`).
+  - `almacenamiento.ts`: SharePoint por Graph (subir con sesión de carga si pasa de 4 MB, leer, mover, compartir la carpeta invitando a los destinatarios con vencimiento) o carpeta local.
+  - `expediente.ts`: carpetas del caso (`Casos/<número> <radicado>/<etapa>/Entrada|Insumos|Soportes|Escritos/Vn`) y paso de los adjuntos de la bandeja al expediente al asociar.
+  - `flujoEscritos.ts`: datos faltantes, insumos (solicitud y confirmación), escrito por versiones, revisión, entrega, respuesta de la entidad (acuse, aprobación, devolución), radicación y cierre.
+  - `cargueExcel.ts`: lectura de Excel o CSV sin estructura fija (exceljs), emparejamiento sugerido de columnas, registro por tandas y acuse único del paquete.
+  - `permisosActuacion.ts`: quién puede cada paso (auxiliar, revisor del equipo, coordinador).
+- `utils/`: `asunto.ts` (lee `[Prefijo] [Criticidad] [Radicado] [Actuación] [Vence: …]` en cualquier orden y con o sin tildes), `radicado.ts` (23 dígitos con guiones, puntos o espacios), `fechaColombia.ts` (UTC-5 fijo), `politicaContrasena.ts`, `intentosLogin.ts` y `contrasenas.ts` (copiados de Nodex).
 - `routes/`:
   - `authRouter` (login, me, cambiar-contraseña, salir);
-  - `correosRouter` (bandeja, detalle con sugerencia, registrar, asociar, descartar, estado-buzon, sincronizar);
-  - `casosRouter` (tablero con filtros y semáforo, resumen, registro manual, detalle, historial, PATCH de actuación, asumir);
-  - `catalogosRouter` (parámetros, días no hábiles, juzgados, motivos, usuarios con contraseña temporal, restablecer y desbloquear);
-  - `archivosRouter`.
+  - `correosRouter` (bandeja por registrar o por revisar y por buzón, detalle con sugerencia, registrar, asociar, atendido, descartar, estado de los buzones, sincronizar);
+  - `casosRouter` (tablero con filtros de criticidad y equipo, resumen, registro manual, detalle, historial, PATCH de actuación, asumir);
+  - `catalogosRouter` (parámetros, días no hábiles, juzgados, motivos, usuarios con equipo, equipos y sus integrantes, plantillas);
+  - `casosRouter` también tiene los pasos del flujo: `POST /actuaciones/:id/{datos-faltantes|insumos|insumos/recibidos|revision|devolver-auxiliar|entregar|respuesta|radicacion|cerrar}`;
+  - `archivosRouter` (ver o descargar; subir al expediente con multer en memoria, hasta 60 MB por archivo);
+  - `carguesRouter` (`analizar`, `registrar` por tandas de hasta 50 filas, `acuse`).
 - `worker.ts` y `queues/buzonQueue.ts`: lectura programada (`upsertJobScheduler`, concurrencia 1).
 - `scripts/`:
   - `crearAdmin.ts` (`npm run crear-admin -- correo "Nombre"`);
-  - `correoPrueba.ts` (`npm run correo-prueba [-- ETAPA RADICADO]`): simula una asignación con remitente `prueba@nodex.local`;
-  - `leerBuzon.ts` (`npm run leer-buzon`): lee el buzón una vez, sin Redis.
+  - `correoPrueba.ts` (`npm run correo-prueba [-- ETAPA RADICADO HORAS]`): simula una asignación con el asunto normalizado y remitente `prueba@nodex.local`;
+  - `leerBuzon.ts` (`npm run leer-buzon`): lee los buzones una vez, sin Redis.
 
 ### Acceso
 - **Login propio** (correo y contraseña con bcrypt). **Los usuarios no entran con Microsoft 365**: el usuario lo pidió explícitamente.
 - Sin registro público: el administrador crea al usuario y la app muestra la contraseña temporal una sola vez. Se cambia obligatoriamente al primer ingreso; el middleware bloquea todo menos `/api/auth/*`.
 - Bloqueo de 15 minutos tras 5 fallos por cuenta (30 por IP). La IP real llega en `X-IP-Cliente` desde Next.
 - JWT de 10 horas con `versionSesion`: cerrar sesión, cambiar contraseña o cambiar perfiles invalida los tokens.
-- Perfiles: ADMIN, COORDINADOR, ASISTENTE, AUXILIAR, ABOGADO. Auxiliar y abogado solo ven y editan sus actuaciones.
+- Perfiles (los del cliente): ADMIN, COORDINADOR, ASISTENTE (administrativo), AUXILIAR (jurídico), REVISOR. El auxiliar ve lo suyo; el revisor, lo de su equipo y lo que revisa; asistencia y coordinación, todo. Reasignar responsables es solo del coordinador ("repartir excepcionalmente").
+- Equipos: un revisor y sus auxiliares, con las etapas que atienden. La semilla crea los cuatro del correo del cliente si no hay ninguno.
 
-### Supuestos (dudas D1–D30 sin respuesta del abogado)
+### Supuestos y respuestas
 
-Todo lo que define plazos está en la tabla `parametros`, en la pantalla Parámetros, marcado "Supuesto" hasta que se confirme. Cuando llegue una respuesta, se cambia el valor; si cambia el valor por defecto, también en `PARAMETROS_BASE`. **No se reescribe la lógica.**
+Todo lo que define plazos está en la tabla `parametros`, en la pantalla Parámetros. Los que confirmó el manual o el correo del cliente aparecen como confirmados; el resto dice "Supuesto". Cuando llegue una respuesta, se cambia el valor; si cambia el valor por defecto, también en `PARAMETROS_BASE` (con `fuente`). **No se reescribe la lógica.** La tabla al día está en `Docs/PLAN.md` §1 y §5.
 
-Valores por defecto:
-- corte a las 17:00 y la jornada empieza a las 08:00 (D1);
-- el "día hábil siguiente" llega hasta las 23:59 (D2);
-- un término en días vence a las 17:00 (D4);
-- para impugnar hay 3 días hábiles (D5);
-- el ANS cuenta desde el último insumo recibido (D6);
-- en impugnación y desacato siempre revisa un abogado (D16);
-- semáforo rojo con menos de 4 horas y amarillo con menos de 24.
+Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificación de devoluciones (D19), criticidad, ANS-01/02/03/06/07 y plazos de la entidad (insumos y devoluciones).
 
 ## Frontend (`frontend/`)
 
@@ -105,52 +110,50 @@ Valores por defecto:
 - **Sesión:**
   - cookie `TOKEN` (httpOnly) en el dominio del frontend;
   - `src/auth/dal.ts` (`obtenerSesion`, `requiereRol`) redirige a cambiar contraseña si es la temporal;
-  - las descargas pasan por `app/archivos/[id]/route.ts`.
+  - las descargas pasan por `app/archivos/[id]/route.ts` y las subidas por `app/archivos/subir` y `app/cargues/analizar` (route handlers: los escritos pasan del límite de las server actions).
 - **Pantallas:**
   - `inicio`;
-  - `correos` y `correos/[id]` (formulario precargado y acciones asociar o descartar);
-  - `casos` (tablero) y `casos/[id]` (detalle, `PanelActuacion` editable, historial);
-  - `parametros` (editor y días no hábiles);
-  - `usuarios`;
+  - `correos` (por registrar, respuestas por revisar, asociados y descartados, por buzón) y `correos/[id]` (formulario precargado con etapa, criticidad y vencimiento del asunto; asociar, descartar o marcar atendido);
+  - `casos` (tablero con número interno, criticidad y equipo) y `casos/[id]` (detalle, `PanelActuacion` editable, correos enviados y simulados, historial);
+  - `casos/nuevo` (asignación manual o desde Excel; desde un correo con Excel adjunto abre ya leído);
+  - en `casos/[id]`, `PanelTrabajo` por actuación: escrito por versiones, revisión, entrega, respuesta, insumos, datos faltantes, radicación y cierre. Los botones siguen las mismas reglas de `permisosActuacion` del backend;
+  - en `correos/[id]`, `AtenderRespuesta`: clasificar la respuesta a una entrega, marcar insumos recibidos o confirmar datos faltantes desde el correo;
+  - `equipos` (etapas e integrantes) y `plantillas` (correos de salida), las dos del coordinador;
+  - `parametros` (editor y días no hábiles; las listas se escriben separadas por comas);
+  - `usuarios` (perfiles y equipo);
   - `auth/login` y `auth/cambiar-contrasena`.
 - `AGENTS.md` lo genera `next dev`; se deja en git.
 
-## Estado (2026-11-09)
+## Estado (2026-11-09, noche)
 
-**Probado:**
-- Tipos y lint sin errores en las dos apps, y build de producción del frontend (antes del rediseño; repetirlo con el servidor apagado).
-- 17 pruebas del motor de plazos y del radicado.
-- 7 pruebas de contraseñas y bloqueo.
-- 13 rutas GET con sesión real, más registro, PATCH y asumir con un caso de prueba (borrado después).
-- Capturas de todas las pantallas en Edge.
+**Bloque 1:** tres buzones, asunto normalizado, número interno, criticidad, vencimiento informado, roles y equipos, reparto por equipo, plantillas y acuse automático.
+**Bloque 2:** expediente en SharePoint, flujo completo del escrito (insumos, datos faltantes, revisión, entregas V1 y V2, respuesta y devoluciones, radicación, cierre), asignación manual y cargue desde Excel.
 
-**En la base `gpa_legal`:**
-- El administrador `dmora@gomezpinedaabogados.com`.
-- Los roles y los 18 parámetros.
-- El correo de prueba #1 (acción, por registrar).
-- No hay auxiliares ni abogados: crearlos en Usuarios para probar el reparto.
+**Probado** (con datos temporales borrados después; la base quedó como estaba):
+- Tipos en las dos apps y lint del frontend sin errores (el backend no tiene eslint).
+- Lector del asunto con los formatos de fecha del cliente, sin tildes, en otro orden y en respuestas `RE:`.
+- Flujo completo por servicios: los adjuntos pasan de la bandeja al expediente; el ANS queda suspendido mientras se esperan insumos y se reanuda al recibirlos; devolución interna; V1, devolución de fondo con su plazo de corrección, V2 que cierra ese plazo; aprobación, radicación y cierre del caso.
+- Por HTTP con usuarios reales de prueba: subir y descargar documentos (también por el proxy del frontend), permisos (el auxiliar no puede entregar), validaciones, respuesta de la entidad que llega por otro hilo al buzón de entregas, asociada por radicado y clasificada desde el correo.
+- Excel de 30 filas adjunto a un correo: lectura, emparejamiento automático, registro en tandas y un solo acuse del paquete. Contra la base remota tarda unos 2 s por caso.
+- Las 11 pantallas cargan con sesión de coordinador y de auxiliar.
+- Se corrigió un error que ya existía: `recalcularPlazos` fallaba al editar notificación o término (`{...instancia}` de Sequelize no copia los valores).
 
-**Sin probar:** lectura real del buzón y envío por Graph (falta la configuración de 365), Azure Blob y el worker con Redis.
+**Después (misma noche):** correos con diseño corporativo y vista previa; identificación de respuestas por número interno; documentos de insumos y de respuestas de la entidad agrupados en el caso; medición del tamaño de los buzones y limpieza de adjuntos. Probado: vista previa (capturas con Chrome sin ventana), respuestas en un hilo nuevo y sin radicado identificadas por el número (también en minúsculas) y archivadas en su carpeta. La limpieza de adjuntos y la medición necesitan Graph real: sin probar.
+
+**Ojo al probar:** un archivo nuevo en `backend/src` reinicia el `nodemon` (y el arranque contra la base remota tarda cerca de un minuto). Los scripts de prueba, mejor fuera de `src`.
+
+**En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las 8 plantillas en borrador y los 2 casos de prueba de la mañana (GPA-2026-00001 y 00002).
+
+**Sin probar:** Graph real (buzones, envío y SharePoint: falta 365) y el worker con Redis.
 
 ## Pendientes y próximos pasos
 
-1. **Infraestructura de 365** (guía en `Docs/CONFIGURAR_BUZON_M365.md`): buzón y alias, reglas `X-Tutelas-Etapa`, app de Entra solo con `Mail.ReadWrite` y `Mail.Send`, y política de acceso limitada al buzón. Después: `npm run leer-buzon`.
-2. **Respuestas del abogado** (cuestionario D1–D30). Bloquean el diseño fino D1, D6, D16, D17 y D30.
-3. **Botón de registro manual** en pantalla. La API ya existe: `POST /api/casos` con `fechaAsignacion`.
-4. **Fase 2:**
-   - escritos y versiones, devoluciones (forma o fondo, con motivo);
-   - envío de correos desde la app (pedir insumos, entregar al abogado, entregar a la entidad) emparejados por hilo;
-   - radicación en el juzgado y decisiones con la regla de favorable (D13);
-   - impugnación y cumplimiento;
-   - cargue masivo desde Excel y archivo maestro de otros operadores (ANS-13).
-5. **Fase 3:** ANS-01 a 13 calculados, alertas tempranas (ANS-08), informes semanal y mensual, asistencia del equipo (ANS-11) y reglas de descuento (D29).
-6. **Producción:**
-   - servidor propio con Nginx y PM2 (API, worker y frontend);
-   - usuario propio de base de datos, no el de Nodex;
-   - Azure Blob;
-   - `alter` apagado, con ajustes de esquema;
-   - HTTPS para la cookie `secure`.
-7. Decidir dónde usar el logo de la firma (`Docs/logogpa.png`).
+1. **Infraestructura de 365** (guía en `Docs/CONFIGURAR_BUZON_M365.md`): tres buzones compartidos, app de Entra con `Mail.ReadWrite`, `Mail.Send` y `Sites.Selected`, política de acceso limitada a los tres buzones y permiso de escritura sobre el sitio de SharePoint. Después: `npm run leer-buzon` y una entrega de prueba.
+2. **En la app:** escribir `GPA-SDM-PST` en el parámetro `PREFIJO_ASUNTO`, los destinatarios (`CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA`), crear revisores y auxiliares y armar los equipos.
+3. **Bloque 3** (ver `Docs/PLAN.md` §4 y, para los buzones, §7): tablero diario, alertas inmediatas, informes semanal y mensual, ANS calculados y archivo maestro de otros operadores. Del bloque 2 quedan la solicitud de expedientes a juzgados y un correo libre desde el caso.
+4. **Decisiones tomadas:** SharePoint como único repositorio y envío por Graph, no por SendGrid (razones en `Docs/PLAN.md` §6). Pendiente: plantillas definitivas del cliente.
+5. **Producción:** servidor propio con Nginx y PM2, usuario propio de base, `alter` apagado con ajustes de esquema, HTTPS y `CORREO_ENVIO_ACTIVO=true` cuando las plantillas estén aprobadas.
+6. Decidir dónde usar el logo de la firma (`Docs/logogpa.png`).
 
 ## Continuar en el Mac
 
@@ -165,7 +168,7 @@ cp .env.example .env
 #   DB_HOST, DB_USER y DB_PASSWORD: los mismos del Backend/.env de Nodex en el Mac
 #   DB_NAME=gpa_legal
 #   JWT_SECRET=$(openssl rand -hex 48)    ← uno propio; solo invalida las sesiones abiertas
-#   BUZON_ACTIVO=false hasta tener la configuración de 365
+#   BUZON_ACTIVO=false y CORREO_ENVIO_ACTIVO=false hasta tener la configuración de 365
 npm run dev        # → "Conexión exitosa a la base de tutelas" y "API de tutelas en el puerto 4100"
 
 cd ../frontend && npm ci

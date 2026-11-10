@@ -11,6 +11,7 @@ const SesionSchema = z.object({
   nombre: z.string(),
   correo: z.string(),
   roles: z.array(z.string()),
+  equipoId: z.number().nullable().optional(),
   debeCambiarContrasena: z.boolean()
 })
 export type Sesion = z.infer<typeof SesionSchema>

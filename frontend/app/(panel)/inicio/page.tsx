@@ -1,20 +1,28 @@
 import Link from "next/link"
-import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, type LucideIcon } from "lucide-react"
 import { fetchApi } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { NOMBRES_ROLES, modulosPermitidos, tieneRol, type CodigoRol } from "@/src/auth/permisos"
-import { ETAPAS, fechaHora } from "@/src/lib/formato"
+import { BUZONES, CRITICIDADES, ETAPAS, fechaHora } from "@/src/lib/formato"
 
 // Aspecto de cada módulo (las clases van completas: Tailwind solo genera las que lee literalmente)
 const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string, borde: string, halo: string }> = {
   "/correos": { Icono: Inbox, fondo: "from-cyan-400 to-sky-600", sombra: "shadow-cyan-500/30", borde: "hover:border-cyan-300", halo: "bg-cyan-400" },
   "/casos": { Icono: LayoutList, fondo: "from-orange-400 to-red-600", sombra: "shadow-orange-500/30", borde: "hover:border-orange-300", halo: "bg-orange-400" },
+  "/equipos": { Icono: UsersRound, fondo: "from-violet-400 to-indigo-600", sombra: "shadow-violet-500/30", borde: "hover:border-violet-300", halo: "bg-violet-400" },
+  "/plantillas": { Icono: Mail, fondo: "from-teal-400 to-emerald-600", sombra: "shadow-teal-500/30", borde: "hover:border-teal-300", halo: "bg-teal-400" },
   "/parametros": { Icono: SlidersHorizontal, fondo: "from-slate-500 to-slate-700", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-400" },
   "/usuarios": { Icono: Users, fondo: "from-rose-400 to-pink-600", sombra: "shadow-rose-500/30", borde: "hover:border-rose-300", halo: "bg-rose-400" }
 }
 
-type Resumen = { semaforo: Record<string, number>, porEtapa: { etapa: string, count: number }[], porRegistrar: number }
-type EstadoBuzon = { activo: boolean, estado: { ultimaEjecucion: string | null, ultimoError: string | null } | null }
+type Resumen = {
+  semaforo: Record<string, number>, porEtapa: { etapa: string, count: number }[], porCriticidad: { criticidad: string, count: number }[],
+  porRegistrar: number, porRevisar: number
+}
+type EstadoBuzon = {
+  activo: boolean, envio: string,
+  buzones: { buzon: string, direccion: string, porcentaje: number | null, alerta: boolean, estado: { ultimaEjecucion: string | null, ultimoError: string | null } | null }[]
+}
 type Pendiente = { cantidad: number, texto: string }
 
 const leer = async <T,>(ruta: string): Promise<T | null> => {
@@ -24,7 +32,7 @@ const leer = async <T,>(ruta: string): Promise<T | null> => {
 
 const COLORES = [
   { clave: "VENCIDO", nombre: "Vencidas", punto: "bg-red-600", texto: "text-red-700" },
-  { clave: "ROJO", nombre: "Críticas", punto: "bg-red-400", texto: "text-red-600" },
+  { clave: "ROJO", nombre: "Urgentes", punto: "bg-red-400", texto: "text-red-600" },
   { clave: "AMARILLO", nombre: "Próximas", punto: "bg-amber-400", texto: "text-amber-700" },
   { clave: "VERDE", nombre: "A tiempo", punto: "bg-emerald-500", texto: "text-emerald-700" },
   { clave: "SIN_FECHA", nombre: "Sin fecha límite", punto: "bg-slate-300", texto: "text-slate-500" }
@@ -45,10 +53,13 @@ export default async function InicioPage() {
   ])
 
   const pendientes: Record<string, Pendiente[]> = {
-    "/correos": resumen?.porRegistrar ? [{ cantidad: resumen.porRegistrar, texto: "por registrar" }] : [],
+    "/correos": [
+      { cantidad: resumen?.porRegistrar ?? 0, texto: "por registrar" },
+      { cantidad: resumen?.porRevisar ?? 0, texto: "respuestas por revisar" }
+    ].filter(p => p.cantidad > 0),
     "/casos": [
       { cantidad: resumen?.semaforo.VENCIDO ?? 0, texto: "vencidas" },
-      { cantidad: resumen?.semaforo.ROJO ?? 0, texto: "críticas" },
+      { cantidad: resumen?.semaforo.ROJO ?? 0, texto: "urgentes" },
       { cantidad: resumen?.semaforo.AMARILLO ?? 0, texto: "próximas" }
     ].filter(p => p.cantidad > 0)
   }
@@ -66,7 +77,7 @@ export default async function InicioPage() {
           <h1 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">{saludo()}, {sesion.nombre.split(" ")[0]}</h1>
           <p className="mt-2 text-sm text-slate-200">
             {urgentes > 0
-              ? <>Tienes <b className="text-white">{urgentes}</b> actuación(es) vencidas o críticas.</>
+              ? <>Tienes <b className="text-white">{urgentes}</b> actuación(es) vencidas o urgentes.</>
               : "Todo al día en tus actuaciones."}
           </p>
           {sesion.roles.length > 0 && (
@@ -150,11 +161,31 @@ export default async function InicioPage() {
                   ))}
                 </ul>
               )}
+            {resumen.porCriticidad.length > 0 && (
+              <ul className="mt-4 space-y-2 border-t border-slate-100 pt-4 text-xs">
+                {["CRITICO", "ALTO", "ORDINARIO"].map(c => {
+                  const fila = resumen.porCriticidad.find(x => x.criticidad === c)
+                  return fila ? (
+                    <li key={c} className="flex justify-between">
+                      <Link href={`/casos?criticidad=${c}`} className="text-slate-600 hover:text-slate-900">{CRITICIDADES[c]}</Link>
+                      <span className={`font-semibold ${c === "CRITICO" ? "text-red-700" : "text-slate-800"}`}>{fila.count}</span>
+                    </li>
+                  ) : null
+                })}
+              </ul>
+            )}
             {buzon && (
-              <p className="mt-5 border-t border-slate-100 pt-4 text-[11px] text-slate-400">
-                {buzon.activo ? `Buzón leído: ${fechaHora(buzon.estado?.ultimaEjecucion)}` : "Lectura del buzón apagada"}
-                {buzon.estado?.ultimoError && <span className="block text-red-600">Error en la última lectura</span>}
-              </p>
+              <div className="mt-5 border-t border-slate-100 pt-4 text-[11px] text-slate-400 space-y-0.5">
+                {!buzon.activo && <p>Lectura de buzones apagada</p>}
+                {buzon.activo && buzon.buzones.map(b => (
+                  <p key={b.buzon}>
+                    {BUZONES[b.buzon]}: {fechaHora(b.estado?.ultimaEjecucion)}
+                    {b.porcentaje !== null && <span className={b.alerta ? "text-amber-700 font-semibold" : ""}> · {b.porcentaje}% lleno</span>}
+                    {b.estado?.ultimoError && <span className="text-red-600"> · error</span>}
+                  </p>
+                ))}
+                {buzon.envio === "SIMULADO" && <p className="text-amber-700">Envío de correos simulado</p>}
+              </div>
             )}
           </div>
         </section>

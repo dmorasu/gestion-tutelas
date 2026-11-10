@@ -27,6 +27,22 @@ export async function asociarCorreo(correoId: number, actuacionId: number) {
   return r
 }
 
+export async function marcarAtendido(correoId: number) {
+  const r = await enviar(`/correos/${correoId}/atendido`, "POST")
+  revalidatePath("/correos")
+  revalidatePath(`/correos/${correoId}`)
+  return r
+}
+
+// Atiende una respuesta por revisar (insumos, entrega, datos faltantes) con su ruta del backend
+export async function atenderRespuesta(correoId: number, casoId: number, ruta: string, cuerpo: Record<string, unknown>) {
+  const r = await enviar(ruta, "POST", cuerpo)
+  revalidatePath("/correos")
+  revalidatePath(`/correos/${correoId}`)
+  revalidatePath(`/casos/${casoId}`)
+  return r
+}
+
 export async function leerBuzon() {
   return enviar("/correos/sincronizar", "POST")
 }

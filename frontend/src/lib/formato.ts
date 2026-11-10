@@ -30,7 +30,7 @@ export const tiempoRestante = (valor?: string | null) => {
 }
 
 export const ETAPAS: Record<string, string> = {
-  ACCION: "Acción",
+  ACCION: "Contestación",
   IMPUGNACION: "Impugnación",
   CUMPLIMIENTO: "Cumplimiento",
   REQUERIMIENTO_PREVIO: "Requerimiento previo",
@@ -42,13 +42,44 @@ export const TIPOS_SOLICITUD: Record<string, string> = { TUTELA: "Tutela", ACCIO
 
 export const ESTADOS_ACTUACION: Record<string, string> = {
   POR_ASUMIR: "Por asumir",
+  EN_ANALISIS: "En análisis",
   EN_INSUMOS: "Esperando insumos",
   EN_PROYECCION: "En proyección",
-  EN_REVISION: "En revisión del abogado",
+  EN_REVISION: "Con el revisor",
+  AJUSTE_INTERNO: "Ajuste pedido por el revisor",
   ENTREGADO: "Entregado a la entidad",
-  DEVUELTO: "Devuelto",
-  RADICADO: "Radicado en el juzgado",
+  DEVUELTO: "Devuelto por la entidad",
+  APROBADO: "Aprobado por la entidad",
+  RADICADO: "Radicado",
   CERRADA: "Cerrada"
+}
+
+export const CRITICIDADES: Record<string, string> = { CRITICO: "Crítico", ALTO: "Alto", ORDINARIO: "Ordinario" }
+
+// Clasificación de las devoluciones de la entidad (manual §17). Solo las de fondo cuentan para ANS-05
+export const TIPOS_DEVOLUCION: Record<string, string> = { FONDO: "De fondo", SOPORTE: "Por falta de soporte", CRITERIO: "Por criterio institucional", ESTILO: "De estilo" }
+
+export const BUZONES: Record<string, string> = { ASIGNACIONES: "Asignaciones", INSUMOS: "Insumos", ENTREGAS: "Entregas" }
+
+// Para qué salió o qué resultó ser cada correo
+export const PROPOSITOS: Record<string, string> = {
+  ASIGNACION: "Asignación",
+  SEGUIMIENTO: "Seguimiento",
+  ACUSE_ASIGNACION: "Confirmación de recibido",
+  SOLICITUD_DATOS_FALTANTES: "Solicitud de datos faltantes",
+  RESPUESTA_DATOS_FALTANTES: "Datos faltantes recibidos",
+  ACUSE_DATOS_FALTANTES: "Confirmación de datos faltantes",
+  SOLICITUD_INSUMOS: "Solicitud de insumos",
+  RESPUESTA_INSUMOS: "Insumos recibidos",
+  ACUSE_INSUMOS: "Confirmación de insumos",
+  ENTREGA_V1: "Entrega V1",
+  ENTREGA_V2: "Entrega V2",
+  RESPUESTA_ENTREGA: "Respuesta a la entrega",
+  ACUSE_ENTIDAD: "Acuse de la entidad",
+  APROBACION_ENTIDAD: "Aprobación de la entidad",
+  DEVOLUCION_ENTIDAD: "Devolución de la entidad",
+  ACUSE_PAQUETE: "Confirmación del paquete",
+  ASIGNACION_PAQUETE: "Asignación en paquete (Excel)"
 }
 
 export const UNIDADES_TERMINO: Record<string, string> = { HORAS: "Horas", DIAS_HABILES: "Días hábiles", DIAS_CALENDARIO: "Días calendario" }

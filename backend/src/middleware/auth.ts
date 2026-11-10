@@ -30,7 +30,7 @@ export const autenticacion = async (req: Request, res: Response, next: NextFunct
     if (typeof decodificado !== 'object' || !decodificado.id) return noAutorizado(res, 'Token no válido')
 
     const usuario = await Usuario.findByPk(decodificado.id, {
-      attributes: ['id', 'nombre', 'correo', 'versionSesion', 'activo', 'debeCambiarContrasena'],
+      attributes: ['id', 'nombre', 'correo', 'versionSesion', 'activo', 'debeCambiarContrasena', 'equipoId'],
       include: [{ model: Rol, attributes: ['codigo'], through: { attributes: [] } }]
     })
     if (!usuario || !usuario.activo) return noAutorizado(res, 'Usuario no existe o está inactivo')

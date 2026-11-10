@@ -1,30 +1,48 @@
+import { Op } from 'sequelize'
 import { Parametro } from '../models'
 
 // =====================================
-// PARÁMETROS: los supuestos de las dudas pendientes (Docs/PLAN.md §5)
-// Se siembran con el valor propuesto; cuando el abogado responda se cambian en la pantalla de
-// Parámetros (y se marcan como confirmados) sin tocar el código.
+// PARÁMETROS: reglas de plazos y ANS (Docs/PLAN.md §5)
+// Los que siguen siendo supuestos se cambian en la pantalla de Parámetros cuando haya respuesta.
+// "fuente" marca los que ya respondió el cliente (manual operativo v1.1 o el correo de roles): al
+// sembrar se actualizan solos si nadie los había confirmado a mano.
 // =====================================
 
-type Definicion = { valor: unknown, descripcion: string, duda?: string }
+type Definicion = { valor: unknown, descripcion: string, duda?: string, fuente?: string }
 
 export const PARAMETROS_BASE = {
-  HORA_CORTE_ASIGNACION: { valor: '17:00', duda: 'D1', descripcion: 'Lo que llega después de esta hora cuenta como asignado el siguiente día hábil' },
+  HORA_CORTE_ASIGNACION: { valor: '15:00', duda: 'D1', fuente: 'Manual §3', descripcion: 'Las asignaciones y los insumos recibidos después de esta hora cuentan desde el día hábil siguiente' },
   HORA_INICIO_JORNADA: { valor: '08:00', duda: 'D1', descripcion: 'Hora en que se entiende asignado lo que llegó después del corte o en día no hábil' },
   HORA_FIN_DIA_ANS: { valor: '23:59', duda: 'D2', descripcion: 'Hasta qué hora del "día hábil siguiente" se cumple un ANS' },
-  HORA_VENCIMIENTO_TERMINO: { valor: '17:00', duda: 'D4', descripcion: 'Hora en que vence un término judicial en días (cierre del despacho)' },
+  HORA_VENCIMIENTO_TERMINO: { valor: '17:00', duda: 'D4', descripcion: 'Hora en que vence un término judicial en días, o el "Vence" del asunto que trae fecha sin hora' },
   DIAS_TERMINO_IMPUGNACION: { valor: 3, duda: 'D5', descripcion: 'Días hábiles para impugnar, desde el día siguiente a la notificación del fallo' },
-  ANS_INICIO_CON_INSUMOS: { valor: 'ULTIMO_INSUMO', duda: 'D6', descripcion: 'Desde cuándo cuentan ANS-01/02/04 si se pidieron insumos: ULTIMO_INSUMO, INSUMOS_MINIMOS o ASIGNACION' },
-  DIAS_ANTELACION_ANS01: { valor: 1, descripcion: 'ANS-01: días hábiles de antelación al vencimiento para entregar la contestación' },
-  DIAS_ANS02: { valor: 1, descripcion: 'ANS-02: días hábiles desde la asignación para desacato, requerimiento y cumplimiento' },
-  DIAS_ANTELACION_ANS03: { valor: 1, descripcion: 'ANS-03: días hábiles de antelación al vencimiento para entregar la impugnación' },
-  DIAS_ANS06: { valor: 1, duda: 'D20', descripcion: 'ANS-06: días hábiles para corregir una devolución' },
-  DIAS_ANS07: { valor: 1, descripcion: 'ANS-07: días hábiles desde la asignación para pedir los insumos faltantes' },
-  META_ANS: { valor: { 'ANS-01': 95, 'ANS-02': 95, 'ANS-03': 95, 'ANS-04': 90, 'ANS-05': 15, 'ANS-06': 95, 'ANS-07': 95, 'ANS-08': 95 }, duda: 'D11', descripcion: 'Meta mensual de cada ANS en %' },
+  ANS_INICIO_CON_INSUMOS: { valor: 'ULTIMO_INSUMO', duda: 'D6', descripcion: 'Desde cuándo cuentan los ANS si se pidieron insumos: ULTIMO_INSUMO, INSUMOS_MINIMOS o ASIGNACION' },
+  DIAS_ANTELACION_ANS01: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-01: días hábiles de antelación al vencimiento para entregar la contestación' },
+  DIAS_MINIMOS_ANS01: { valor: 2, fuente: 'Manual §21', descripcion: 'ANS-01: con menos de estos días hábiles hasta el vencimiento, se entrega dentro del día hábil siguiente' },
+  DIAS_ANS02: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-02 (críticos): días hábiles desde la asignación con insumos para entregar' },
+  DIAS_ANTELACION_ANS03: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-03: días hábiles de antelación al vencimiento para entregar la impugnación' },
+  DIAS_ANS06: { valor: 1, duda: 'D20', fuente: 'Manual §17', descripcion: 'ANS-06: días hábiles para corregir una devolución de fondo' },
+  DIAS_ANS07: { valor: 1, fuente: 'Manual §11', descripcion: 'ANS-07: días hábiles desde la asignación para pedir los insumos faltantes' },
+  DIAS_DEVOLUCION_ENTIDAD: { valor: 2, fuente: 'Manual §17', descripcion: 'Días hábiles que tiene la entidad para devolver un escrito entregado' },
+  DIAS_SUMINISTRO_INSUMOS: { valor: 2, fuente: 'Manual §11', descripcion: 'Días hábiles que tiene el cliente para entregar los insumos (el mismo día si es crítico)' },
+  META_ANS: { valor: { 'ANS-01': 95, 'ANS-02': 95, 'ANS-03': 95, 'ANS-04': 90, 'ANS-05': 15, 'ANS-06': 95, 'ANS-07': 95, 'ANS-08': 95 }, duda: 'D11', descripcion: 'Meta mensual de cada ANS en % (el manual las deja entre corchetes, sujetas a cierre)' },
   SENTIDOS_FAVORABLES: { valor: ['NIEGA', 'IMPROCEDENTE', 'NO_SANCIONA'], duda: 'D13', descripcion: 'Sentidos favorables a la entidad. En segunda instancia: Confirma es favorable si la primera lo fue; Revoca, si no lo fue; Modifica es desfavorable' },
   CUMPLIMIENTO_DURANTE_IMPUGNACION: { valor: false, duda: 'D12', descripcion: 'Abrir la actuación de cumplimiento mientras corre la impugnación' },
-  ETAPAS_REVISION_OBLIGATORIA: { valor: ['IMPUGNACION', 'DESACATO'], duda: 'D16', descripcion: 'Etapas en las que siempre revisa un abogado' },
-  REPARTO_AUTOMATICO: { valor: true, descripcion: 'Asignar el auxiliar con menos casos abiertos al registrar' },
+  ETAPAS_CRITICAS: { valor: ['CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO'], fuente: 'Manual §13', descripcion: 'Etapas que siempre son de nivel crítico' },
+  HORAS_CRITICO: { valor: 24, fuente: 'Manual §13', descripcion: 'Crítico: término vencido o que vence en menos de estas horas al asignarse' },
+  HORAS_ALTO: { valor: 48, fuente: 'Manual §13', descripcion: 'Alto: vence en menos de estas horas (y más que el crítico)' },
+  PREFIJO_ASUNTO: { valor: process.env.PREFIJO_ASUNTO || 'GPA', fuente: 'Correo del cliente §4', descripcion: 'Primer bloque del asunto de los correos de salida, entre corchetes' },
+  // Destinatarios que define el cliente en la fase inicial (manual §9 y §10.2): se llenan en Parámetros
+  CORREOS_INSUMOS: { valor: [] as string[], descripcion: 'A quién se piden los insumos (enlace operativo del cliente)' },
+  CORREOS_ENTREGA: { valor: [] as string[], descripcion: 'Correo único de la dependencia que recibe los proyectos (entregas V1 y V2)' },
+  CORREOS_COPIA_ENTREGA: { valor: [] as string[], descripcion: 'Copia de las entregas (supervisor)' },
+  DIAS_VIGENCIA_ENLACE: { valor: 90, fuente: 'Manual §23', descripcion: 'Días que dura el permiso del enlace de una entrega (el manual pide enlaces con caducidad)' },
+  LIMPIAR_ADJUNTOS_BUZON: { valor: true, descripcion: 'Quitar del buzón los adjuntos que ya están verificados en SharePoint (el correo se conserva)' },
+  DIAS_RETENER_ADJUNTOS_BUZON: { valor: 30, descripcion: 'Días que un adjunto sigue también en el buzón antes de quitarlo' },
+  CUOTA_BUZON_GB: { valor: 50, descripcion: 'Capacidad de cada buzón compartido (50 GB sin licencia; 100 GB con licencia)' },
+  ALERTA_BUZON_PORCENTAJE: { valor: 80, descripcion: 'Avisar cuando un buzón pase de este porcentaje de su capacidad' },
+  ACUSE_AUTOMATICO: { valor: true, descripcion: 'Enviar la confirmación de recibido con el número interno al registrar la asignación' },
+  REPARTO_AUTOMATICO: { valor: true, descripcion: 'Asignar el auxiliar con menos casos abiertos del equipo que atiende la etapa' },
   SEMAFORO_HORAS_ROJO: { valor: 4, descripcion: 'Semáforo rojo: menos de estas horas para la fecha límite (o vencido)' },
   SEMAFORO_HORAS_AMARILLO: { valor: 24, descripcion: 'Semáforo amarillo: menos de estas horas para la fecha límite' }
 } satisfies Record<string, Definicion>
@@ -45,13 +63,18 @@ export const cargarParametros = async (forzar = false) => {
 export const parametro = <T = unknown>(clave: ClaveParametro): T =>
   (valores.has(clave) ? valores.get(clave) : PARAMETROS_BASE[clave].valor) as T
 
-// Inserta los que falten sin pisar los que ya se cambiaron
+// Inserta los que falten sin pisar los que ya se cambiaron. Los que respondió el cliente (fuente)
+// reemplazan el supuesto mientras nadie lo haya confirmado a mano. Los que ya no existen se borran
 export const sembrarParametros = async () => {
   for (const [clave, def] of Object.entries(PARAMETROS_BASE) as [string, Definicion][]) {
-    await Parametro.findOrCreate({
+    const [fila, creado] = await Parametro.findOrCreate({
       where: { clave },
-      defaults: { clave, valor: def.valor, descripcion: def.descripcion, duda: def.duda ?? null }
+      defaults: { clave, valor: def.valor, descripcion: def.descripcion, duda: def.duda ?? null, confirmado: !!def.fuente }
     })
+    // Nunca editado (updatedAt = createdAt): sigue con el supuesto sembrado y se puede reemplazar
+    const sinEditar = fila.updatedAt.getTime() === fila.createdAt.getTime()
+    if (!creado && def.fuente && !fila.confirmado && sinEditar) await fila.update({ valor: def.valor, descripcion: def.descripcion, confirmado: true })
   }
+  await Parametro.destroy({ where: { clave: { [Op.notIn]: Object.keys(PARAMETROS_BASE) } } })
   await cargarParametros(true)
 }

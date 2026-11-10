@@ -4,14 +4,16 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "react-toastify"
 import { registrarCorreo } from "../acciones"
-import { ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, isoDesdeLocal, radicado as formatoRadicado } from "@/src/lib/formato"
+import { registrarManual } from "../../casos/acciones"
+import { CRITICIDADES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, isoDesdeLocal, radicado as formatoRadicado, valorFechaHoraLocal } from "@/src/lib/formato"
 
 export type Juzgado = { id: number, nombre: string }
 type Parte = { tipoDocumento: string, numeroDocumento: string, nombre: string }
 
 type Props = {
-  correoId: number
-  sugerencia: { radicado: string | null, juzgadoId: number | null, etapa: string | null, tipoSolicitud: string }
+  // Sin correo: registro manual (la asignación llegó por otro medio) y la fecha la indica el asistente
+  correoId?: number
+  sugerencia: { radicado: string | null, juzgadoId: number | null, etapa: string | null, criticidad: string | null, fechaVencimiento: string | null, tipoSolicitud: string }
   juzgados: Juzgado[]
   casoExistente: { id: number, radicado: string } | null
 }
@@ -20,7 +22,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
   const router = useRouter()
   const [pendiente, iniciar] = useTransition()
   const [errores, setErrores] = useState<string[]>([])
-  // El alias de cumplimiento agrupa cumplimiento, requerimiento previo y desacato: se precisa aquí
+  // La etapa viene del asunto normalizado; si se adivinó por el texto, el asistente la confirma aquí
   const [etapa, setEtapa] = useState(sugerencia.etapa ?? "ACCION")
   const [partes, setPartes] = useState<Parte[]>([{ tipoDocumento: "CC", numeroDocumento: "", nombre: "" }])
 
@@ -30,6 +32,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
   const enviar = (datos: FormData) => {
     const terminoValor = Number(datos.get("terminoValor")) || null
     const cuerpo = {
+      ...(!correoId && { fechaAsignacion: isoDesdeLocal(String(datos.get("fechaAsignacion") ?? "")) }),
       radicado: String(datos.get("radicado") ?? ""),
       tipoSolicitud: datos.get("tipoSolicitud"),
       etapa,
@@ -40,16 +43,21 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
       fechaNotificacion: isoDesdeLocal(String(datos.get("fechaNotificacion") ?? "")),
       terminoValor,
       terminoUnidad: terminoValor ? datos.get("terminoUnidad") : null,
+      fechaVencimiento: isoDesdeLocal(String(datos.get("fechaVencimiento") ?? "")),
+      criticidad: datos.get("criticidad") || null,
       requiereInsumos: datos.get("requiereInsumos") === "on",
-      requiereRevisionAbogado: datos.get("requiereRevisionAbogado") === "on",
       origenImpugnacion: etapa === "IMPUGNACION" ? datos.get("origenImpugnacion") : null,
       observaciones: datos.get("observaciones") || null
     }
     iniciar(async () => {
-      const r = await registrarCorreo(correoId, cuerpo)
+      const r = correoId ? await registrarCorreo(correoId, cuerpo) : await registrarManual(cuerpo)
       if (!r.ok) return setErrores(r.errores)
-      const { casoId, deOtroOperador } = r.datos as { casoId: number, deOtroOperador: boolean }
-      toast.success("Asignación registrada")
+      const { casoId, deOtroOperador, numeroInterno, acuse } = r.datos as {
+        casoId: number, deOtroOperador: boolean, numeroInterno: string, acuse: { estado: string, error: string | null } | null
+      }
+      toast.success(`Asignación registrada: caso ${numeroInterno}`)
+      if (acuse?.estado === "SIMULADO") toast.info("Confirmación de recibido simulada (el envío real no está activo)")
+      if (acuse?.estado === "ERROR") toast.error(`No se envió la confirmación de recibido: ${acuse.error ?? ""}`)
       if (deOtroOperador) toast.warn("El radicado figura en el archivo maestro de otro operador")
       router.push(`/casos/${casoId}`)
     })
@@ -58,6 +66,13 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
   return (
     <form action={enviar} className="tarjeta p-5 space-y-3">
       <h2 className="text-sm font-semibold text-slate-700">{casoExistente ? `Nueva etapa del caso ${formatoRadicado(casoExistente.radicado)}` : "Registrar asignación"}</h2>
+
+      {!correoId && (
+        <div>
+          <label className="etiqueta">Fecha y hora de asignación</label>
+          <input type="datetime-local" name="fechaAsignacion" required className="campo" />
+        </div>
+      )}
 
       <div>
         <label className="etiqueta">Radicado (23 dígitos)</label>
@@ -130,6 +145,20 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
         </div>
       )}
 
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="etiqueta">Vence (informado)</label>
+          <input type="datetime-local" name="fechaVencimiento" defaultValue={valorFechaHoraLocal(sugerencia.fechaVencimiento)} className="campo" />
+        </div>
+        <div>
+          <label className="etiqueta">Criticidad de la entidad</label>
+          <select name="criticidad" defaultValue={sugerencia.criticidad ?? ""} className="campo">
+            <option value="">— No la indicó —</option>
+            {Object.entries(CRITICIDADES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
+      </div>
+
       <div>
         <label className="etiqueta">Notificación ({etapa === "IMPUGNACION" ? "del fallo" : etapa === "DESACATO" ? "de la apertura" : "de la acción o requerimiento"})</label>
         <input type="datetime-local" name="fechaNotificacion" className="campo" />
@@ -149,8 +178,6 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
 
       <div className="flex flex-col gap-1 text-sm">
         <label className="flex items-center gap-2"><input type="checkbox" name="requiereInsumos" /> Requiere insumos de la entidad</label>
-        <label className="flex items-center gap-2"><input type="checkbox" name="requiereRevisionAbogado" /> Requiere revisión de abogado</label>
-        <p className="text-xs text-slate-500">Impugnación y desacato siempre van a revisión (parámetro D16).</p>
       </div>
 
       <div>
@@ -163,7 +190,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
           {errores.map(e => <li key={e}>{e}</li>)}
         </ul>
       )}
-      <button disabled={pendiente} className="boton-primario w-full">{pendiente ? "Registrando…" : "Registrar y repartir"}</button>
+      <button disabled={pendiente} className="boton-primario w-full">{pendiente ? "Registrando…" : correoId ? "Registrar, repartir y confirmar recibido" : "Registrar y repartir"}</button>
     </form>
   )
 }

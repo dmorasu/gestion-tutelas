@@ -1,11 +1,13 @@
 import { Router } from 'express'
 import { body, param } from 'express-validator'
-import { Parametro, DiaNoHabil, Juzgado, Usuario, Rol, MotivoDevolucion } from '../models'
+import { Parametro, DiaNoHabil, Juzgado, Usuario, Rol, MotivoDevolucion, Equipo, PlantillaCorreo } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { cargarParametros, PARAMETROS_BASE } from '../services/parametros'
 import { cargarCalendario } from '../services/calendario'
-import { ROLES } from '../services/constantes'
+import { ROLES, ETAPAS, PLANTILLAS } from '../services/constantes'
+import { MARCADORES, PLANTILLAS_BASE, vistaPrevia, enviarPrueba } from '../services/buzon/correosSalida'
+import type { CodigoPlantilla } from '../services/constantes'
 import { responderError, ErrorNegocio } from '../utils/errores'
 import { generarContrasenaTemporal } from '../utils/politicaContrasena'
 import { cifrarContrasena } from '../utils/contrasenas'
@@ -78,8 +80,8 @@ router.get('/motivos-devolucion', async (_req, res) => {
 // ── Usuarios y perfiles ──
 router.get('/usuarios', async (req, res) => {
   const usuarios = await Usuario.findAll({
-    attributes: ['id', 'nombre', 'correo', 'activo', 'capacidadDiaria', 'ultimoIngreso', 'debeCambiarContrasena'],
-    include: [{ model: Rol, attributes: ['codigo', 'nombre'], through: { attributes: [] } }],
+    attributes: ['id', 'nombre', 'correo', 'activo', 'capacidadDiaria', 'ultimoIngreso', 'debeCambiarContrasena', 'equipoId'],
+    include: [{ model: Rol, attributes: ['codigo', 'nombre'], through: { attributes: [] } }, { model: Equipo, attributes: ['id', 'nombre'] }],
     order: [['nombre', 'ASC']]
   })
   // El administrador ve qué cuentas están bloqueadas por intentos fallidos
@@ -138,7 +140,8 @@ router.put('/usuarios/:id', requiereRol(ROLES.ADMIN), param('id').isInt(), body(
     if (usuario.id === req.usuario!.id && req.body.activo === false) throw new ErrorNegocio('No puede desactivarse a sí mismo')
     await usuario.update({
       ...('activo' in req.body && { activo: !!req.body.activo }),
-      ...('capacidadDiaria' in req.body && { capacidadDiaria: req.body.capacidadDiaria ? Number(req.body.capacidadDiaria) : null })
+      ...('capacidadDiaria' in req.body && { capacidadDiaria: req.body.capacidadDiaria ? Number(req.body.capacidadDiaria) : null }),
+      ...('equipoId' in req.body && { equipoId: req.body.equipoId ? Number(req.body.equipoId) : null })
     })
     if (Array.isArray(req.body.roles)) {
       const roles = await Rol.findAll({ where: { codigo: req.body.roles } })
@@ -147,6 +150,103 @@ router.put('/usuarios/:id', requiereRol(ROLES.ADMIN), param('id').isInt(), body(
     // Al desactivarlo o cambiarle los perfiles se cierra su sesión
     await usuario.increment('versionSesion')
     res.json({ ok: true })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// ── Equipos: un revisor y sus auxiliares, con las etapas que atienden ──
+router.get('/equipos', async (_req, res) => {
+  const equipos = await Equipo.findAll({
+    include: [{
+      model: Usuario, attributes: ['id', 'nombre', 'activo'], where: { activo: true }, required: false,
+      include: [{ model: Rol, attributes: ['codigo'], through: { attributes: [] } }]
+    }],
+    order: [['nombre', 'ASC']]
+  })
+  res.json(equipos)
+})
+
+const validarEtapas = body('etapas').optional().isArray().custom((etapas: string[]) => etapas.every(e => (ETAPAS as readonly string[]).includes(e))).withMessage('Etapa no válida')
+
+router.post('/equipos', administran, body('nombre').isString().trim().notEmpty().withMessage('Falta el nombre'), validarEtapas, manejarErroresEntrada, async (req, res) => {
+  try {
+    if (await Equipo.findOne({ where: { nombre: req.body.nombre } })) throw new ErrorNegocio('Ya existe un equipo con ese nombre')
+    res.status(201).json(await Equipo.create({ nombre: req.body.nombre, etapas: req.body.etapas ?? [] }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+router.put('/equipos/:id', administran, param('id').isInt(), validarEtapas, manejarErroresEntrada, async (req, res) => {
+  try {
+    const equipo = await Equipo.findByPk(Number(req.params.id))
+    if (!equipo) throw new ErrorNegocio('El equipo no existe', 404)
+    await equipo.update({
+      ...('nombre' in req.body && { nombre: String(req.body.nombre).trim() }),
+      ...('etapas' in req.body && { etapas: req.body.etapas }),
+      ...('activo' in req.body && { activo: !!req.body.activo })
+    })
+    res.json(equipo)
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// El coordinador arma los equipos: mueve una persona a un equipo (o la saca con equipoId null)
+router.put('/equipos/miembro/:usuarioId', administran, param('usuarioId').isInt(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const usuario = await Usuario.findByPk(Number(req.params.usuarioId))
+    if (!usuario) throw new ErrorNegocio('Usuario no existe', 404)
+    const equipoId = req.body.equipoId ? Number(req.body.equipoId) : null
+    if (equipoId && !(await Equipo.findByPk(equipoId))) throw new ErrorNegocio('El equipo no existe', 404)
+    await usuario.update({ equipoId })
+    res.json({ ok: true })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// ── Plantillas de los correos de salida (las del cliente están pendientes) ──
+router.get('/plantillas', async (_req, res) => {
+  const filas = await PlantillaCorreo.findAll()
+  res.json({
+    marcadores: MARCADORES,
+    plantillas: Object.entries(PLANTILLAS).map(([codigo, def]) => {
+      const fila = filas.find(f => f.codigo === codigo)
+      const base = PLANTILLAS_BASE[codigo as CodigoPlantilla]
+      return { codigo, ...def, titulo: fila?.titulo || def.titulo, asunto: fila?.asunto ?? base.asunto, cuerpo: fila?.cuerpo ?? base.cuerpo, confirmada: fila?.confirmada ?? false }
+    })
+  })
+})
+
+router.put('/plantillas/:codigo', administran, param('codigo').isIn(Object.keys(PLANTILLAS)),
+  body('asunto').isString().trim().notEmpty().withMessage('Falta el asunto'),
+  body('cuerpo').isString().trim().notEmpty().withMessage('Falta el cuerpo'),
+  manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const codigo = String(req.params.codigo)
+      const [fila] = await PlantillaCorreo.findOrCreate({ where: { codigo }, defaults: { codigo, asunto: req.body.asunto, cuerpo: req.body.cuerpo } })
+      await fila.update({ asunto: req.body.asunto, cuerpo: req.body.cuerpo, titulo: String(req.body.titulo ?? '').trim() || null, confirmada: !!req.body.confirmada })
+      res.json(fila)
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+// Vista previa con datos de ejemplo de lo que se está editando (sin guardar)
+const textoPlantilla = [body('asunto').isString(), body('cuerpo').isString(), body('titulo').optional({ values: 'null' }).isString()]
+router.post('/plantillas/:codigo/vista-previa', param('codigo').isIn(Object.keys(PLANTILLAS)), ...textoPlantilla, manejarErroresEntrada, (req, res) => {
+  const { asunto, html } = vistaPrevia(req.params!.codigo as CodigoPlantilla, { asunto: req.body.asunto, cuerpo: req.body.cuerpo, titulo: req.body.titulo })
+  res.json({ asunto, html })
+})
+
+// La envía de verdad al correo de quien la edita, para verla en Outlook
+router.post('/plantillas/:codigo/prueba', administran, param('codigo').isIn(Object.keys(PLANTILLAS)), ...textoPlantilla, manejarErroresEntrada, async (req, res) => {
+  try {
+    await enviarPrueba(req.params!.codigo as CodigoPlantilla, { asunto: req.body.asunto, cuerpo: req.body.cuerpo, titulo: req.body.titulo }, req.usuario!.correo)
+    res.json({ ok: true, para: req.usuario!.correo })
   } catch (error) {
     responderError(res, error)
   }
