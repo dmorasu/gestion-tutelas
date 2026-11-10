@@ -45,6 +45,7 @@ export const PARAMETROS_BASE = {
   CORREOS_ALERTAS: { valor: [] as string[], descripcion: 'A quién se emiten las alertas (responsable de la entidad y supervisor)' },
   FECHA_INICIO_PLAN: { valor: '', descripcion: 'Fecha del acta de inicio (AAAA-MM-DD): desde ahí cuenta el avance del plan de choque (ANS-04)' },
   META_DIARIA_PLAN: { valor: 168, fuente: 'Manual §13', descripcion: 'ANS-04: primeros escritos por día hábil que comprometió el plan de choque' },
+  MINUTOS_ALERTA_SIN_ATENDER: { valor: 30, descripcion: 'Una asignación sin atender después de estos minutos se avisa al coordinador (en horario hábil)' },
   ACUSE_AUTOMATICO: { valor: true, descripcion: 'Enviar la confirmación de recibido con el número interno al registrar la asignación' },
   REPARTO_AUTOMATICO: { valor: true, descripcion: 'Asignar el auxiliar con menos casos abiertos del equipo que atiende la etapa' },
   SEMAFORO_HORAS_ROJO: { valor: 4, descripcion: 'Semáforo rojo: menos de estas horas para la fecha límite (o vencido)' },

@@ -1,4 +1,4 @@
-import { Actuacion, Archivo, Caso } from '../models'
+import { Actuacion, Archivo, Caso, Escrito } from '../models'
 import { carpetaCaso, guardarArchivo, moverArchivo } from './almacenamiento'
 import { NOMBRES_ETAPAS, type Etapa } from './constantes'
 
@@ -55,4 +55,15 @@ export const archivarAdjuntos = async (correoId: number, actuacionId: number, su
     }
     await archivo.update(cambios)
   }
+}
+
+// Carpeta del expediente según lo que es la respuesta. Lo que adjunta la entidad al responder una
+// entrega (el escrito con observaciones, por ejemplo) queda en la carpeta de esa versión y ligado a ella
+export const destinoAdjuntos = async (proposito: string, actuacionId: number): Promise<{ sub: Subcarpeta, tipo: Archivo['tipo'], escritoId: number | null }> => {
+  if (proposito === 'RESPUESTA_INSUMOS') return { sub: 'Insumos', tipo: 'INSUMO', escritoId: null }
+  if (proposito === 'RESPUESTA_ENTREGA') {
+    const escrito = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']], attributes: ['id', 'version'] })
+    return { sub: `Escritos/V${escrito?.version ?? 1}`, tipo: 'RESPUESTA', escritoId: escrito?.id ?? null }
+  }
+  return { sub: 'Entrada', tipo: 'CORREO', escritoId: null }
 }

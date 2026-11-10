@@ -13,6 +13,7 @@ import { normalizarRadicado } from '../utils/radicado'
 import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
 import { lineaTiempo } from '../services/lineaTiempo'
+import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
 import { modoEnvio, borradorLibre, enviarLibre } from '../services/buzon/correosSalida'
 import { proveedorAlmacen } from '../services/almacenamiento'
 import { MotivoDevolucion, Alerta } from '../models'
@@ -106,14 +107,16 @@ router.get('/resumen', async (req, res) => {
     const propias = alcance(req)
     const colores = ['VENCIDO', 'ROJO', 'AMARILLO', 'VERDE', 'SIN_FECHA']
     const conteos = await Promise.all(colores.map(c => Actuacion.count({ where: { ...propias, estado: ABIERTA, fechaLimiteEntrega: rangoSemaforo(c) } })))
-    const [porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes] = await Promise.all([
+    const [porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes, porAtender, asignacionesSinAtender] = await Promise.all([
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['etapa'] }),
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['criticidad'] }),
       Correo.count({ where: { direccion: 'ENTRANTE', estado: 'POR_REGISTRAR' } }),
       Correo.count({ where: { direccion: 'ENTRANTE', porRevisar: true } }),
-      Alerta.count({ where: { estado: 'PENDIENTE' } })
+      Alerta.count({ where: { estado: 'PENDIENTE' } }),
+      Correo.count({ where: await filtroPorAtender() }),
+      asignacionesVencidas()
     ])
-    res.json({ semaforo: Object.fromEntries(colores.map((c, i) => [c, conteos[i]])), porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes })
+    res.json({ semaforo: Object.fromEntries(colores.map((c, i) => [c, conteos[i]])), porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes, porAtender, asignacionesSinAtender })
   } catch (error) {
     responderError(res, error)
   }

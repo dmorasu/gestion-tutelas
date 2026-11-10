@@ -125,6 +125,66 @@ export class Correo extends Model {
 
   @HasMany(() => Archivo)
   declare archivos?: Archivo[]
+
+  @HasMany(() => EnlaceCorreo)
+  declare enlacesPendientes?: EnlaceCorreo[]
+
+  // Quién lo está atendiendo (lo tomó o se lo trasladaron). null = nadie: está "sin atender".
+  // Sin asociación al modelo de usuarios: Correo ya tiene una (usuarioId) y dos obligarían a nombrarlas
+  @Index
+  @Column(DataType.INTEGER)
+  declare responsableId: number | null
+
+  @Column(DataType.DATE)
+  declare tomadoEn: Date | null
+
+  @Column(DataType.TEXT)
+  declare notaTraslado: string | null
+
+  // Ya se avisó al coordinador que la asignación pasó de MINUTOS_ALERTA_SIN_ATENDER sin atender
+  @Column(DataType.DATE)
+  declare avisoSinAtenderEn: Date | null
+}
+
+// =====================================
+// ENLACES DE SHAREPOINT QUE TRAE UN CORREO
+// El cliente manda expedientes e insumos como enlace. Cada enlace es un pendiente del correo hasta
+// que su documento esté en el expediente (descargado por la app o subido a mano) o se descarte:
+// un correo con enlaces pendientes no cuenta como atendido.
+// =====================================
+@Table({ tableName: 'enlaces_correo' })
+export class EnlaceCorreo extends Model {
+  @ForeignKey(() => Correo)
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare correoId: number
+
+  @BelongsTo(() => Correo, { onDelete: 'CASCADE' })
+  declare correo?: Correo
+
+  @AllowNull(false)
+  @Column(DataType.TEXT)
+  declare url: string
+
+  @Index
+  @Default('PENDIENTE')
+  @Column(DataType.STRING(12))
+  declare estado: 'PENDIENTE' | 'DESCARGADO' | 'DESCARTADO'
+
+  // Cuántos archivos quedaron en el expediente (un enlace a una carpeta trae varios)
+  @Default(0)
+  @Column(DataType.INTEGER)
+  declare archivos: number
+
+  // Último intento fallido: por qué (pide iniciar sesión, venció, carpeta…)
+  @Column(DataType.TEXT)
+  declare error: string | null
+
+  @Column(DataType.DATE)
+  declare intentadoEn: Date | null
+
+  @Column(DataType.INTEGER)
+  declare usuarioId: number | null
 }
 
 // Documentos del expediente (adjuntos de correos, escritos, anexos, insumos), guardados en SharePoint

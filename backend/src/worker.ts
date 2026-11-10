@@ -7,6 +7,7 @@ import { colaBuzon, NOMBRE_COLA_BUZON } from './queues/buzonQueue'
 import { sincronizarBuzon } from './services/buzon/sincronizarBuzon'
 import { limpiarAdjuntos } from './services/buzon/limpiezaBuzon'
 import { detectarAlertas } from './services/alertas'
+import { avisarSinAtender } from './services/buzon/atencion'
 import { cargarParametros } from './services/parametros'
 import { cargarCalendario } from './services/calendario'
 import { activarHistorialCasos } from './services/historialCasos'
@@ -47,6 +48,9 @@ const iniciar = async () => {
       return
     }
     const nuevos = await sincronizarBuzon()
+    // Después de leer: asignaciones que pasaron de la media hora sin atender → aviso al coordinador
+    const avisadas = await avisarSinAtender().catch(error => { console.error('❌ Aviso sin atender', error); return 0 })
+    if (avisadas) console.log(colors.yellow(`⏰ ${avisadas} asignaciones sin atender avisadas al coordinador`))
     if (nuevos) console.log(colors.cyan(`📥 ${nuevos} correos nuevos`))
   }, { connection: conexionRedis(), concurrency: 1 })
     .on('failed', (_job, error) => console.error(colors.red('❌ Lectura del buzón:'), error.message))

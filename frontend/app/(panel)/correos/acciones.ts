@@ -46,3 +46,51 @@ export async function atenderRespuesta(correoId: number, casoId: number, ruta: s
 export async function leerBuzon() {
   return enviar("/correos/sincronizar", "POST")
 }
+
+// ── Quién atiende el correo ──
+const recargar = (correoId: number) => { revalidatePath("/correos"); revalidatePath(`/correos/${correoId}`) }
+
+export async function tomarCorreo(correoId: number, forzar = false) {
+  const r = await enviar(`/correos/${correoId}/tomar`, "POST", { forzar })
+  recargar(correoId)
+  return r
+}
+
+export async function soltarCorreo(correoId: number) {
+  const r = await enviar(`/correos/${correoId}/soltar`, "POST")
+  recargar(correoId)
+  return r
+}
+
+export async function trasladarCorreo(correoId: number, usuarioId: number, nota: string) {
+  const r = await enviar(`/correos/${correoId}/trasladar`, "POST", { usuarioId, nota })
+  recargar(correoId)
+  return r
+}
+
+// ── Enlaces de SharePoint ──
+export async function traerEnlace(correoId: number, enlaceId: number) {
+  const r = await enviar(`/correos/enlaces/${enlaceId}/descargar`, "POST")
+  recargar(correoId)
+  return r
+}
+
+export async function descartarEnlace(correoId: number, enlaceId: number, motivo: string) {
+  const r = await enviar(`/correos/enlaces/${enlaceId}/descartar`, "POST", { motivo })
+  recargar(correoId)
+  return r
+}
+
+// Actuaciones abiertas que coinciden con lo buscado (número interno, radicado o accionante)
+export async function buscarActuaciones(q: string) {
+  const r = await enviar(`/casos?${new URLSearchParams({ q, todos: "1" })}`, "GET")
+  if (!r.ok) return []
+  const { actuaciones } = r.datos as { actuaciones: { id: number, etapa: string, estado: string, caso: { id: number, numeroInterno: string | null, radicado: string, partes: { nombre: string }[] } }[] }
+  return actuaciones
+}
+
+export async function asociarComo(correoId: number, actuacionId: number, proposito: string) {
+  const r = await enviar(`/correos/${correoId}/asociar`, "POST", { actuacionId, proposito })
+  recargar(correoId)
+  return r
+}

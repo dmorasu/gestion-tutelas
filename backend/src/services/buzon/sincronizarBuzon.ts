@@ -1,9 +1,10 @@
 import pdf from 'pdf-parse/lib/pdf-parse.js'
 import { Op } from 'sequelize'
-import { Correo, Archivo, SincronizacionBuzon, Caso, Actuacion, Escrito } from '../../models'
+import { Correo, Archivo, SincronizacionBuzon, Caso, Actuacion } from '../../models'
 import { graph, rutaBuzon, buzonesConfigurados, ErrorGraph } from './graph'
 import { guardarArchivo, carpetaBandeja } from '../almacenamiento'
-import { archivarAdjuntos, type Subcarpeta } from '../expediente'
+import { archivarAdjuntos, destinoAdjuntos } from '../expediente'
+import { registrarEnlaces } from './enlaces'
 import { buscarRadicados } from '../../utils/radicado'
 import { leerAsunto, etapaPorTexto } from '../../utils/asunto'
 import { parametro } from '../parametros'
@@ -111,6 +112,7 @@ const guardarMensaje = async (buzon: Buzon, id: string) => {
   const encontrados = buscarRadicados(m.subject, cuerpo, ...textosPdf)
   correo.radicados = asunto.radicado ? [asunto.radicado, ...encontrados.filter(r => r !== asunto.radicado)] : encontrados
   await correo.save()
+  await registrarEnlaces(correo)
   return correo
 }
 
@@ -124,17 +126,6 @@ const RESPUESTA_A: Record<string, string> = {
   SOLICITUD_DATOS_FALTANTES: 'RESPUESTA_DATOS_FALTANTES',
   ENTREGA_V1: 'RESPUESTA_ENTREGA',
   ENTREGA_V2: 'RESPUESTA_ENTREGA'
-}
-
-// Carpeta del expediente según lo que es la respuesta. Lo que adjunta la entidad al responder una
-// entrega (el escrito con observaciones, por ejemplo) queda en la carpeta de esa versión y ligado a ella
-const destinoAdjuntos = async (proposito: string, actuacionId: number): Promise<{ sub: Subcarpeta, tipo: Archivo['tipo'], escritoId: number | null }> => {
-  if (proposito === 'RESPUESTA_INSUMOS') return { sub: 'Insumos', tipo: 'INSUMO', escritoId: null }
-  if (proposito === 'RESPUESTA_ENTREGA') {
-    const escrito = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']], attributes: ['id', 'version'] })
-    return { sub: `Escritos/V${escrito?.version ?? 1}`, tipo: 'RESPUESTA', escritoId: escrito?.id ?? null }
-  }
-  return { sub: 'Entrada', tipo: 'CORREO', escritoId: null }
 }
 
 const asociar = async (correo: Correo, actuacion: { id?: number, casoId: number }, proposito: string, porRevisar: boolean) => {

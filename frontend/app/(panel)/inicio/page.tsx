@@ -22,7 +22,7 @@ const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string
 
 type Resumen = {
   semaforo: Record<string, number>, porEtapa: { etapa: string, count: number }[], porCriticidad: { criticidad: string, count: number }[],
-  porRegistrar: number, porRevisar: number, alertasPendientes: number
+  porRegistrar: number, porRevisar: number, alertasPendientes: number, porAtender: number, asignacionesSinAtender: number
 }
 type EstadoBuzon = {
   activo: boolean, envio: string,
@@ -59,8 +59,8 @@ export default async function InicioPage() {
 
   const pendientes: Record<string, Pendiente[]> = {
     "/correos": [
-      { cantidad: resumen?.porRegistrar ?? 0, texto: "por registrar" },
-      { cantidad: resumen?.porRevisar ?? 0, texto: "respuestas por revisar" }
+      { cantidad: resumen?.asignacionesSinAtender ?? 0, texto: "asignaciones sin atender a tiempo" },
+      { cantidad: resumen?.porAtender ?? 0, texto: "por atender" }
     ].filter(p => p.cantidad > 0),
     "/alertas": resumen?.alertasPendientes ? [{ cantidad: resumen.alertasPendientes, texto: "por emitir" }] : [],
     "/casos": [
