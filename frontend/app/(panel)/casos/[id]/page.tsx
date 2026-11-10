@@ -4,7 +4,7 @@ import { ArrowLeft, Briefcase, Clock, FileText, Info, Mail, type LucideIcon } fr
 import { obtener } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { tieneRol } from "@/src/auth/permisos"
-import { ESTADOS_ACTUACION, ETAPAS, TIPOS_SOLICITUD, fechaHora, radicado, tiempoRestante } from "@/src/lib/formato"
+import { ESTADOS_ACTUACION, ETAPAS, TIPOS_SOLICITUD, fechaHora, radicado, tiempoRestante, yaEntregada } from "@/src/lib/formato"
 import Seccion from "@/components/ui/Seccion"
 import Dato from "@/components/ui/Dato"
 import Criticidad from "@/components/ui/Criticidad"
@@ -226,7 +226,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
                   {actual.semaforo && <Semaforo valor={actual.semaforo} />}
                 </div>
                 <Dato etiqueta="Límite de entrega (ANS)" valor={actual.fechaLimiteEntrega
-                  ? <><b className="text-slate-900">{fechaHora(actual.fechaLimiteEntrega)}</b>{actual.estado !== "CERRADA" && <span className="block text-slate-500">{tiempoRestante(actual.fechaLimiteEntrega)}</span>}</>
+                  ? <><b className="text-slate-900">{fechaHora(actual.fechaLimiteEntrega)}</b>{!yaEntregada(actual.estado) && <span className="block text-slate-500">{tiempoRestante(actual.fechaLimiteEntrega)}</span>}</>
                   : actual.requiereInsumos ? "Suspendido mientras llegan los insumos" : null} />
                 <Dato etiqueta={actual.fechaVencimientoInformada ? "Vence (informado por la entidad)" : "Vencimiento judicial"} valor={fechaHora(actual.fechaVencimiento)} />
                 <Dato etiqueta="Asignada" valor={fechaHora(actual.fechaAsignacion)} />

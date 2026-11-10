@@ -6,7 +6,9 @@ const ESTILOS: Record<string, { clase: string, texto: string }> = {
   ROJO: { clase: "bg-red-100 text-red-800 ring-1 ring-red-300", texto: "Urgente" },
   AMARILLO: { clase: "bg-amber-100 text-amber-800 ring-1 ring-amber-300", texto: "Próximo" },
   VERDE: { clase: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200", texto: "A tiempo" },
-  SIN_FECHA: { clase: "bg-slate-100 text-slate-600 ring-1 ring-slate-200", texto: "Sin fecha" }
+  SIN_FECHA: { clase: "bg-slate-100 text-slate-600 ring-1 ring-slate-200", texto: "Sin fecha" },
+  // El escrito ya salió: el ANS se midió y queda esperando a la entidad o al juzgado
+  ENTREGADO: { clase: "bg-white text-slate-600 ring-1 ring-slate-300", texto: "Entregado" }
 }
 
 export default function Semaforo({ valor }: { valor?: string | null }) {

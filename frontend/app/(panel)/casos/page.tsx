@@ -2,7 +2,7 @@ import Link from "next/link"
 import { obtener } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { tieneRol } from "@/src/auth/permisos"
-import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, fechaHora, radicado, tiempoRestante } from "@/src/lib/formato"
+import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, fechaHora, radicado, tiempoRestante, yaEntregada } from "@/src/lib/formato"
 import Semaforo from "@/components/ui/Semaforo"
 import Criticidad from "@/components/ui/Criticidad"
 
@@ -71,6 +71,7 @@ export default async function CasosPage({ searchParams }: { searchParams: Promis
             <option value="AMARILLO">Próximo</option>
             <option value="VERDE">A tiempo</option>
             <option value="SIN_FECHA">Sin fecha</option>
+            <option value="ENTREGADO">Entregado</option>
           </select>
         </div>
         <div>
@@ -98,7 +99,7 @@ export default async function CasosPage({ searchParams }: { searchParams: Promis
                 <td><Semaforo valor={a.semaforo} /></td>
                 <td className="whitespace-nowrap">
                   {fechaHora(a.fechaLimiteEntrega)}
-                  <p className="text-xs text-slate-500">{a.fechaLimiteEntrega ? tiempoRestante(a.fechaLimiteEntrega) : ""}</p>
+                  <p className="text-xs text-slate-500">{a.fechaLimiteEntrega && !yaEntregada(a.estado) ? tiempoRestante(a.fechaLimiteEntrega) : ""}</p>
                 </td>
                 <td className="whitespace-nowrap text-xs">
                   <Link href={`/casos/${a.caso.id}`} className="enlace font-medium">{a.caso.numeroInterno ?? "—"}</Link>

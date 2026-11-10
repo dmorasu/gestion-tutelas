@@ -30,7 +30,7 @@ type Datos = {
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 const nombreMes = (mes: string) => `${MESES[Number(mes.slice(5, 7)) - 1]} de ${mes.slice(0, 4)}`
-const ORDEN_SEMAFORO = ["VENCIDO", "ROJO", "AMARILLO", "VERDE", "SIN_FECHA"]
+const ORDEN_SEMAFORO = ["VENCIDO", "ROJO", "AMARILLO", "VERDE", "SIN_FECHA", "ENTREGADO"]
 const NIVELES: Record<string, string> = { LEVE: "Leve", MODERADO: "Moderado", GRAVE: "Grave" }
 const pesos = (n: number) => n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 })
 

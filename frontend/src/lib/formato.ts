@@ -102,4 +102,7 @@ export const TIPOS_ESCRITO: Record<string, string> = {
 export const tipoEscrito = (a: { etapa: string, origenImpugnacion?: string | null }) =>
   TIPOS_ESCRITO[a.etapa === "IMPUGNACION" && a.origenImpugnacion === "ACCIONANTE" ? "DESCORRE" : a.etapa] ?? "Escrito"
 
+// Con el escrito ya entregado (o cerrada la actuación) el límite del ANS ya se midió: no corre
+export const yaEntregada = (estado: string) => ["ENTREGADO", "APROBADO", "RADICADO", "CERRADA"].includes(estado)
+
 export const UNIDADES_TERMINO: Record<string, string> = { HORAS: "Horas (en días hábiles)", DIAS_HABILES: "Días hábiles", DIAS_CALENDARIO: "Días calendario" }

@@ -7,7 +7,7 @@ import Semaforo from "@/components/ui/Semaforo"
 import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
-import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal } from "@/src/lib/formato"
+import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal, yaEntregada } from "@/src/lib/formato"
 
 export type Responsable = { id: number, nombre: string }
 export type ActuacionDetalle = {
@@ -87,7 +87,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           <Dato nombre="Notificación" valor={fechaHora(a.fechaNotificacion)} />
           <Dato nombre="Término" valor={a.terminoValor ? `${a.terminoValor} ${UNIDADES_TERMINO[a.terminoUnidad ?? ""]?.toLowerCase() ?? ""}` : "—"} />
           <Dato nombre={a.fechaVencimientoInformada ? "Vencimiento (informado por la entidad)" : "Vencimiento judicial"} valor={fechaHora(a.fechaVencimiento)} />
-          <Dato nombre="Límite de entrega (ANS)" valor={`${fechaHora(a.fechaLimiteEntrega)}${a.fechaLimiteEntrega && a.estado !== "CERRADA" ? ` · ${tiempoRestante(a.fechaLimiteEntrega)}` : ""}`} destacado />
+          <Dato nombre="Límite de entrega (ANS)" valor={`${fechaHora(a.fechaLimiteEntrega)}${a.fechaLimiteEntrega && !yaEntregada(a.estado) ? ` · ${tiempoRestante(a.fechaLimiteEntrega)}` : ""}`} destacado />
           <Dato nombre="Auxiliar" valor={a.auxiliar?.nombre ?? "Sin asignar"} />
           <Dato nombre="Revisor" valor={`${a.revisor?.nombre ?? "Sin asignar"}${a.equipo ? ` · ${a.equipo.nombre}` : ""}`} />
           <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />

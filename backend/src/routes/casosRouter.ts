@@ -44,7 +44,9 @@ const alcance = alcanceActuaciones
 
 // Mientras se esperan insumos el ANS está suspendido (sin fecha límite), pero el término judicial
 // sigue corriendo: el semáforo cae al vencimiento para no esconder la urgencia
-const semaforoDe = (a: Actuacion) => semaforo(a.fechaLimiteEntrega ?? a.fechaVencimiento)
+// Con el escrito ya entregado (o aprobado o radicado) el ANS ya se midió: no cuenta como pendiente
+const ENTREGADAS = ['ENTREGADO', 'APROBADO', 'RADICADO']
+const semaforoDe = (a: Actuacion) => (ENTREGADAS.includes(a.estado) ? 'ENTREGADO' : semaforo(a.fechaLimiteEntrega ?? a.fechaVencimiento))
 
 // =====================================
 // TABLERO: actuaciones abiertas, la de fecha límite más cercana primero
@@ -60,8 +62,13 @@ router.get('/', async (req, res) => {
     if (req.query.auxiliarId) w.auxiliarId = Number(req.query.auxiliarId)
     if (req.query.revisorId) w.revisorId = Number(req.query.revisorId)
     if (req.query.todos !== '1') Object.assign(w, alcance(req))
+    if (req.query.semaforo === 'ENTREGADO') w.estado = ENTREGADAS
     const rango = req.query.semaforo ? rangoSemaforo(String(req.query.semaforo)) : undefined
-    if (rango) w.fechaLimiteEntrega = rango
+    if (rango) {
+      w.fechaLimiteEntrega = rango
+      // Los colores son de lo que falta entregar
+      if (!req.query.estado) w.estado = { [Op.notIn]: [...ENTREGADAS, 'CERRADA'] }
+    }
 
     // Búsqueda por radicado, número interno, nombre o documento del accionante. Primero los casos y
     // luego se filtra por id: un $anidado$ con límite y hasMany falla en Sequelize
@@ -112,7 +119,8 @@ router.get('/resumen', async (req, res) => {
   try {
     const propias = alcance(req)
     const colores = ['VENCIDO', 'ROJO', 'AMARILLO', 'VERDE', 'SIN_FECHA']
-    const conteos = await Promise.all(colores.map(c => Actuacion.count({ where: { ...propias, estado: ABIERTA, fechaLimiteEntrega: rangoSemaforo(c) } })))
+    const pendientes = { [Op.notIn]: [...ENTREGADAS, 'CERRADA'] }
+    const conteos = await Promise.all(colores.map(c => Actuacion.count({ where: { ...propias, estado: pendientes, fechaLimiteEntrega: rangoSemaforo(c) } })))
     const [porEtapa, porCriticidad, porRegistrar, porRevisar, alertasPendientes, porAtender, asignacionesSinAtender] = await Promise.all([
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['etapa'] }),
       Actuacion.count({ where: { ...propias, estado: ABIERTA }, group: ['criticidad'] }),

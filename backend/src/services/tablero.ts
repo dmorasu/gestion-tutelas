@@ -53,6 +53,7 @@ const VISTAS: Record<string, string> = {
       v1."fechaEntregaEntidad" AS fecha_entrega_v1, ${dia('v1."fechaEntregaEntidad"')} AS dia_entrega_v1,
       ${aTiempo('v1."fechaEntregaEntidad"', 'v1."limiteAns"', 'a."fechaVencimiento"')} AS v1_a_tiempo,
       CASE WHEN a.estado = 'CERRADA' THEN NULL
+        WHEN a.estado IN ('ENTREGADO', 'APROBADO', 'RADICADO') THEN 'ENTREGADO'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") IS NULL THEN 'SIN_FECHA'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") < now() THEN 'VENCIDO'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") < now() + make_interval(hours => ${param('SEMAFORO_HORAS_ROJO')}::int) THEN 'ROJO'
