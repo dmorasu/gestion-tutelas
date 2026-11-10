@@ -6,7 +6,8 @@ import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { analizarExcel, registrarFilas, acusarPaquete } from '../services/cargueExcel'
 import { guardarArchivo, leerArchivo } from '../services/almacenamiento'
-import { ETAPAS, ROLES, TIPOS_SOLICITUD } from '../services/constantes'
+import { ETAPAS, ETAPA_EN_ASUNTO, NOMBRES_CRITICIDAD, ROLES, TIPOS_SOLICITUD } from '../services/constantes'
+import { textoFechaHora } from '../utils/fechaColombia'
 import { responderError, ErrorNegocio } from '../utils/errores'
 
 const router = Router()
@@ -39,6 +40,30 @@ router.post('/analizar', carga.single('archivo'), async (req, res) => {
   }
 })
 
+// Correo con varios radicados en el texto (sin Excel): la misma pantalla del cargue, una fila por
+// radicado, con la etapa, la criticidad y el vencimiento que traía el asunto
+router.post('/desde-correo', body('correoId').isInt(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const correo = await Correo.findByPk(Number(req.body.correoId), { attributes: ['id', 'asunto', 'remitente', 'fechaCorreo', 'estado', 'radicados', 'etapaDetectada', 'criticidadDetectada', 'vencimientoDetectado'] })
+    if (!correo) throw new ErrorNegocio('El correo no existe', 404)
+    if (correo.estado !== 'POR_REGISTRAR') throw new ErrorNegocio('Este correo ya fue registrado o descartado')
+    if (!correo.radicados.length) throw new ErrorNegocio('El correo no trae radicados')
+    const etapa = correo.etapaDetectada ? ETAPA_EN_ASUNTO[correo.etapaDetectada] : ''
+    const criticidad = correo.criticidadDetectada ? NOMBRES_CRITICIDAD[correo.criticidadDetectada] : ''
+    const vence = correo.vencimientoDetectado ? textoFechaHora(correo.vencimientoDetectado) : ''
+    res.json({
+      hoja: 'Correo',
+      encabezados: ['Radicado', 'Etapa', 'Criticidad', 'Vence'],
+      filas: correo.radicados.map(r => [r, etapa, criticidad, vence]),
+      mapeo: { radicado: 0, etapa: 1, criticidad: 2, vencimiento: 3, notificacion: null, accionante: null, documento: null, juzgado: null, derechos: null, observaciones: null },
+      archivo: null,
+      correo
+    })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
 router.post('/registrar',
   body('filas').isArray({ min: 1, max: 50 }).withMessage('Envíe entre 1 y 50 filas por tanda'),
   body('fechaAsignacion').isISO8601().withMessage('Indique la fecha y hora de asignación'),
@@ -48,7 +73,8 @@ router.post('/registrar',
   async (req, res) => {
     try {
       const archivo = req.body.archivoId ? await Archivo.findByPk(Number(req.body.archivoId), { attributes: ['nombre', 'correoId'] }) : null
-      const origen = archivo ? `Cargue de Excel: ${archivo.nombre}${archivo.correoId ? ` (correo #${archivo.correoId})` : ''}` : 'Cargue de Excel'
+      const origen = archivo ? `Cargue de Excel: ${archivo.nombre}${archivo.correoId ? ` (correo #${archivo.correoId})` : ''}`
+        : req.body.correoId ? `Asignación en paquete (correo #${Number(req.body.correoId)})` : 'Cargue de Excel'
       res.json(await registrarFilas({
         filas: req.body.filas, fechaAsignacion: req.body.fechaAsignacion, etapaPorDefecto: req.body.etapaPorDefecto || null,
         tipoSolicitud: req.body.tipoSolicitud, origen, usuarioId: req.usuario!.id

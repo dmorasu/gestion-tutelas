@@ -249,3 +249,60 @@ export const enviarPrueba = async (codigo: CodigoPlantilla, base: BasePlantilla,
   const logo = logoIncrustado()
   await enviarCorreo(PLANTILLAS[codigo].buzon, { para: [para], asunto: `[PRUEBA] ${asunto}`, html, adjuntos: logo ? [logo] : [] })
 }
+
+// =====================================
+// CORREO LIBRE DESDE EL CASO
+// Para lo que no tiene plantilla (aclarar algo con la entidad, responder una pregunta). Sale con el
+// mismo diseño y la ficha del caso, por el buzón que se elija, y queda registrado en el caso.
+// =====================================
+
+// Lo que el formulario trae ya escrito: asunto normalizado y a quién escribir según el buzón
+export const borradorLibre = async (actuacionId: number) => {
+  const { valores } = await valoresDeActuacion(actuacionId)
+  const asignacion = await Correo.findOne({ where: { actuacionId, proposito: 'ASIGNACION' }, attributes: ['remitente'] })
+  return {
+    asunto: `[${valores.prefijo}] [${valores.criticidad}] [${valores.radicado}] [${valores.actuacion}] Caso ${valores.numeroInterno}`,
+    destinatarios: {
+      ASIGNACIONES: asignacion?.remitente ? [asignacion.remitente] : [],
+      INSUMOS: parametro<string[]>('CORREOS_INSUMOS'),
+      ENTREGAS: parametro<string[]>('CORREOS_ENTREGA')
+    }
+  }
+}
+
+export const enviarLibre = async (d: {
+  actuacionId: number, buzon: Buzon, para: string[], cc?: string[], asunto: string, cuerpo: string, responderACorreoId?: number | null, usuarioId: number
+}) => {
+  const para = [...new Set(d.para.map(c => c.trim().toLowerCase()).filter(Boolean))]
+  if (!para.length) throw new ErrorNegocio('Indique a quién va el correo')
+  if (!d.asunto.trim() || !d.cuerpo.trim()) throw new ErrorNegocio('Escriba el asunto y el mensaje')
+  const { actuacion, valores } = await valoresDeActuacion(d.actuacionId)
+  const html = armarCorreoHtml({
+    titulo: 'Comunicación sobre el caso',
+    cuerpoHtml: aHtml(escaparHtml(d.cuerpo.trim())),
+    ficha: [
+      { etiqueta: 'Caso', valor: valores.numeroInterno }, { etiqueta: 'Radicado', valor: valores.radicadoFormato },
+      { etiqueta: 'Actuación', valor: valores.etapa }, { etiqueta: 'Criticidad', valor: valores.criticidad }, { etiqueta: 'Vence', valor: valores.vence }
+    ].filter(f => f.valor),
+    criticidad: valores.criticidad,
+    buzon: NOMBRE_BUZON[d.buzon],
+    logoSrc: `cid:${CID_LOGO}`
+  })
+  const original = d.responderACorreoId ? await Correo.findByPk(d.responderACorreoId, { attributes: ['graphId', 'conversationId', 'buzon', 'casoId'] }) : null
+  if (original && original.casoId !== actuacion.casoId) throw new ErrorNegocio('Ese correo no es de este caso')
+  const registro = {
+    direccion: 'SALIENTE' as const, buzon: d.buzon, remitente: direccionBuzon(d.buzon), para, cc: d.cc ?? [], asunto: d.asunto.trim(),
+    cuerpoTexto: d.cuerpo.trim(), fechaCorreo: new Date(), radicados: [valores.radicado], proposito: 'LIBRE',
+    casoId: actuacion.casoId, actuacionId: actuacion.id, usuarioId: d.usuarioId
+  }
+  if (modoEnvio() === 'SIMULADO') return Correo.create({ ...registro, estado: 'SIMULADO', conversationId: original?.conversationId ?? null })
+  try {
+    const responderA = original?.graphId && original.buzon === d.buzon ? original.graphId : undefined
+    const logo = logoIncrustado()
+    const enviado = await enviarCorreo(d.buzon, { para, cc: d.cc, asunto: registro.asunto, html, responderA, adjuntos: logo ? [logo] : [] })
+    return Correo.create({ ...registro, estado: 'ENVIADO', graphId: enviado.graphId, conversationId: enviado.conversationId, fechaCorreo: enviado.enviadoEn })
+  } catch (error) {
+    const correo = await Correo.create({ ...registro, estado: 'ERROR', error: String(error instanceof Error ? error.message : error).slice(0, 2000) })
+    throw new ErrorNegocio(`No se pudo enviar: ${correo.error}`)
+  }
+}

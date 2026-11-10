@@ -68,6 +68,11 @@ export default async function CorreoPage({ params }: { params: Promise<{ id: str
               {correo.archivos.map(a => <li key={a.id}><Documento d={a} /></li>)}
             </ul>
           )}
+          {correo.estado === "POR_REGISTRAR" && correo.radicados.length > 1 && (
+            <Link href={`/casos/nuevo?correoId=${correo.id}`} className="block rounded border border-slate-300 bg-slate-50 px-3 py-2 text-sm hover:bg-slate-100">
+              Este correo trae <b>{correo.radicados.length} radicados</b>: registrarlos todos con un solo acuse →
+            </Link>
+          )}
           {correo.estado === "POR_REGISTRAR" && correo.archivos.filter(a => esExcel(a.nombre)).map(a => (
             <Link key={a.id} href={`/casos/nuevo?archivoId=${a.id}`} className="block rounded border border-slate-300 bg-slate-50 px-3 py-2 text-sm hover:bg-slate-100">
               Registrar las asignaciones del Excel <b>{a.nombre}</b> →

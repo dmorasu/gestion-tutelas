@@ -63,6 +63,7 @@ Los puertos (4100/3100) no chocan con Nodex (4000, 3000-3002).
   - `flujoEscritos.ts`: datos faltantes, insumos (solicitud y confirmación), escrito por versiones, revisión, entrega, respuesta de la entidad (acuse, aprobación, devolución), radicación y cierre.
   - `cargueExcel.ts`: lectura de Excel o CSV sin estructura fija (exceljs), emparejamiento sugerido de columnas, registro por tandas y acuse único del paquete.
   - `permisosActuacion.ts`: quién puede cada paso (auxiliar, revisor del equipo, coordinador) y `alcanceActuaciones` (qué ve cada perfil en tableros y listados).
+  - `lineaTiempo.ts`: historial del caso como el de Nodex (bitácora, correos, documentos y alertas, con títulos legibles).
   - `indicadores.ts`: ANS por periodo y tablero diario. `alertas.ts`: detección (worker cada 30 min) y emisión. `informes.ts`: Excel semanal y mensual. `archivoMaestro.ts`: radicados de otros operadores.
 - `utils/`: `asunto.ts` (lee `[Prefijo] [Criticidad] [Radicado] [Actuación] [Vence: …]` en cualquier orden y con o sin tildes), `radicado.ts` (23 dígitos con guiones, puntos o espacios), `fechaColombia.ts` (UTC-5 fijo), `politicaContrasena.ts`, `intentosLogin.ts` y `contrasenas.ts` (copiados de Nodex).
 - `routes/`:
@@ -118,7 +119,8 @@ Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificac
   - `correos` (por registrar, respuestas por revisar, asociados y descartados, por buzón) y `correos/[id]` (formulario precargado con etapa, criticidad y vencimiento del asunto; asociar, descartar o marcar atendido);
   - `casos` (tablero con número interno, criticidad y equipo) y `casos/[id]` (detalle, `PanelActuacion` editable, correos enviados y simulados, historial);
   - `casos/nuevo` (asignación manual o desde Excel; desde un correo con Excel adjunto abre ya leído);
-  - en `casos/[id]`, `PanelTrabajo` por actuación: escrito por versiones, revisión, entrega, respuesta, insumos, datos faltantes, radicación y cierre. Los botones siguen las mismas reglas de `permisosActuacion` del backend;
+  - `casos/[id]` con pestañas (`?tab=actuacion|informacion|documentos|correos|historial&actuacion=id`) y columna lateral, como el detalle de trámites de Nodex; componentes en `casos/[id]/componentes` (`HistorialCaso`, `DocumentosCaso`, `CorreosCaso`) y `components/ui/Seccion` y `Dato` copiados de Nodex;
+  - en la pestaña Actuación, `PanelTrabajo`: escrito por versiones, revisión, entrega, respuesta, insumos, datos faltantes, radicación y cierre. Los botones siguen las mismas reglas de `permisosActuacion` del backend;
   - en `correos/[id]`, `AtenderRespuesta`: clasificar la respuesta a una entrega, marcar insumos recibidos o confirmar datos faltantes desde el correo;
   - grupo Seguimiento: `seguimiento` (tablero diario por perfil), `indicadores` (ANS por periodo), `alertas` e `informes`; en Configuración, `archivo-maestro`;
   - `equipos` (etapas e integrantes) y `plantillas` (correos de salida), las dos del coordinador;
@@ -145,7 +147,9 @@ Confirmados: corte a las 15:00 (D1), revisión de todo escrito (D16), clasificac
 
 **Bloque 3 (misma noche):** tablero diario, indicadores ANS, alertas, informes en Excel y archivo maestro. Probado con un escenario de 5 casos (a tiempo, próximo, vencido, desacato y devuelto): alertas sin repetirse, ANS esperados, informes con sus hojas y la relación de facturación, archivo maestro que marca el duplicado y hace saltar ANS-13; pantallas capturadas con Chrome sin ventana (se ven bien) y permisos por perfil. Datos de prueba borrados.
 
-**Ojo al probar:** un archivo nuevo en `backend/src` reinicia el `nodemon` (y el arranque contra la base remota tarda cerca de un minuto). Los scripts de prueba, mejor fuera de `src`.
+**Cierre del bloque 2 y diseño (misma noche):** expediente del juzgado por datos faltantes, correo libre, varios radicados en un correo, detalle del caso por pestañas con historial estilo Nodex y formulario de asignación por pasos. Probado con un caso completo (línea de tiempo de 27 eventos, pestañas y formularios capturados con Chrome sin ventana) y el registro de 3 radicados de un correo con un solo acuse.
+
+**Ojo al probar:** borrar solo por id lo que crea la prueba: el usuario usa la app al mismo tiempo (una limpieza amplia ya borró un informe y un correo suyos). un archivo nuevo en `backend/src` reinicia el `nodemon` (y el arranque contra la base remota tarda cerca de un minuto). Los scripts de prueba, mejor fuera de `src`.
 
 **En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las 8 plantillas en borrador y los 2 casos de prueba de la mañana (GPA-2026-00001 y 00002).
 

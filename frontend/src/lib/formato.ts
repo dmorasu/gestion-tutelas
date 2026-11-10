@@ -79,6 +79,8 @@ export const PROPOSITOS: Record<string, string> = {
   APROBACION_ENTIDAD: "Aprobación de la entidad",
   DEVOLUCION_ENTIDAD: "Devolución de la entidad",
   ACUSE_PAQUETE: "Confirmación del paquete",
+  ALERTA: "Alerta al cliente",
+  LIBRE: "Correo escrito desde el caso",
   ASIGNACION_PAQUETE: "Asignación en paquete (Excel)"
 }
 

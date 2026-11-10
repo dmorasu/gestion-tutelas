@@ -8,11 +8,12 @@ import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES } from '../services/constantes'
+import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES } from '../services/constantes'
 import { normalizarRadicado } from '../utils/radicado'
 import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
-import { modoEnvio } from '../services/buzon/correosSalida'
+import { lineaTiempo } from '../services/lineaTiempo'
+import { modoEnvio, borradorLibre, enviarLibre } from '../services/buzon/correosSalida'
 import { proveedorAlmacen } from '../services/almacenamiento'
 import { MotivoDevolucion, Alerta } from '../models'
 import { responderError, ErrorNegocio } from '../utils/errores'
@@ -137,6 +138,19 @@ router.post('/',
     }
   })
 
+// ¿Ya existe el caso? El formulario lo consulta mientras se escribe el radicado
+router.get('/radicado/:radicado', async (req, res) => {
+  try {
+    const radicado = normalizarRadicado(String(req.params.radicado))
+    const caso = radicado.length === 23
+      ? await Caso.findOne({ where: { radicado }, attributes: ['id', 'numeroInterno', 'estado'], include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado'] }] })
+      : null
+    res.json({ caso })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
 router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {
     const caso = await Caso.findByPk(Number(req.params.id), {
@@ -181,9 +195,13 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
   }
 })
 
+// Línea de tiempo (bitácora, correos, documentos y alertas), del más reciente al más antiguo
 router.get('/:id/historial', param('id').isInt(), manejarErroresEntrada, async (req, res) => {
-  const historial = await HistorialCaso.findAll({ where: { casoId: Number(req.params.id) }, order: [['createdAt', 'DESC']], limit: 300 })
-  res.json(historial)
+  try {
+    res.json(await lineaTiempo(Number(req.params.id)))
+  } catch (error) {
+    responderError(res, error)
+  }
 })
 
 // =====================================
@@ -270,6 +288,28 @@ const paso = (permiso: 'RESPONSABLE' | 'REVISOR', fn: Paso) => async (req: Reque
 }
 
 const fechaOpcional = (v: unknown) => (v ? new Date(String(v)) : null)
+
+// Correo libre: el borrador (asunto y destinatarios sugeridos) y el envío
+router.get('/actuaciones/:id/borrador-correo', param('id').isInt(), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const a = await Actuacion.findByPk(Number(req.params.id))
+      if (!a) throw new ErrorNegocio('La actuación no existe', 404)
+      exigirResponsable(req, a)
+      res.json(await borradorLibre(a.id))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+router.post('/actuaciones/:id/correo', param('id').isInt(), body('buzon').isIn(BUZONES), body('para').isArray({ min: 1 }).withMessage('Indique a quién va el correo'),
+  body('asunto').isString().trim().notEmpty().withMessage('Falta el asunto'), body('cuerpo').isString().trim().notEmpty().withMessage('Falta el mensaje'), manejarErroresEntrada,
+  paso('RESPONSABLE', async (req, a) => {
+    await enviarLibre({
+      actuacionId: a.id, buzon: req.body.buzon, para: req.body.para, cc: req.body.cc ?? [], asunto: req.body.asunto, cuerpo: req.body.cuerpo,
+      responderACorreoId: req.body.responderACorreoId ? Number(req.body.responderACorreoId) : null, usuarioId: req.usuario!.id
+    })
+  }))
 
 router.post('/actuaciones/:id/datos-faltantes', param('id').isInt(), body('detalle').isString().trim().notEmpty().withMessage('Indique qué datos faltan'), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({ actuacionId: a.id, detalle: req.body.detalle, para: req.body.para, usuarioId: req.usuario!.id })))

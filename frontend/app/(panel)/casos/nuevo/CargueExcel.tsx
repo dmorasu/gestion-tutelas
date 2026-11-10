@@ -23,7 +23,8 @@ const TANDA = 10
 
 export type Analisis = {
   hoja: string, encabezados: string[], filas: string[][], mapeo: Record<string, number | null>,
-  archivo: { id: number, nombre: string }, correo: { id: number, asunto: string | null, remitente: string | null, fechaCorreo: string } | null
+  // null: los radicados vienen del texto de un correo, no de un Excel
+  archivo: { id: number, nombre: string } | null, correo: { id: number, asunto: string | null, remitente: string | null, fechaCorreo: string } | null
 }
 type Resultado = { numero: number, ok: boolean, radicado: string | null, numeroInterno?: string | null, casoId?: number, error?: string }
 
@@ -77,7 +78,7 @@ export default function CargueExcel({ inicial }: { inicial: Analisis | null }) {
     for (let i = 0; i < validas.length; i += TANDA) {
       const r = await registrarTanda({
         filas: validas.slice(i, i + TANDA), fechaAsignacion: isoDesdeLocal(fechaAsignacion), etapaPorDefecto: etapaPorDefecto || null,
-        tipoSolicitud, archivoId: analisis.archivo.id
+        tipoSolicitud, archivoId: analisis.archivo?.id ?? null, correoId: analisis.archivo ? null : analisis.correo?.id ?? null
       })
       if (!r.ok) { toast.error(r.errores.join(". ")); break }
       todos.push(...(r.datos as Resultado[]))
@@ -111,7 +112,7 @@ export default function CargueExcel({ inicial }: { inicial: Analisis | null }) {
     <div className="space-y-4">
       <div className="tarjeta p-4 space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
-          <p><b>{analisis.archivo.nombre}</b> · hoja {analisis.hoja} · {filas.length} filas · <span className={validas.length < filas.length ? "text-amber-700" : ""}>{validas.length} con radicado válido</span></p>
+          <p><b>{analisis.archivo?.nombre ?? `Radicados del correo "${analisis.correo?.asunto ?? ""}"`}</b>{analisis.archivo && ` · hoja ${analisis.hoja}`} · {filas.length} filas · <span className={validas.length < filas.length ? "text-amber-700" : ""}>{validas.length} con radicado válido</span></p>
           {analisis.correo && <p className="text-xs text-slate-500">Llegó en el correo de {analisis.correo.remitente} el {fechaHora(analisis.correo.fechaCorreo)}</p>}
         </div>
 

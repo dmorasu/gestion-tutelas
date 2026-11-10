@@ -45,3 +45,18 @@ export async function acusarPaquete(correoId: number, registrados: { radicado: s
   revalidatePath("/correos")
   return { ok: true }
 }
+
+// Asunto normalizado y destinatarios sugeridos para un correo libre desde el caso
+export async function borradorCorreo(actuacionId: number): Promise<Resultado> {
+  const r = await fetchApi(`/casos/actuaciones/${actuacionId}/borrador-correo`)
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  return { ok: true, datos: await r.json() }
+}
+
+// ¿El radicado ya es un caso? (el formulario de registro lo consulta al completar los 23 dígitos)
+export async function buscarPorRadicado(radicado: string) {
+  const r = await fetchApi(`/casos/radicado/${encodeURIComponent(radicado)}`)
+  if (!r.ok) return null
+  const { caso } = await r.json() as { caso: { id: number, numeroInterno: string | null, estado: string, actuaciones: { id: number, etapa: string, estado: string }[] } | null }
+  return caso ? { ...caso, radicadoBuscado: radicado } : null
+}

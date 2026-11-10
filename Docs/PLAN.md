@@ -54,7 +54,12 @@ Por asumir → En análisis → (Esperando insumos) → En proyección → Con e
 5. Radicación informada por la entidad y cierre con las causales del manual (§27).
 6. **Asignación manual** (un caso) y **cargue desde Excel sin estructura fija**: la app lee la hoja, adivina las columnas, el asistente corrige el emparejamiento, se registra por tandas y sale una sola confirmación con el número interno de cada radicado.
 
-Pendiente del bloque: solicitud de expedientes a juzgados (asistente) y un correo libre (no plantilla) desde el caso.
+Cierre del bloque (2026-11-09, noche):
+- **Expediente del juzgado** (opción A, la que permite el manual §4): se le pide al cliente con "Pedir expediente del juzgado", que abre la solicitud de datos faltantes con el texto escrito.
+- **Correo libre** desde el caso (pestaña Correos): buzón a elegir, asunto normalizado y destinatarios sugeridos, en el hilo de un correo recibido si se responde; sale con el diseño corporativo y queda en el caso.
+- **Varios radicados en un correo**: el correo ofrece registrarlos todos en la pantalla de varios casos, con un solo acuse.
+- **Detalle del caso como en Nodex**: pestañas Actuación, Información, Documentos (expediente por etapa y carpeta), Correos e Historial (línea de tiempo por día, con filtros), y columna lateral de plazos y responsables.
+- **Formulario de asignación** por pasos en tarjetas, con validación del radicado, aviso de caso existente y resumen.
 
 **Ajustes del 2026-11-09 (noche):**
 - **Correos con diseño corporativo** (grafito y el dorado del logo, logo incrustado de 16 KB, ficha del caso con la criticidad en color, botón al enlace de la entrega) y **vista previa** en la administración de plantillas, más "Enviarme una prueba" cuando el envío real esté encendido. El título del correo también se edita.
