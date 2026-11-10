@@ -1,5 +1,5 @@
 import { enBogota, instanteBogota, minutosDeHora, sumarDias } from '../utils/fechaColombia'
-import { esDiaHabil, habilDesde, restarDiasHabiles, sumarDiasHabiles } from '../utils/diasHabiles'
+import { esDiaHabil, esMedioDia, habilDesde, restarDiasHabiles, sumarDiasHabiles } from '../utils/diasHabiles'
 import { parametro } from './parametros'
 import type { Criticidad, Etapa, UnidadTermino } from './constantes'
 
@@ -10,9 +10,17 @@ import type { Criticidad, Etapa, UnidadTermino } from './constantes'
 
 const HORA = 60 * 60 * 1000
 
+// D3: en medio día la jornada termina a HORA_CORTE_MEDIO_DIA; si es más temprano, manda sobre el corte
+const corteDelDia = (dia: string, clave: 'HORA_CORTE_ASIGNACION' | 'HORA_FIN_DIA_ANS') => {
+  const hora = parametro<string>(clave)
+  if (!esMedioDia(dia)) return hora
+  const medio = parametro<string>('HORA_CORTE_MEDIO_DIA')
+  return minutosDeHora(medio) < minutosDeHora(hora) ? medio : hora
+}
+
 // D1: lo que llega después del corte o en día no hábil cuenta desde el siguiente día hábil
 export const asignacionEfectiva = (llegada: Date, etapa?: Etapa): Date => {
-  const corte = minutosDeHora(parametro<string>('HORA_CORTE_ASIGNACION'))
+  const corte = minutosDeHora(corteDelDia(enBogota(llegada).dia, 'HORA_CORTE_ASIGNACION'))
   const inicio = parametro<string>('HORA_INICIO_JORNADA')
   const { dia, minutos } = enBogota(llegada)
   if (esDiaHabil(dia, etapa) && minutos <= corte) return llegada
@@ -20,28 +28,38 @@ export const asignacionEfectiva = (llegada: Date, etapa?: Etapa): Date => {
   return instanteBogota(siguiente, inicio)
 }
 
-// D4: término en horas (corridas), días hábiles o días calendario, desde la notificación.
-// Los días se cuentan desde el día siguiente; si el último cae en día no hábil, pasa al siguiente hábil
+// D4: término en días hábiles o días calendario, desde la notificación. Los días se cuentan desde el
+// día siguiente; si el último cae en día no hábil, pasa al siguiente hábil. Las horas se pasan a días
+// hábiles (24 h = 1 día, 48 h = 2) mientras TERMINO_HORAS_EN_DIAS esté activo; si no, corren seguidas
 export const vencimientoTermino = (notificacion: Date, valor: number, unidad: UnidadTermino, etapa?: Etapa): Date => {
-  if (unidad === 'HORAS') return new Date(notificacion.getTime() + valor * HORA)
+  if (unidad === 'HORAS') {
+    if (!parametro<boolean>('TERMINO_HORAS_EN_DIAS')) return new Date(notificacion.getTime() + valor * HORA)
+    return vencimientoTermino(notificacion, Math.max(1, Math.ceil(valor / 24)), 'DIAS_HABILES', etapa)
+  }
   const hora = parametro<string>('HORA_VENCIMIENTO_TERMINO')
   const { dia } = enBogota(notificacion)
   const ultimo = unidad === 'DIAS_HABILES' ? sumarDiasHabiles(dia, valor, etapa) : habilDesde(sumarDias(dia, valor), etapa)
   return instanteBogota(ultimo, hora)
 }
 
-// D5: vencimiento para impugnar el fallo de primera instancia
-export const vencimientoImpugnacion = (notificacionFallo: Date) =>
-  vencimientoTermino(notificacionFallo, parametro<number>('DIAS_TERMINO_IMPUGNACION'), 'DIAS_HABILES', 'IMPUGNACION')
+// D5: vencimiento para impugnar el fallo de primera instancia. Si se notificó por correo se suman
+// los días del parámetro (pendiente con el cliente: Ley 2213 de 2022)
+export const vencimientoImpugnacion = (notificacionFallo: Date, porCorreo = false) =>
+  vencimientoTermino(notificacionFallo, parametro<number>('DIAS_TERMINO_IMPUGNACION') + (porCorreo ? parametro<number>('DIAS_ADICIONALES_NOTIFICACION_CORREO') : 0), 'DIAS_HABILES', 'IMPUGNACION')
 
-// "Dentro de los N días hábiles siguientes" (D2: hasta la hora de fin del día)
+// Los ANS miden nuestro trabajo: cuentan los medios días como medio (D3) y vencen a la hora de fin
+// del día hábil (D2: 3:00 p. m.), o antes si ese día es medio día. Los términos del juzgado no
+// (HORA_VENCIMIENTO_TERMINO, 5:00 p. m.)
+const finDiaAns = (dia: string) => instanteBogota(dia, corteDelDia(dia, 'HORA_FIN_DIA_ANS'))
+
+// "Dentro de los N días hábiles siguientes"
 export const finDeDiasHabilesSiguientes = (desde: Date, dias: number, etapa?: Etapa) =>
-  instanteBogota(sumarDiasHabiles(enBogota(desde).dia, dias, etapa), parametro<string>('HORA_FIN_DIA_ANS'))
+  finDiaAns(sumarDiasHabiles(enBogota(desde).dia, dias, etapa, true))
 
 // "Con al menos N días hábiles de antelación al vencimiento": a más tardar al fin del día
 // hábil que queda N días antes
 export const conAntelacion = (vencimiento: Date, dias: number, etapa?: Etapa) =>
-  instanteBogota(restarDiasHabiles(enBogota(vencimiento).dia, dias, etapa), parametro<string>('HORA_FIN_DIA_ANS'))
+  finDiaAns(restarDiasHabiles(enBogota(vencimiento).dia, dias, etapa, true))
 
 const menor = (...fechas: (Date | null | undefined)[]) => {
   const validas = fechas.filter((f): f is Date => !!f)
@@ -54,13 +72,22 @@ export type DatosPlazo = {
   fechaAsignacion: Date
   fechaVencimiento: Date | null
   requiereInsumos: boolean
+  // D6: datos faltantes de la asignación pedidos y aún sin respuesta, y cuándo llegaron
+  datosFaltantesPendientes?: boolean
+  fechaDatosCompletos?: Date | null
   // Insumos pedidos: recepción null = no ha llegado
   insumos?: { minimo: boolean, fechaRecepcion: Date | null }[]
 }
 
-// D6: desde cuándo cuenta el ANS cuando se pidieron insumos. null = aún esperando insumos
+// D6: el ANS cuenta desde la asignación con sus insumos mínimos (los documentos que debe traer la
+// asignación). Si se pidieron datos faltantes, desde que llegan, con la hora de corte. Los insumos
+// para preparar el escrito son otra cosa: los rige ANS_INICIO_CON_INSUMOS. null = el ANS no corre
 export const inicioAns = (d: DatosPlazo): Date | null => {
-  const base = asignacionEfectiva(d.fechaAsignacion, d.etapa)
+  const desdeDatos = parametro<boolean>('ANS_DESDE_DATOS_COMPLETOS')
+  if (desdeDatos && d.datosFaltantesPendientes) return null
+  const asignacion = asignacionEfectiva(d.fechaAsignacion, d.etapa)
+  const completos = desdeDatos && d.fechaDatosCompletos ? asignacionEfectiva(d.fechaDatosCompletos, d.etapa) : null
+  const base = completos && completos > asignacion ? completos : asignacion
   const modo = parametro<string>('ANS_INICIO_CON_INSUMOS')
   const insumos = d.insumos ?? []
   if (!d.requiereInsumos || modo === 'ASIGNACION' || !insumos.length) return base
@@ -80,7 +107,7 @@ const conAntelacionOSiguiente = (d: DatosPlazo, antelacion: number): Date | null
   const inicio = inicioAns(d)
   if (!inicio) return null // esperando insumos: el ANS está suspendido
   const minimos = parametro<number>('DIAS_MINIMOS_ANS01')
-  const holgado = sumarDiasHabiles(enBogota(inicio).dia, minimos, d.etapa) <= enBogota(d.fechaVencimiento).dia
+  const holgado = sumarDiasHabiles(enBogota(inicio).dia, minimos, d.etapa, true) <= enBogota(d.fechaVencimiento).dia
   return holgado
     ? conAntelacion(d.fechaVencimiento, antelacion, d.etapa)
     : menor(finDeDiasHabilesSiguientes(inicio, 1, d.etapa), d.fechaVencimiento)

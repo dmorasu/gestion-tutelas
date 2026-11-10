@@ -4,30 +4,35 @@ import { Parametro } from '../models'
 // =====================================
 // PARÁMETROS: reglas de plazos y ANS (Docs/PLAN.md §5)
 // Los que siguen siendo supuestos se cambian en la pantalla de Parámetros cuando haya respuesta.
-// "fuente" marca los que ya respondió el cliente (manual operativo v1.1 o el correo de roles): al
+// "fuente" marca los que ya respondió el cliente (manual operativo v1.1, el correo de roles o las
+// respuestas a las dudas de TI, "Dudas TI"): al
 // sembrar se actualizan solos si nadie los había confirmado a mano.
 // =====================================
 
 type Definicion = { valor: unknown, descripcion: string, duda?: string, fuente?: string }
 
 export const PARAMETROS_BASE = {
-  HORA_CORTE_ASIGNACION: { valor: '15:00', duda: 'D1', fuente: 'Manual §3', descripcion: 'Las asignaciones y los insumos recibidos después de esta hora cuentan desde el día hábil siguiente' },
+  HORA_CORTE_ASIGNACION: { valor: '15:00', duda: 'D1', fuente: 'Manual §3 y Dudas TI D1', descripcion: 'Las asignaciones y los insumos recibidos después de esta hora cuentan desde el día hábil siguiente' },
   HORA_INICIO_JORNADA: { valor: '08:00', duda: 'D1', descripcion: 'Hora en que se entiende asignado lo que llegó después del corte o en día no hábil' },
-  HORA_FIN_DIA_ANS: { valor: '23:59', duda: 'D2', descripcion: 'Hasta qué hora del "día hábil siguiente" se cumple un ANS' },
-  HORA_VENCIMIENTO_TERMINO: { valor: '17:00', duda: 'D4', descripcion: 'Hora en que vence un término judicial en días, o el "Vence" del asunto que trae fecha sin hora' },
-  DIAS_TERMINO_IMPUGNACION: { valor: 3, duda: 'D5', descripcion: 'Días hábiles para impugnar, desde el día siguiente a la notificación del fallo' },
-  ANS_INICIO_CON_INSUMOS: { valor: 'ULTIMO_INSUMO', duda: 'D6', descripcion: 'Desde cuándo cuentan los ANS si se pidieron insumos: ULTIMO_INSUMO, INSUMOS_MINIMOS o ASIGNACION' },
+  HORA_FIN_DIA_ANS: { valor: '15:00', duda: 'D2', fuente: 'Dudas TI D2', descripcion: 'Hasta qué hora del día hábil se cumple un ANS (nuestra actividad)' },
+  HORA_VENCIMIENTO_TERMINO: { valor: '17:00', duda: 'D2', fuente: 'Dudas TI D2', descripcion: 'Hora en que vence un término judicial en días (horario hábil de los juzgados), o el "Vence" del asunto que trae fecha sin hora' },
+  HORA_CORTE_MEDIO_DIA: { valor: '12:00', duda: 'D3', descripcion: 'Hasta qué hora se trabaja los medios días (24 y 31 de diciembre): corte de asignación y fin del día para los ANS' },
+  TERMINO_HORAS_EN_DIAS: { valor: true, duda: 'D4', fuente: 'Dudas TI D4', descripcion: 'Los términos en horas se cuentan en días hábiles: 24 horas = 1 día hábil, 48 horas = 2' },
+  DIAS_TERMINO_IMPUGNACION: { valor: 3, duda: 'D5', fuente: 'Dudas TI D5', descripcion: 'Días hábiles para impugnar, desde el día siguiente a la notificación del fallo' },
+  DIAS_ADICIONALES_NOTIFICACION_CORREO: { valor: 0, duda: 'D5', descripcion: 'Días hábiles que se suman al término de impugnación si el fallo se notificó por correo (Ley 2213 de 2022: serían 2). Pendiente de consultar con el cliente' },
+  ANS_DESDE_DATOS_COMPLETOS: { valor: true, duda: 'D6', fuente: 'Dudas TI D6', descripcion: 'Si se pidieron datos faltantes de la asignación (insumos mínimos), el ANS no corre hasta que lleguen y cuenta desde su llegada' },
+  ANS_INICIO_CON_INSUMOS: { valor: 'ULTIMO_INSUMO', duda: 'D6', descripcion: 'Desde cuándo cuentan los ANS si se pidieron insumos para preparar el escrito: ULTIMO_INSUMO, INSUMOS_MINIMOS o ASIGNACION' },
   DIAS_ANTELACION_ANS01: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-01: días hábiles de antelación al vencimiento para entregar la contestación' },
   DIAS_MINIMOS_ANS01: { valor: 2, fuente: 'Manual §21', descripcion: 'ANS-01: con menos de estos días hábiles hasta el vencimiento, se entrega dentro del día hábil siguiente' },
   DIAS_ANS02: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-02 (críticos): días hábiles desde la asignación con insumos para entregar' },
   DIAS_ANTELACION_ANS03: { valor: 1, fuente: 'Manual §21', descripcion: 'ANS-03: días hábiles de antelación al vencimiento para entregar la impugnación' },
-  DIAS_ANS06: { valor: 1, duda: 'D20', fuente: 'Manual §17', descripcion: 'ANS-06: días hábiles para corregir una devolución de fondo' },
+  DIAS_ANS06: { valor: 1, duda: 'D20', fuente: 'Manual §17 y Dudas TI D20', descripcion: 'ANS-06: días hábiles para corregir una devolución de fondo, desde el correo de devolución (sin hora de corte)' },
   DIAS_ANS07: { valor: 1, fuente: 'Manual §11', descripcion: 'ANS-07: días hábiles desde la asignación para pedir los insumos faltantes' },
   DIAS_DEVOLUCION_ENTIDAD: { valor: 2, fuente: 'Manual §17', descripcion: 'Días hábiles que tiene la entidad para devolver un escrito entregado' },
   DIAS_SUMINISTRO_INSUMOS: { valor: 2, fuente: 'Manual §11', descripcion: 'Días hábiles que tiene el cliente para entregar los insumos (el mismo día si es crítico)' },
-  META_ANS: { valor: { 'ANS-01': 95, 'ANS-02': 95, 'ANS-03': 95, 'ANS-04': 90, 'ANS-05': 15, 'ANS-06': 95, 'ANS-07': 95, 'ANS-08': 95 }, duda: 'D11', descripcion: 'Meta mensual de cada ANS en % (el manual las deja entre corchetes, sujetas a cierre)' },
-  SENTIDOS_FAVORABLES: { valor: ['NIEGA', 'IMPROCEDENTE', 'NO_SANCIONA'], duda: 'D13', descripcion: 'Sentidos favorables a la entidad. En segunda instancia: Confirma es favorable si la primera lo fue; Revoca, si no lo fue; Modifica es desfavorable' },
-  CUMPLIMIENTO_DURANTE_IMPUGNACION: { valor: false, duda: 'D12', descripcion: 'Abrir la actuación de cumplimiento mientras corre la impugnación' },
+  META_ANS: { valor: { 'ANS-01': 90, 'ANS-02': 90, 'ANS-03': 90, 'ANS-04': 90, 'ANS-05': 15, 'ANS-06': 90, 'ANS-07': 90, 'ANS-08': 90 }, duda: 'D11', fuente: 'Dudas TI D11', descripcion: 'Meta mensual de cada ANS en % (ANS-05 es un tope). 90 % mientras se negocian los porcentajes' },
+  SENTIDOS_FAVORABLES: { valor: ['NIEGA', 'IMPROCEDENTE', 'HECHO_SUPERADO', 'NO_SANCIONA'], duda: 'D13', fuente: 'Dudas TI D13', descripcion: 'Sentidos favorables a la entidad (Concede y Concede parcialmente son desfavorables). En segunda instancia: Confirma es favorable si la primera lo fue; Revoca, si la primera concedió; lo demás es desfavorable' },
+  CUMPLIMIENTO_DURANTE_IMPUGNACION: { valor: true, duda: 'D12', fuente: 'Dudas TI D12', descripcion: 'Todo fallo desfavorable lleva memorial de cumplimiento, aunque se impugne: se abre la actuación de cumplimiento mientras corre la impugnación' },
   ETAPAS_CRITICAS: { valor: ['CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO'], fuente: 'Manual §13', descripcion: 'Etapas que siempre son de nivel crítico' },
   HORAS_CRITICO: { valor: 24, fuente: 'Manual §13', descripcion: 'Crítico: término vencido o que vence en menos de estas horas al asignarse' },
   HORAS_ALTO: { valor: 48, fuente: 'Manual §13', descripcion: 'Alto: vence en menos de estas horas (y más que el crítico)' },

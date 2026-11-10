@@ -4,8 +4,9 @@ import { sumarDias } from './fechaColombia'
 // DÍAS HÁBILES EN COLOMBIA (copiado de Nodex y ampliado)
 // Sin sábados, domingos ni festivos. Los festivos se calculan para cualquier año: fijos, los que
 // la Ley Emiliani (Ley 51 de 1983) pasa al lunes siguiente y los que dependen de la Pascua.
-// Además, la tabla de días no hábiles (D3: 24 y 31 de diciembre, vacancia judicial...) que puede
-// aplicar a todas las etapas o solo a algunas. Fechas como texto YYYY-MM-DD (días de Colombia).
+// Además, la tabla de días no hábiles, que puede aplicar a todas las etapas o solo a algunas, y
+// los medios días (D3: el 24 y el 31 de diciembre; la vacancia judicial no suspende el servicio).
+// Fechas como texto YYYY-MM-DD (días de Colombia).
 // =====================================
 
 const DIA_MS = 24 * 60 * 60 * 1000
@@ -40,14 +41,19 @@ export const festivosColombia = (anio: number): Set<string> => {
   return festivos
 }
 
-// ── Días no hábiles de la tabla (los carga services/calendario.ts) ──
-// etapas null = aplica a todas
-export type DiaNoHabilRegla = { fecha: string, etapas: string[] | null }
+// ── Días no hábiles y medios días de la tabla (los carga services/calendario.ts) ──
+// etapas null = aplica a todas. medioDia: se trabaja hasta HORA_CORTE_MEDIO_DIA (D3: el 24 y el 31
+// de diciembre); para los ANS ese día vale medio día hábil, para los términos del juzgado vale uno entero
+export type DiaNoHabilRegla = { fecha: string, etapas: string[] | null, medioDia?: boolean }
 let adicionales = new Map<string, string[] | null>()
+let mediosDias = new Set<string>()
 
 export const fijarDiasNoHabiles = (dias: DiaNoHabilRegla[]) => {
-  adicionales = new Map(dias.map(d => [d.fecha, d.etapas?.length ? d.etapas : null]))
+  adicionales = new Map(dias.filter(d => !d.medioDia).map(d => [d.fecha, d.etapas?.length ? d.etapas : null]))
+  mediosDias = new Set(dias.filter(d => d.medioDia).map(d => d.fecha))
 }
+
+export const esMedioDia = (fecha: string) => mediosDias.has(fecha)
 
 export const esDiaHabil = (fecha: string, etapa?: string) => {
   const dia = new Date(`${fecha}T00:00:00Z`)
@@ -59,26 +65,38 @@ export const esDiaHabil = (fecha: string, etapa?: string) => {
   return etapas === null ? false : !etapa || !etapas.includes(etapa)
 }
 
-// El n-ésimo día hábil después de una fecha (sin contarla)
-export const sumarDiasHabiles = (fecha: string, dias: number, etapa?: string) => {
+// Cuánto vale el día: 0 no hábil, 0,5 medio día (solo si se cuentan medios días) y 1 completo
+const valorDia = (fecha: string, etapa: string | undefined, medios: boolean) =>
+  !esDiaHabil(fecha, etapa) ? 0 : medios && mediosDias.has(fecha) ? 0.5 : 1
+
+// El n-ésimo día hábil después de una fecha (sin contarla). Con medios días, dos medios suman uno:
+// por eso el 24 y el 31 de diciembre restan un día hábil a la temporada (D3)
+export const sumarDiasHabiles = (fecha: string, dias: number, etapa?: string, medios = false) => {
   let actual = fecha
   let faltan = dias
   while (faltan > 0) {
     actual = sumarDias(actual, 1)
-    if (esDiaHabil(actual, etapa)) faltan--
+    faltan -= valorDia(actual, etapa, medios)
   }
   return actual
 }
 
 // El n-ésimo día hábil antes de una fecha (sin contarla)
-export const restarDiasHabiles = (fecha: string, dias: number, etapa?: string) => {
+export const restarDiasHabiles = (fecha: string, dias: number, etapa?: string, medios = false) => {
   let actual = fecha
   let faltan = dias
   while (faltan > 0) {
     actual = sumarDias(actual, -1)
-    if (esDiaHabil(actual, etapa)) faltan--
+    faltan -= valorDia(actual, etapa, medios)
   }
   return actual
+}
+
+// Días hábiles de un rango, contando los medios días como medio (meta diaria del plan de choque)
+export const contarDiasHabiles = (desde: string, hasta: string, etapa?: string) => {
+  let n = 0
+  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) n += valorDia(d, etapa, true)
+  return n
 }
 
 // Ese día si es hábil; si no, el siguiente hábil

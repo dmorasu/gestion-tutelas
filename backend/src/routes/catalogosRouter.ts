@@ -43,9 +43,11 @@ router.get('/dias-no-habiles', async (_req, res) => {
   res.json(await DiaNoHabil.findAll({ order: [['fecha', 'ASC']] }))
 })
 
-router.post('/dias-no-habiles', administran, body('fecha').isISO8601(), body('etapas').optional().isArray(), manejarErroresEntrada, async (req, res) => {
+router.post('/dias-no-habiles', administran, body('fecha').isISO8601(), body('etapas').optional().isArray(), body('medioDia').optional().isBoolean(), manejarErroresEntrada, async (req, res) => {
   try {
-    const [dia] = await DiaNoHabil.upsert({ fecha: String(req.body.fecha).slice(0, 10), descripcion: req.body.descripcion ?? null, etapas: req.body.etapas ?? [] })
+    const [dia] = await DiaNoHabil.upsert({
+      fecha: String(req.body.fecha).slice(0, 10), descripcion: req.body.descripcion ?? null, etapas: req.body.etapas ?? [], medioDia: req.body.medioDia === true
+    })
     await cargarCalendario(true)
     res.status(201).json(dia)
   } catch (error) {

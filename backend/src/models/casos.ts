@@ -196,6 +196,16 @@ export class Actuacion extends Model {
   @Column(DataType.BOOLEAN)
   declare requiereInsumos: boolean
 
+  // D6: la asignación llegó sin sus insumos mínimos y se pidieron los datos faltantes. Mientras
+  // tanto el ANS no corre; cuando llegan, cuenta desde fechaDatosCompletos
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare datosFaltantesPendientes: boolean
+
+  @Column(DataType.DATE)
+  declare fechaDatosCompletos: Date | null
+
   @Column(DataType.DATE)
   declare fechaAsumida: Date | null
 

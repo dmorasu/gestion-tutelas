@@ -84,4 +84,4 @@ export const PROPOSITOS: Record<string, string> = {
   ASIGNACION_PAQUETE: "Asignación en paquete (Excel)"
 }
 
-export const UNIDADES_TERMINO: Record<string, string> = { HORAS: "Horas", DIAS_HABILES: "Días hábiles", DIAS_CALENDARIO: "Días calendario" }
+export const UNIDADES_TERMINO: Record<string, string> = { HORAS: "Horas (en días hábiles)", DIAS_HABILES: "Días hábiles", DIAS_CALENDARIO: "Días calendario" }

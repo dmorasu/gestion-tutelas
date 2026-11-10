@@ -45,7 +45,8 @@ export class MotivoDevolucion extends Model {
   declare activo: boolean
 }
 
-// Días no hábiles además de fines de semana y festivos (D3). etapas vacío = todas
+// Días no hábiles además de fines de semana y festivos (D3). etapas vacío = todas.
+// medioDia: no es un día no hábil sino uno que se trabaja hasta HORA_CORTE_MEDIO_DIA (24 y 31 de diciembre)
 @Table({ tableName: 'dias_no_habiles' })
 export class DiaNoHabil extends Model {
   @Unique
@@ -59,6 +60,11 @@ export class DiaNoHabil extends Model {
   @Default([])
   @Column(DataType.ARRAY(DataType.STRING))
   declare etapas: string[]
+
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare medioDia: boolean
 }
 
 // Supuestos de las dudas pendientes y reglas configurables (Docs/PLAN.md §5)

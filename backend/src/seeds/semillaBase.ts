@@ -1,6 +1,6 @@
 import { db } from '../config/db'
 import { Op } from 'sequelize'
-import { Rol, Equipo, Caso } from '../models'
+import { Rol, Equipo, Caso, DiaNoHabil } from '../models'
 import { NOMBRES_ROLES } from '../services/constantes'
 import { sembrarParametros } from '../services/parametros'
 import { sembrarPlantillas } from '../services/buzon/correosSalida'
@@ -14,6 +14,18 @@ const EQUIPOS_INICIALES = [
   { nombre: 'Impugnaciones y cumplimientos', etapas: ['IMPUGNACION', 'CUMPLIMIENTO'] },
   { nombre: 'Requerimientos y desacatos', etapas: ['REQUERIMIENTO_PREVIO', 'DESACATO'] }
 ]
+
+// D3: el 24 y el 31 de diciembre se trabaja medio día (entre los dos restan un día hábil). Se
+// siembran el año en curso y el siguiente, que cubren el contrato; no pisan lo que se haya editado
+const sembrarMediosDias = async () => {
+  const anio = new Date().getFullYear()
+  for (const a of [anio, anio + 1]) {
+    for (const [dia, nombre] of [['24', 'Nochebuena'], ['31', 'Fin de año']]) {
+      const fecha = `${a}-12-${dia}`
+      await DiaNoHabil.findOrCreate({ where: { fecha }, defaults: { fecha, descripcion: `${nombre}: medio día`, etapas: [], medioDia: true } })
+    }
+  }
+}
 
 // Roles, parámetros, plantillas, equipos y la secuencia del número interno. Idempotente: no pisa
 // lo que ya se haya cambiado
@@ -35,5 +47,6 @@ export const sembrarBase = async () => {
     for (const caso of sinNumero) await caso.update({ numeroInterno: await siguienteNumeroInterno(undefined, caso.createdAt) })
   }
   await sembrarParametros()
+  await sembrarMediosDias()
   await sembrarPlantillas()
 }

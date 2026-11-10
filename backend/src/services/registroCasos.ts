@@ -39,7 +39,8 @@ export type DatosRegistro = {
 
 type DatosCalculo = {
   etapa: Etapa, fechaAsignacion: Date, fechaNotificacion: Date | null, terminoValor: number | null, terminoUnidad: UnidadTermino | null,
-  fechaVencimientoInformada: Date | null, requiereInsumos: boolean, criticidad: Criticidad, criticidadFuente: string | null
+  fechaVencimientoInformada: Date | null, requiereInsumos: boolean, criticidad: Criticidad, criticidadFuente: string | null,
+  datosFaltantesPendientes?: boolean, fechaDatosCompletos?: Date | null
 }
 
 // Vencimiento, criticidad y fecha límite ANS de una actuación con sus datos actuales.
@@ -58,7 +59,10 @@ export const calcularPlazos = (a: DatosCalculo, insumos: { minimo: boolean, fech
     criticidad,
     criticidadFuente,
     // Campos uno a uno: "a" puede ser una instancia de Sequelize y {...a} no copia sus valores
-    fechaLimiteEntrega: fechaLimiteEntrega({ etapa: a.etapa, fechaAsignacion: a.fechaAsignacion, requiereInsumos: a.requiereInsumos, criticidad, fechaVencimiento, insumos })
+    fechaLimiteEntrega: fechaLimiteEntrega({
+      etapa: a.etapa, fechaAsignacion: a.fechaAsignacion, requiereInsumos: a.requiereInsumos, criticidad, fechaVencimiento, insumos,
+      datosFaltantesPendientes: a.datosFaltantesPendientes, fechaDatosCompletos: a.fechaDatosCompletos
+    })
   }
 }
 

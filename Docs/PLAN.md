@@ -84,20 +84,44 @@ Lo anterior del bloque 3 que estaba planeado y no se hizo: cargue masivo (ya est
 ### Bloque 4: producción (siguiente)
 Servidor propio, usuario propio de base, ajustes de esquema sin `alter`, HTTPS, almacenamiento de adjuntos (ver §6) y encender el envío real.
 
-## 5. Supuestos que siguen abiertos
+## 5. Respuestas a las dudas de TI (D1–D30) y lo que sigue abierto
 
-Todo está en la pantalla Parámetros: los confirmados por el manual tienen la marca, el resto dice "Supuesto".
+Fuente: `Docs/Dudas TI .docx` (respuestas del abogado, 2026-11-10). Todo está en la pantalla Parámetros: lo respondido lleva la marca de confirmado y la fuente "Dudas TI".
 
-| Duda | Supuesto | Parámetro |
+**Aplicado en la app:**
+
+| Duda | Respuesta | Dónde |
 |---|---|---|
-| D2 Fin del día hábil para ANS | 23:59 | `HORA_FIN_DIA_ANS` |
-| D4 Hora de vencimiento de términos en días | 17:00 | `HORA_VENCIMIENTO_TERMINO` |
-| D5 Impugnación | 3 días hábiles | `DIAS_TERMINO_IMPUGNACION` |
-| D6 Insumos | El ANS cuenta desde el último insumo | `ANS_INICIO_CON_INSUMOS` |
-| D11 Metas | Las del manual, entre corchetes | `META_ANS` |
-| D12 Simultáneas | No abrir cumplimiento durante la impugnación | `CUMPLIMIENTO_DURANTE_IMPUGNACION` |
-| D13 Favorable | Niega, improcedente, no sanciona | `SENTIDOS_FAVORABLES` |
-| Destinatarios | Vacíos: los define el cliente en la fase inicial | `CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA` |
+| D1 | Corte a las 3:00 p. m. para asignaciones e insumos | `HORA_CORTE_ASIGNACION` |
+| D2 | Nuestra actividad vence a las 3:00 p. m.; los juzgados, a las 5:00 p. m. | `HORA_FIN_DIA_ANS` = 15:00, `HORA_VENCIMIENTO_TERMINO` = 17:00 |
+| D3 | La vacancia no suspende el servicio. El 24 y el 31 de diciembre son medios días: entre los dos restan un día hábil | Días no hábiles con `medioDia` (se siembran solos) y `HORA_CORTE_MEDIO_DIA`. Solo para los ANS: los términos del juzgado cuentan el día entero |
+| D4 | Todo en días hábiles: 24 h = 1 día, 48 h = 2 | `TERMINO_HORAS_EN_DIAS` |
+| D5 | 3 días hábiles desde el día siguiente a la notificación | `DIAS_TERMINO_IMPUGNACION` |
+| D6 | Los insumos mínimos son los documentos de la asignación; si faltan, el asistente los pide | `ANS_DESDE_DATOS_COMPLETOS`: el ANS no corre mientras se esperan los datos faltantes y cuenta desde su llegada |
+| D11 | 90 % mientras se negocian; ANS-09 propuesto para eliminar | `META_ANS` |
+| D12 | Todo fallo desfavorable lleva memorial de cumplimiento, aunque se impugne | `CUMPLIMIENTO_DURANTE_IMPUGNACION` = sí |
+| D13 | Favorables: niega, improcedente, hecho superado. Concede y concede parcialmente son desfavorables. En segunda: confirma lo favorable o revoca lo que concedió | `SENTIDOS_FAVORABLES` y sentido `HECHO_SUPERADO` |
+| D16 | Todos los casos los revisa un abogado | Ya era así en el flujo |
+| D20 | Las devoluciones no usan la hora de corte | ANS-06 cuenta desde la hora del correo de devolución |
+| D10, D15, D17, D18, D19, D30 | Coinciden con lo propuesto | Ya construido |
+
+**Abierto:**
+
+| Duda | Qué falta | Parámetro o trabajo |
+|---|---|---|
+| D3 | Hora exacta del medio día | `HORA_CORTE_MEDIO_DIA` = 12:00 (supuesto) |
+| D5 | Si se suman 2 días cuando el fallo se notifica por correo (Ley 2213 de 2022) | `DIAS_ADICIONALES_NOTIFICACION_CORREO` = 0 |
+| D6 | Si los insumos para preparar el escrito también suspenden el ANS | `ANS_INICIO_CON_INSUMOS` = último insumo |
+| D7, D9, D14 | Etiqueta "Fecha asignación impugnación"; separar memorial de cumplimiento y respuesta a requerimiento previo; impugnación de la entidad o respuesta a la del accionante (descorre) | Por construir |
+| D11 | Porcentajes definitivos y si se elimina ANS-09 | `META_ANS` |
+| D19 | Lineamientos de fondo de la entidad (aún no comunicados) | Catálogo de motivos cuando lleguen |
+| D21–D24 | PQRS: no está en la fase inicial, pero se puede activar en cualquier momento | Por construir (término de 15, 10 o 30 días; tutela por derecho de petición crea PQRS ligada) |
+| D25 | PST (contratante, fideicomitente y supervisor) también da insumos y recibe alertas | `CORREOS_INSUMOS`, `CORREOS_ALERTAS` |
+| D26 | El archivo maestro es de **PQRS** que responde otro equipo, no de tutelas. Aún no lo entregan | Reorientar el archivo maestro |
+| D27 | Equipo mínimo: 5 asistentes, 15 auxiliares, 3 revisores y 1 coordinador | Asistencia diaria para ANS-11 |
+| D28 | Tablero en Power BI para PST y la entidad, y el mismo tablero dentro de la app | Vistas en Postgres y pantalla del tablero |
+| D29 | Descuentos: leve 0,5 %, moderado 1,5 %, grave 3 %, tope 10 %; sanción atribuible y reincidencia | Parámetros, alertas internas y tablero |
+| Destinatarios | Los define el cliente en la fase inicial | `CORREOS_INSUMOS`, `CORREOS_ENTREGA`, `CORREOS_COPIA_ENTREGA` |
 
 ## 6. Decisiones pendientes
 

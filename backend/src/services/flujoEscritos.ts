@@ -46,6 +46,9 @@ export const solicitarDatosFaltantes = async (d: { actuacionId: number, detalle:
     codigo: 'SOLICITUD_DATOS_FALTANTES', actuacionId: a.id, para, responderACorreoId: asignacion?.id ?? null, extra: { detalle: d.detalle.trim() }, usuarioId: d.usuarioId
   })
   exigirEnviado(correo)
+  // D6: sin los insumos mínimos de la asignación el ANS no corre hasta que lleguen
+  await a.update({ datosFaltantesPendientes: true })
+  await recalcularPlazos(a.id)
   return correo
 }
 
@@ -56,6 +59,9 @@ export const confirmarDatosFaltantes = async (d: { correoId: number, enviarAcuse
     exigirEnviado(await enviarPlantilla({ codigo: 'ACUSE_DATOS_FALTANTES', actuacionId: correo.actuacionId, para: [correo.remitente], responderACorreoId: correo.id, usuarioId: d.usuarioId }))
   }
   await correo.update({ porRevisar: false, proposito: 'RESPUESTA_DATOS_FALTANTES', usuarioId: d.usuarioId })
+  // El ANS cuenta desde la llegada del correo con los datos, no desde que se confirma
+  await Actuacion.update({ datosFaltantesPendientes: false, fechaDatosCompletos: correo.fechaCorreo }, { where: { id: correo.actuacionId } })
+  await recalcularPlazos(correo.actuacionId)
 }
 
 // ── Insumos (buzón de insumos) ──
@@ -198,8 +204,9 @@ export const registrarRespuesta = async (d: {
     if (!d.devolucion || !TIPOS_DEVOLUCION.includes(d.devolucion.tipo)) throw new ErrorNegocio('Indique el tipo de devolución')
     // La entidad tiene DIAS_DEVOLUCION_ENTIDAD días hábiles; después es extemporánea (manual §17)
     const plazoEntidad = finDeDiasHabilesSiguientes(escrito.fechaEntregaEntidad ?? fecha, parametro<number>('DIAS_DEVOLUCION_ENTIDAD'), a.etapa)
-    // ANS-06: corregir dentro del día hábil siguiente o antes del vencimiento, si es menor
-    const limite = menor(finDeDiasHabilesSiguientes(asignacionEfectiva(fecha, a.etapa), parametro<number>('DIAS_ANS06'), a.etapa), a.fechaVencimiento)
+    // ANS-06: corregir dentro del día hábil siguiente o antes del vencimiento, si es menor. Desde la
+    // hora del correo de devolución, sin la hora de corte de la asignación (D20)
+    const limite = menor(finDeDiasHabilesSiguientes(fecha, parametro<number>('DIAS_ANS06'), a.etapa), a.fechaVencimiento)
     await Devolucion.create({
       escritoId: escrito.id, fechaDevolucion: fecha, tipo: d.devolucion.tipo, motivoId: d.devolucion.motivoId ?? null,
       observacion: d.devolucion.observacion?.trim() || null, fechaLimiteCorreccion: limite, extemporanea: fecha > plazoEntidad, correoId: correo?.id ?? null

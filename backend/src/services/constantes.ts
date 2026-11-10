@@ -104,9 +104,9 @@ export const PLANTILLAS = {
 } as const satisfies Record<string, { buzon: Buzon, nombre: string, titulo: string }>
 export type CodigoPlantilla = keyof typeof PLANTILLAS
 
-// Sentidos de las decisiones (D13: se agregan "Concede parcialmente" y los de desacato)
+// Sentidos de las decisiones (D13: "Concede parcialmente", "Hecho superado" y los de desacato)
 export const SENTIDOS_DECISION = [
-  'CONCEDE', 'CONCEDE_PARCIAL', 'NIEGA', 'IMPROCEDENTE', // primera instancia
+  'CONCEDE', 'CONCEDE_PARCIAL', 'NIEGA', 'IMPROCEDENTE', 'HECHO_SUPERADO', // primera instancia
   'CONFIRMA', 'REVOCA', 'MODIFICA', // segunda instancia
   'SANCIONA', 'NO_SANCIONA' // desacato
 ] as const

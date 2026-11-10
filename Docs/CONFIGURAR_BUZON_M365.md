@@ -8,7 +8,7 @@ La app **Nodex Tutelas** lee tres buzones, envía desde ellos los correos de la 
 |---|---|
 | `asignacionsdmc@gomezpinedaabogados.com` | Entran las asignaciones y la información faltante. Sale la confirmación de recibido con el número interno |
 | `insumosdmc@gomezpinedaabogados.com` | Salen las solicitudes de insumos. Entran los insumos |
-| `entrega@gomezpinedaabogados.com` | Salen las entregas V1 y V2. Entran el acuse, la aprobación o la devolución |
+| `entregasdmc@gomezpinedaabogados.com` | Salen las entregas V1 y V2. Entran el acuse, la aprobación o la devolución |
 
 Cada buzón tiene su función, así que **no hacen falta reglas de flujo de correo**: la app sabe qué es cada correo por el buzón al que llegó y por el asunto normalizado.
 
@@ -19,7 +19,7 @@ Los buzones compartidos no requieren licencia. En **Exchange Online PowerShell**
 ```powershell
 New-Mailbox -Shared -Name "Asignaciones tutelas" -PrimarySmtpAddress asignacionsdmc@gomezpinedaabogados.com
 New-Mailbox -Shared -Name "Insumos tutelas" -PrimarySmtpAddress insumosdmc@gomezpinedaabogados.com
-New-Mailbox -Shared -Name "Entregas tutelas" -PrimarySmtpAddress entrega@gomezpinedaabogados.com
+New-Mailbox -Shared -Name "Entregas tutelas" -PrimarySmtpAddress entregasdmc@gomezpinedaabogados.com
 
 # El cliente escribe desde fuera de la firma: los buzones deben aceptar correo externo
 "asignacionsdmc","insumosdmc","entrega" | ForEach-Object {
@@ -27,7 +27,7 @@ New-Mailbox -Shared -Name "Entregas tutelas" -PrimarySmtpAddress entrega@gomezpi
 }
 ```
 
-Si `entrega@` ya existe como buzón de otra persona o de otro uso, conviene usar otro nombre (por ejemplo `entregasdmc@`) y avisar al cliente: la app leería todo lo que llegue a ese buzón.
+Los tres siguen el mismo patrón de nombre (`asignacionsdmc@`, `insumosdmc@`, `entregasdmc@`). Ninguno debe ser el buzón de una persona ni tener otro uso: la app lee todo lo que llega a ellos.
 
 El manual operativo (§23) exige **bloquear el reenvío automático externo** en estos buzones. Si la firma no lo tiene bloqueado para todos, hágalo en la política de correo no deseado saliente.
 
@@ -49,7 +49,7 @@ Sin este paso, la app podría leer **todos** los buzones de la firma.
 # Grupo de seguridad con correo que contiene solo los tres buzones
 New-DistributionGroup -Name "App Nodex Tutelas" -Type Security `
   -PrimarySmtpAddress app-nodex-tutelas@gomezpinedaabogados.com `
-  -Members asignacionsdmc@gomezpinedaabogados.com, insumosdmc@gomezpinedaabogados.com, entrega@gomezpinedaabogados.com
+  -Members asignacionsdmc@gomezpinedaabogados.com, insumosdmc@gomezpinedaabogados.com, entregasdmc@gomezpinedaabogados.com
 
 New-ApplicationAccessPolicy -AppId <Id-de-aplicación> `
   -PolicyScopeGroupId app-nodex-tutelas@gomezpinedaabogados.com `
@@ -58,7 +58,7 @@ New-ApplicationAccessPolicy -AppId <Id-de-aplicación> `
 # Comprobación: los tres primeros deben decir Granted y el último Denied
 Test-ApplicationAccessPolicy -Identity asignacionsdmc@gomezpinedaabogados.com -AppId <Id-de-aplicación>
 Test-ApplicationAccessPolicy -Identity insumosdmc@gomezpinedaabogados.com -AppId <Id-de-aplicación>
-Test-ApplicationAccessPolicy -Identity entrega@gomezpinedaabogados.com -AppId <Id-de-aplicación>
+Test-ApplicationAccessPolicy -Identity entregasdmc@gomezpinedaabogados.com -AppId <Id-de-aplicación>
 Test-ApplicationAccessPolicy -Identity <cualquier-otro-buzon>@gomezpinedaabogados.com -AppId <Id-de-aplicación>
 ```
 
@@ -98,7 +98,7 @@ ENTRA_CLIENT_ID=<Id. de aplicación (cliente)>
 ENTRA_CLIENT_SECRET=<valor del secreto>
 BUZON_ASIGNACIONES=asignacionsdmc@gomezpinedaabogados.com
 BUZON_INSUMOS=insumosdmc@gomezpinedaabogados.com
-BUZON_ENTREGAS=entrega@gomezpinedaabogados.com
+BUZON_ENTREGAS=entregasdmc@gomezpinedaabogados.com
 BUZON_LEER_DESDE=<fecha de hoy, AAAA-MM-DD>
 # Dejar en false hasta aprobar las plantillas: los correos de salida quedan simulados
 CORREO_ENVIO_ACTIVO=false

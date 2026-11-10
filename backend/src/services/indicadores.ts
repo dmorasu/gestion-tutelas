@@ -3,7 +3,7 @@ import { Actuacion, Alerta, Caso, Devolucion, Escrito, Equipo, Informe, Solicitu
 import { parametro } from './parametros'
 import { limiteSolicitudInsumos } from './plazos'
 import { enBogota, instanteBogota, sumarDias, textoFechaHora } from '../utils/fechaColombia'
-import { esDiaHabil, sumarDiasHabiles } from '../utils/diasHabiles'
+import { contarDiasHabiles, esDiaHabil, sumarDiasHabiles } from '../utils/diasHabiles'
 import { ESTADOS_ACTUACION, ETAPAS } from './constantes'
 
 // =====================================
@@ -42,7 +42,7 @@ const armar = (codigo: string, nombre: string, regla: string, sentido: Indicador
 // Con menos de N días hábiles entre la asignación y el vencimiento, el caso se mide solo por calidad
 const asignadoSinHolgura = (a: Actuacion) => {
   if (!a.fechaVencimiento || !a.fechaAsignacionEfectiva) return false
-  return sumarDiasHabiles(enBogota(a.fechaAsignacionEfectiva).dia, parametro<number>('DIAS_MINIMOS_ANS01'), a.etapa) > enBogota(a.fechaVencimiento).dia
+  return sumarDiasHabiles(enBogota(a.fechaAsignacionEfectiva).dia, parametro<number>('DIAS_MINIMOS_ANS01'), a.etapa, true) > enBogota(a.fechaVencimiento).dia
 }
 
 const esCritica = (a: Actuacion) => a.criticidad === 'CRITICO' || parametro<string[]>('ETAPAS_CRITICAS').includes(a.etapa)
@@ -53,12 +53,6 @@ const diaHabilNumero = (dia: string, n: number) => {
   let cuenta = esDiaHabil(actual) ? 1 : 0
   while (cuenta < n) { actual = sumarDias(actual, 1); if (esDiaHabil(actual)) cuenta++ }
   return actual
-}
-
-const diasHabilesEntre = (desde: string, hasta: string) => {
-  let n = 0
-  for (let d = desde; d <= hasta; d = sumarDias(d, 1)) if (esDiaHabil(d)) n++
-  return n
 }
 
 // Fechas límite de los informes de un periodo: semanal el 2.º día hábil de cada semana, mensual el
@@ -110,7 +104,7 @@ export const calcularAns = async (desde: string, hasta: string): Promise<Indicad
       Actuacion.count({ where: { fechaAsignacion: { [Op.lt]: finPlan } } }),
       Actuacion.count({ where: { fechaAsignacion: { [Op.lt]: finPlan } }, include: [{ model: SolicitudInsumo, required: true, where: { minimo: true, fechaRecepcion: null }, attributes: [] }], distinct: true })
     ])
-    const esperado = Math.min(parametro<number>('META_DIARIA_PLAN') * diasHabilesEntre(inicioPlan, hasta), asignadas - conInsumosPendientes)
+    const esperado = Math.min(parametro<number>('META_DIARIA_PLAN') * contarDiasHabiles(inicioPlan, hasta), asignadas - conInsumosPendientes)
     ans04 = armar('ANS-04', 'Avance del plan de choque', 'Primeros escritos acumulados frente al menor entre la meta del cronograma y los casos asignados con insumos', 'MIN', Math.min(primeros, esperado), esperado, [])
   } else {
     ans04 = { ...armar('ANS-04', 'Avance del plan de choque', 'Falta la fecha del acta de inicio (parámetro FECHA_INICIO_PLAN)', 'MIN', 0, 0, []), cumple: null }
