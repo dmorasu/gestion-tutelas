@@ -58,6 +58,14 @@ export async function crearPqrsLigada(casoId: number, datos: Record<string, unkn
   return { ok: true, datos: await r.json() }
 }
 
+// Nota de la persona en la bitácora del caso (no se edita ni se borra)
+export async function agregarNota(casoId: number, texto: string, actuacionId: number | null): Promise<Resultado> {
+  const r = await fetchApi(`/casos/${casoId}/notas`, { method: "POST", body: JSON.stringify({ texto, actuacionId }) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true }
+}
+
 export async function registrarManual(datos: Record<string, unknown>): Promise<Resultado> {
   const r = await fetchApi("/casos", { method: "POST", body: JSON.stringify(datos) })
   if (!r.ok) return { ok: false, errores: await leerErrores(r) }

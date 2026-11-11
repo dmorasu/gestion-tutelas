@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { body, param } from 'express-validator'
 import { Op, type WhereOptions } from 'sequelize'
-import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso } from '../models'
+import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol, tieneRol } from '../middleware/auth'
 import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos'
@@ -213,13 +213,31 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
       attributes: ['id', 'numeroInterno', 'radicado', 'tipoSolicitud', 'estado'],
       include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado', 'fechaLimiteEntrega', 'tipoPeticion'] }]
     })
-    res.json({ caso: datos, correos, archivos, relacionados, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    const notas = await NotaCaso.count({ where: { casoId: caso.id } })
+    res.json({ caso: datos, correos, archivos, relacionados, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
 })
 
-// Línea de tiempo (bitácora, correos, documentos y alertas), del más reciente al más antiguo
+// Notas de las personas en la bitácora. Escribe quien trabaja el caso: asistencia y coordinación,
+// o el auxiliar o revisor de alguna de sus actuaciones (las mismas reglas de lo que ve cada perfil)
+router.post('/:id/notas', param('id').isInt(), body('texto').isString().trim().isLength({ min: 1, max: 4000 }).withMessage('Escriba la nota (hasta 4.000 caracteres)'),
+  body('actuacionId').optional({ values: 'null' }).isInt(), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const casoId = Number(req.params.id)
+      const actuacionId = req.body.actuacionId ? Number(req.body.actuacionId) : null
+      const visibles = await Actuacion.count({ where: { casoId, ...alcance(req) } })
+      if (!visibles) throw new ErrorNegocio('Este caso no está a su cargo', 403)
+      if (actuacionId && !(await Actuacion.count({ where: { id: actuacionId, casoId } }))) throw new ErrorNegocio('La etapa no es de este caso')
+      res.status(201).json(await NotaCaso.create({ casoId, actuacionId, usuarioId: req.usuario!.id, nombreUsuario: req.usuario!.nombre, texto: String(req.body.texto).trim() }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+// Línea de tiempo (notas, bitácora, correos, documentos y alertas), del más reciente al más antiguo
 router.get('/:id/historial', param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {
     res.json(await lineaTiempo(Number(req.params.id)))
@@ -289,6 +307,8 @@ router.delete('/actuaciones/:id', requiereRol(ROLES.COORDINADOR), param('id').is
       await Correo.update({ estado: 'POR_REGISTRAR', casoId: null, actuacionId: null, proposito: null }, { where: { actuacionId: actuacion.id, proposito: 'ASIGNACION', direccion: 'ENTRANTE' } })
       await Correo.update({ actuacionId: null, ...(otras ? {} : { casoId: null }) }, { where: { actuacionId: actuacion.id } })
       await Alerta.destroy({ where: { actuacionId: actuacion.id } })
+      // Las notas de esa etapa se quedan en el caso, sin etapa
+      await NotaCaso.update({ actuacionId: null }, { where: { actuacionId: actuacion.id } })
       // El hook de la bitácora registra la eliminación; el motivo va aparte
       await actuacion.destroy()
       if (otras) {
@@ -303,6 +323,7 @@ router.delete('/actuaciones/:id', requiereRol(ROLES.COORDINADOR), param('id').is
         await Correo.update({ casoId: null }, { where: { casoId } })
         await Archivo.update({ casoId: null }, { where: { casoId } })
         await HistorialCaso.destroy({ where: { casoId } })
+        await NotaCaso.destroy({ where: { casoId } })
         await Caso.destroy({ where: { id: casoId } })
       }
       res.json({ ok: true, casoEliminado: !otras })

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import clsx from "clsx"
-import { ArrowLeft, Briefcase, Clock, FileText, Info, Mail, type LucideIcon } from "lucide-react"
+import { ArrowLeft, Briefcase, FileText, Info, Mail, NotebookPen, type LucideIcon } from "lucide-react"
 import { obtener } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { tieneRol } from "@/src/auth/permisos"
@@ -30,6 +30,7 @@ type Detalle = {
   motivosCierre: string[]
   sentidos: Record<string, string[]>
   relacionados: CasoRelacionado[]
+  notas: number
   tiposPeticion: Record<string, string>
   envio: string
   almacen: string
@@ -45,7 +46,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, notas, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
     obtener<Usuario[]>("/catalogos/usuarios")
@@ -68,7 +69,8 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
     { clave: "informacion", nombre: "Información", Icono: Info },
     { clave: "documentos", nombre: "Documentos", Icono: FileText, insignia: archivos.length > 0 && archivos.length },
     { clave: "correos", nombre: "Correos", Icono: Mail, insignia: correos.some(c => c.porRevisar) ? "Por revisar" : correos.length > 0 && correos.length },
-    { clave: "historial", nombre: "Historial", Icono: Clock }
+    // Bitácora: las notas de las personas y los movimientos del caso en una sola línea de tiempo
+    { clave: "historial", nombre: "Bitácora", Icono: NotebookPen, insignia: notas > 0 && notas }
   ]
   const accionantes = caso.partes.filter(p => p.rol === "ACCIONANTE")
 
@@ -210,8 +212,9 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
           )}
 
           {tab === "historial" && (
-            <Seccion titulo="Historial">
-              <HistorialCaso eventos={historial} />
+            <Seccion titulo="Bitácora del caso">
+              <HistorialCaso eventos={historial} casoId={caso.id} puedeEscribir={gestiona || actuaciones.some(trabaja)}
+                etapas={actuaciones.map(a => ({ id: a.id, nombre: ETAPAS[a.etapa] }))} actuacionInicial={actual?.id ?? null} />
             </Seccion>
           )}
         </div>

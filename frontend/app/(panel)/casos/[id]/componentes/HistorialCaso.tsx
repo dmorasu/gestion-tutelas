@@ -1,9 +1,12 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useTransition } from "react"
+import { toast } from "react-toastify"
 import clsx from "clsx"
+import { agregarNota } from "../../acciones"
+import Avatar from "@/components/ui/Avatar"
 import {
-  Bell, CalendarClock, FileText, FileUp, Flag, History, Inbox, Landmark, MailOpen, PencilLine, Send, Sparkles, Undo2, UserCog,
+  Bell, CalendarClock, FileText, FileUp, Flag, History, Inbox, Landmark, MailOpen, MessageSquareText, PencilLine, Send, Sparkles, Undo2, UserCog,
   type LucideIcon
 } from "lucide-react"
 
@@ -15,6 +18,7 @@ export type EventoCaso = {
 
 // Mismo diseño que el historial de trámites de Nodex: un ícono de color por tipo de evento
 const ESTILO_TIPO: Record<string, { Icono: LucideIcon, color: string }> = {
+  NOTA: { Icono: MessageSquareText, color: "bg-slate-800 text-white" },
   CREADO: { Icono: Sparkles, color: "bg-sky-100 text-sky-600" },
   ESTADO: { Icono: Flag, color: "bg-violet-100 text-violet-600" },
   ASIGNACION: { Icono: UserCog, color: "bg-indigo-100 text-indigo-600" },
@@ -32,6 +36,7 @@ const ESTILO_TIPO: Record<string, { Icono: LucideIcon, color: string }> = {
 
 const FILTROS: { clave: string, nombre: string, tipos: string[] | null }[] = [
   { clave: "todo", nombre: "Todo", tipos: null },
+  { clave: "notas", nombre: "Notas", tipos: ["NOTA"] },
   { clave: "estados", nombre: "Estados", tipos: ["CREADO", "ESTADO", "RADICACION"] },
   { clave: "escritos", nombre: "Escritos y devoluciones", tipos: ["ESCRITO", "DEVOLUCION"] },
   { clave: "insumos", nombre: "Insumos", tipos: ["INSUMO"] },
@@ -48,7 +53,41 @@ const dia = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", weekd
 const hora = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogota", hour: "numeric", minute: "2-digit" })
 const claveDia = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota" })
 
-export default function HistorialCaso({ eventos }: { eventos: EventoCaso[] | null }) {
+// Cuadro para dejar una nota: queda con autor, fecha y, si se elige, la etapa
+function NuevaNota({ casoId, etapas, actuacionInicial }: { casoId: number, etapas: { id: number, nombre: string }[], actuacionInicial: number | null }) {
+  const [texto, setTexto] = useState("")
+  const [actuacion, setActuacion] = useState(actuacionInicial && etapas.some(e => e.id === actuacionInicial) ? String(actuacionInicial) : "")
+  const [pendiente, iniciar] = useTransition()
+  const guardar = () => iniciar(async () => {
+    const r = await agregarNota(casoId, texto, actuacion ? Number(actuacion) : null)
+    if (!r.ok) return void toast.error(r.errores.join(". "))
+    toast.success("Nota agregada a la bitácora")
+    setTexto("")
+  })
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm focus-within:border-slate-300 focus-within:ring-2 focus-within:ring-slate-100">
+      <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3} maxLength={4000}
+        placeholder="Escriba una nota: lo que hizo, acordó o falta en este caso"
+        onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && texto.trim()) guardar() }}
+        className="w-full resize-y border-0 bg-transparent p-1 text-xs text-slate-700 placeholder:text-slate-300 outline-none" />
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2">
+        {etapas.length > 0 ? (
+          <select value={actuacion} onChange={e => setActuacion(e.target.value)} className="campo h-8 w-auto px-2" aria-label="Etapa de la nota">
+            <option value="">Todo el caso</option>
+            {etapas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+          </select>
+        ) : <span />}
+        <button type="button" onClick={guardar} disabled={!texto.trim() || pendiente} className="boton-primario h-8 px-3">
+          <MessageSquareText size={14} />Agregar nota
+        </button>
+      </div>
+    </div>
+  )
+}
+
+export default function HistorialCaso({ eventos, casoId, etapas = [], actuacionInicial = null, puedeEscribir = false }: {
+  eventos: EventoCaso[] | null, casoId: number, etapas?: { id: number, nombre: string }[], actuacionInicial?: number | null, puedeEscribir?: boolean
+}) {
   const [filtro, setFiltro] = useState("todo")
 
   const porDia = useMemo(() => {
@@ -66,6 +105,7 @@ export default function HistorialCaso({ eventos }: { eventos: EventoCaso[] | nul
 
   return (
     <div className="space-y-5">
+      {puedeEscribir && <NuevaNota casoId={casoId} etapas={etapas} actuacionInicial={actuacionInicial} />}
       <div className="flex flex-wrap gap-1.5">
         {FILTROS.map(f => (
           <button key={f.clave} type="button" onClick={() => setFiltro(f.clave)}
@@ -99,7 +139,12 @@ export default function HistorialCaso({ eventos }: { eventos: EventoCaso[] | nul
                     {origen && <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] text-slate-500">{origen}</span>}
                   </div>
                   <p className="mt-0.5 text-[11px] text-slate-400">{evento.usuario || "Sistema"} · {hora.format(new Date(evento.fecha))}</p>
-                  {evento.detalle && <p className="mt-1.5 whitespace-pre-line text-xs leading-5 text-slate-600 [overflow-wrap:anywhere]">{evento.detalle}</p>}
+                  {evento.tipo === "NOTA" && evento.detalle ? (
+                    <div className="mt-2 flex gap-2.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <Avatar nombre={evento.usuario ?? "?"} tamano="sm" />
+                      <p className="whitespace-pre-line text-xs leading-5 text-slate-700 [overflow-wrap:anywhere]">{evento.detalle}</p>
+                    </div>
+                  ) : evento.detalle && <p className="mt-1.5 whitespace-pre-line text-xs leading-5 text-slate-600 [overflow-wrap:anywhere]">{evento.detalle}</p>}
                   {evento.cambios.length > 0 && (
                     <dl className="mt-2 space-y-1 rounded-lg bg-slate-50 px-3 py-2">
                       {evento.cambios.map(cambio => (

@@ -290,3 +290,32 @@ export class HistorialCaso extends Model {
   @Column(DataType.STRING(15))
   declare origen: string | null
 }
+
+// =====================================
+// NOTAS DEL CASO: lo que cada persona deja escrito sobre su paso (llamadas, acuerdos, por qué se
+// decidió algo). Van en la bitácora junto a los movimientos automáticos. No se editan ni se borran:
+// son trazabilidad del servicio
+// =====================================
+@Table({ tableName: 'notas_caso', updatedAt: false })
+export class NotaCaso extends Model {
+  @Index
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare casoId: number
+
+  // La etapa a la que se refiere (opcional)
+  @Column(DataType.INTEGER)
+  declare actuacionId: number | null
+
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare usuarioId: number
+
+  @AllowNull(false)
+  @Column(DataType.STRING(150))
+  declare nombreUsuario: string
+
+  @AllowNull(false)
+  @Column(DataType.TEXT)
+  declare texto: string
+}

@@ -1,12 +1,12 @@
 import { Op } from 'sequelize'
-import { Actuacion, Alerta, Archivo, Caso, Correo, HistorialCaso, Usuario } from '../models'
+import { Actuacion, Alerta, Archivo, Caso, Correo, HistorialCaso, NotaCaso, Usuario } from '../models'
 import type { CambioCampo } from '../models/correos'
 import { NOMBRES_CRITICIDAD, NOMBRES_ETAPAS, type Criticidad, type Etapa } from './constantes'
 import { NOMBRES_ALERTA } from './alertas'
 
 // =====================================
 // LÍNEA DE TIEMPO DEL CASO (mismo diseño que el historial de trámites de Nodex)
-// Junta la bitácora (cambios de caso, actuación, insumos, escritos, devoluciones, radicación) con
+// Junta las notas que escriben las personas, la bitácora (cambios de caso, actuación, insumos, escritos, devoluciones, radicación) con
 // los correos que entraron y salieron, los documentos que se subieron y las alertas. Cada evento
 // lleva un tipo (de ahí el ícono y el filtro), un título en lenguaje natural, quién y cuándo, la
 // etapa a la que pertenece y, si aplica, el antes → después de cada campo.
@@ -15,7 +15,7 @@ import { NOMBRES_ALERTA } from './alertas'
 export type EventoCaso = {
   clave: string
   fecha: string
-  tipo: 'CREADO' | 'ESTADO' | 'ASIGNACION' | 'PLAZOS' | 'INSUMO' | 'ESCRITO' | 'DEVOLUCION' | 'RADICACION' | 'CORREO_SALIDA' | 'CORREO_ENTRADA' | 'DOCUMENTO' | 'ALERTA' | 'DATOS'
+  tipo: 'NOTA' | 'CREADO' | 'ESTADO' | 'ASIGNACION' | 'PLAZOS' | 'INSUMO' | 'ESCRITO' | 'DEVOLUCION' | 'RADICACION' | 'CORREO_SALIDA' | 'CORREO_ENTRADA' | 'DOCUMENTO' | 'ALERTA' | 'DATOS'
   titulo: string
   detalle: string | null
   cambios: CambioCampo[]
@@ -110,7 +110,7 @@ const describir = (h: HistorialCaso, etapa: string | null): Pick<EventoCaso, 'ti
 const iso = (d: Date | string) => new Date(d).toISOString()
 
 export const lineaTiempo = async (casoId: number): Promise<EventoCaso[]> => {
-  const [caso, bitacora, actuaciones, correos, documentos, alertas] = await Promise.all([
+  const [caso, bitacora, actuaciones, correos, documentos, alertas, notas] = await Promise.all([
     Caso.findByPk(casoId, { attributes: ['id'] }),
     HistorialCaso.findAll({ where: { casoId }, order: [['createdAt', 'DESC']], limit: 1000 }),
     Actuacion.findAll({ where: { casoId }, attributes: ['id', 'etapa'] }),
@@ -121,7 +121,8 @@ export const lineaTiempo = async (casoId: number): Promise<EventoCaso[]> => {
     }),
     // Lo que subió una persona (lo que llegó por correo sale con su correo)
     Archivo.findAll({ where: { casoId, correoId: null, usuarioId: { [Op.ne]: null } }, attributes: ['id', 'nombre', 'tipo', 'actuacionId', 'usuarioId', 'createdAt'] }),
-    Alerta.findAll({ where: { casoId }, include: [{ model: Usuario, attributes: ['nombre'] }] })
+    Alerta.findAll({ where: { casoId }, include: [{ model: Usuario, attributes: ['nombre'] }] }),
+    NotaCaso.findAll({ where: { casoId } })
   ])
   if (!caso) return []
   const etapaDe = new Map(actuaciones.map(a => [a.id, NOMBRES_ETAPAS[a.etapa]]))
@@ -168,6 +169,12 @@ export const lineaTiempo = async (casoId: number): Promise<EventoCaso[]> => {
         cambios: [], usuario: a.usuario?.nombre ?? null, origen: null, etapa: etapa(a.actuacionId)
       })
     }
+  }
+  for (const n of notas) {
+    eventos.push({
+      clave: `nota-${n.id}`, fecha: iso(n.get('createdAt') as Date), tipo: 'NOTA', titulo: 'Dejó una nota',
+      detalle: n.texto, cambios: [], usuario: n.nombreUsuario, origen: null, etapa: etapa(n.actuacionId)
+    })
   }
   return eventos.sort((a, b) => b.fecha.localeCompare(a.fecha))
 }

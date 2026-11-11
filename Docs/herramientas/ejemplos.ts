@@ -11,7 +11,7 @@
 import fs from 'fs'
 import path from 'path'
 import { db } from '../../backend/src/config/db'
-import { Actuacion, Alerta, Caso, Devolucion, Escrito, HistorialCaso, Juzgado, RadicacionJuzgado, SolicitudInsumo, Usuario } from '../../backend/src/models'
+import { Actuacion, Alerta, Caso, Devolucion, Escrito, HistorialCaso, Juzgado, NotaCaso, RadicacionJuzgado, SolicitudInsumo, Usuario } from '../../backend/src/models'
 import { cargarParametros } from '../../backend/src/services/parametros'
 import { cargarCalendario } from '../../backend/src/services/calendario'
 import { activarHistorialCasos } from '../../backend/src/services/historialCasos'
@@ -186,6 +186,7 @@ const borrar = async () => {
   const casos = (await Caso.findAll({ where: { id: ids.casos }, attributes: ['id', 'observaciones'] })).filter(c => c.observaciones === MARCA).map(c => c.id)
   await Alerta.destroy({ where: { casoId: casos } })
   await HistorialCaso.destroy({ where: { casoId: casos } })
+  await NotaCaso.destroy({ where: { casoId: casos } })
   // Las PQRS ligadas apuntan a su tutela: primero ellas
   await Caso.destroy({ where: { id: casos, tipoSolicitud: 'PQRS' } })
   await Caso.destroy({ where: { id: casos } })
