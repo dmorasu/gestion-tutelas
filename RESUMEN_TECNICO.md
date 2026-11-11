@@ -49,7 +49,7 @@ Convenciones heredadas de Nodex:
 - `usuarios.ts`: **Equipo** (va antes de Usuario: los decoradores leen su tipo al cargar), Usuario (con `equipoId` y `capacidadDiaria`), Rol, UsuarioRol.
 - `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil (con `medioDia`), Parametro, RadicadoOtroOperador (archivo maestro, judicial o PQRS), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo.
 - `casos.ts`: Caso (radicado judicial o de PQRS, `numeroInterno` GPA-AAAA-NNNNN, `porDerechoPeticion` y `casoRelacionadoId` de la PQRS ligada), Parte, Actuacion (etapa, estado, criticidad, vencimiento informado o calculado, fecha límite ANS, auxiliar, revisor, equipo, datos faltantes pendientes, tipo de petición), SolicitudInsumo (con `fechaLimite` del cliente), Escrito (versiones V1, V2…, estado, enlace, `limiteAns` al entregar), Devolucion (tipo, plazo de corrección, extemporánea), RadicacionJuzgado, Decision (sentido, favorable, término de impugnación, cumplimiento pendiente o ligado, sanción atribuible).
-- `correos.ts`: Correo (buzón, lo leído del asunto, enlaces, `porRevisar`, `responsableId`, aviso sin atender), **EnlaceCorreo** (enlaces de SharePoint como pendientes), Archivo (SharePoint o local: `ruta`, `itemId`, `webUrl`, `adjuntoGraphId`), HistorialCaso (bitácora).
+- `correos.ts`: Correo (buzón, lo leído del asunto, enlaces, `porRevisar`, `responsableId`, aviso sin atender), **EnlaceCorreo** (enlaces de SharePoint como pendientes), Archivo (SharePoint o local: `ruta`, `itemId`, `webUrl`, `adjuntoGraphId`), HistorialCaso (bitácora automática por hooks), **NotaCaso** (notas de las personas: autor, etapa opcional, texto; no se editan ni se borran).
 - `seguimiento.ts`: Alerta (tipo, detección, plazo y emisión), Informe (semanal o mensual, con su Excel y resumen), AnsPeriodo (foto mensual del ANS con nivel y descuento) y Asistencia (por persona y día).
 
 ## Backend (`backend/src`)
@@ -116,7 +116,7 @@ Convenciones heredadas de Nodex:
 - **Login propio** con correo y contraseña (bcrypt). Sin registro público: el administrador crea al usuario y la app muestra la contraseña temporal una sola vez; se cambia al primer ingreso.
 - Bloqueo de 15 minutos tras 5 fallos por cuenta (30 por IP). JWT de 10 horas con `versionSesion`.
 - Perfiles: ADMIN, COORDINADOR, ASISTENTE (administrativo), AUXILIAR (jurídico), REVISOR y CONSULTA (PST y la entidad: solo el tablero, sin descuentos; el backend le niega todo lo demás). El auxiliar ve lo suyo; el revisor, su equipo y lo que revisa; asistencia, coordinación y administrador, todo.
-- Solo el coordinador reasigna responsables de un caso, entrega junto con el revisor, emite alertas y genera informes. El asistente toma y traslada correos.
+- Solo el coordinador reasigna responsables de un caso, elimina actuaciones registradas por error (con motivo y solo si no se ha entregado nada a la entidad), entrega junto con el revisor, emite alertas y genera informes. El asistente toma y traslada correos.
 
 ## Frontend (`frontend/`)
 
@@ -131,12 +131,12 @@ Pantallas:
 | `inicio` | Saludo, módulos con pendientes en vivo, semáforo, etapas, criticidad y estado de los buzones |
 | `correos` | Bandeja de trabajo: por atender (qué falta, quién lo atiende, espera en rojo a los 30 min), mis pendientes, asociados, descartados; uso de cada buzón |
 | `correos/[id]` | Barra de quién lo atiende (tomar, trasladar, soltar), el correo, enlaces de SharePoint, registro por pasos, asociar a cualquier caso, descartar, atender respuestas |
-| `casos` | Listado con número interno, criticidad, equipo y semáforo |
+| `casos` | Listado compacto (semáforo, caso y accionante, etapa y estado, criticidad, límite, responsables) con acciones rápidas por fila: ver, editar (modal) y eliminar |
 | `casos/nuevo` | Un caso a mano (formulario por pasos con resumen), varios casos (Excel o radicados de un correo) o una PQRS (con el ámbito activo) |
-| `casos/[id]` | Pestañas Actuación (`PanelTrabajo`), Información, Documentos, Correos, Historial (`?tab=…&actuacion=id`) y columna de plazos y responsables |
+| `casos/[id]` | Pestañas Actuación (`PanelTrabajo`), Información (con la PQRS ligada), Documentos, Correos, **Bitácora** (notas de las personas y movimientos en una línea de tiempo; la URL sigue siendo `?tab=historial`) y columna de plazos y responsables |
 | `tablero` | Tablero de la operación (mismas vistas que Power BI); descuentos internos |
 | `seguimiento`, `indicadores`, `alertas`, `informes`, `asistencia` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel, asistencia del equipo |
-| `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración |
+| `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración. Usuarios y equipos con el diseño de Nodex: perfiles en columnas, avatar de iniciales, interruptores, menú "⋯" y modales para crear |
 
 ## Estado (2026-11-10)
 
@@ -155,18 +155,37 @@ Pantallas:
   - PQRS (con el ámbito apagado por parámetro) y PQRS ligada.
   - Archivo maestro de PQRS.
 - Producción preparada: ajustes de esquema sin `alter`, PM2 y guía de Nginx.
+- Semáforo "Entregado" para lo entregado, aprobado o radicado (ya no cuenta como vencido ni en los contadores).
+- Diseño: menú de usuario con avatar, usuarios y equipos al estilo Nodex, casillas en grafito, componentes `ui/Modal` y `ui/Avatar`, clases `.boton-icono`, `.chip` y `.opcion` en `globals.css`.
+- Casos: acciones rápidas por fila y `DELETE /casos/actuaciones/:id`.
+- Bitácora con notas (`POST /casos/:id/notas`).
+- Script de casos de ejemplo: `Docs/herramientas/ejemplos.ts crear | borrar`.
 
 **Probado** con datos temporales (borrados después): flujo completo del escrito de V1 a cierre, cargue de 30 casos en Excel, 3 radicados de un correo, respuestas identificadas por hilo, número interno o radicado, alertas, ANS, informes, archivo maestro, bandeja (tomar, trasladar, enlaces, aviso). Pantallas revisadas con capturas de Chrome sin ventana y permisos por perfil.
 
 **Sin probar** (necesitan 365): lectura y envío reales por Graph, SharePoint (subir, mover, compartir, descargar enlaces del cliente), medición y limpieza de los buzones, y el worker con Redis.
 
-**En la base `gpa_legal`:** el administrador, los 4 equipos sin integrantes, los parámetros, las plantillas en borrador, los medios días de diciembre, las vistas `tablero.*` y los 2 casos de prueba del 2026-11-09 (GPA-2026-00001 y 00002; la secuencia quedó en 2). Hay un registro de archivo huérfano (id 18, un informe semanal cuyo informe y archivo se borraron por error en una limpieza): se puede eliminar.
+**En la base `gpa_legal`:**
+- Usuarios: el administrador (Diego Mora) y Stefany Charria, que todavía no tiene perfiles.
+- Los 4 equipos sin integrantes, los parámetros, las plantillas en borrador, los medios días de diciembre y las vistas `tablero.*`.
+- Los 2 casos de prueba del 2026-11-09 (GPA-2026-00001 y 00002).
+- **24 casos de ejemplo** (GPA-2026-00003 a 00026, 4 por etapa y 4 PQRS ligadas), con 4 juzgados de ejemplo, 2 notas en GPA-2026-00005 y unas 20 alertas.
+  - Sus ids están en `Docs/herramientas/salida-ejemplos/ids.json`.
+  - Se quitan con `npx ts-node --transpile-only --project tsconfig.json ../Docs/herramientas/ejemplos.ts borrar` desde `backend`, que también devuelve la secuencia.
+- La secuencia del número interno está en 26. Hay un registro de archivo huérfano (id 18, un informe semanal cuyo informe y archivo se borraron por error en una limpieza): se puede eliminar.
 
-**Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo), devolver la secuencia del número interno al mayor que exista, y no cargar el archivo maestro en la base real (reemplaza la tabla). Los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon.
+**Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo), devolver la secuencia del número interno al mayor que exista, y no cargar el archivo maestro en la base real (reemplaza la tabla). Los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon. **No editar el backend mientras el usuario usa la app:** cada cambio reinicia nodemon (cerca de un minuto contra la base remota) y dos reinicios seguidos pueden chocar al recrear las vistas del tablero ("Falló la conexión a la base de datos"). El usuario levanta los servidores a mano.
 
 ## Pendientes
 
-Lo que dependía del desarrollo está hecho. Falta:
+**Para mañana (con el usuario):**
+- Crear los usuarios reales con perfiles y equipos. Por eso aún no se puede asignar: no hay auxiliares ni revisores.
+- Decidir si se agregan **tareas sueltas** dentro del caso, con responsable, vencimiento y aviso (por ejemplo "llamar al juzgado"). Hoy la unidad de trabajo es la actuación y lo demás va en notas de la bitácora.
+- Seguir con el diseño estilo Nodex en las pantallas que faltan: detalle del caso, correos, parámetros e informes.
+- Decidir si las notas se pueden corregir unos minutos después de escritas (hoy son inmutables).
+- Quitar los casos de ejemplo cuando ya no hagan falta.
+
+**Lo demás:**
 
 1. **Microsoft 365** (`Docs/CONFIGURAR_BUZON_M365.md`):
    - Tres buzones: `asignacionsdmc@`, `insumosdmc@` y `entregasdmc@`.
