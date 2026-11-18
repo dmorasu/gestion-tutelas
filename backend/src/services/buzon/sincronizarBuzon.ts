@@ -182,14 +182,20 @@ export const asociarCorreo = async (correo: Correo) => {
   await correo.update({ casoId: caso.id })
 }
 
-// Tamaño del buzón (suma de sus carpetas), como máximo una vez por hora: avisa antes de llegar a los 50 GB
+// Tamaño de cada carpeta en Exchange (PR_MESSAGE_SIZE_EXTENDED). Graph no expone "sizeInBytes" en
+// mailFolder (ni en v1.0 ni en beta: lo rechaza con 400), pero sí deja leer esta propiedad MAPI
+const PROPIEDAD_TAMANO = 'Long 0x0E08'
+
+// Tamaño del buzón (suma de sus carpetas principales), como máximo una vez por hora: avisa antes de
+// llegar a los 50 GB. No suma subcarpetas: la app solo usa la bandeja de entrada y no crea otras
 const medirBuzon = async (buzon: Buzon, estado: SincronizacionBuzon) => {
   if (estado.tamanoMedidoEn && Date.now() - estado.tamanoMedidoEn.getTime() < 60 * 60 * 1000) return
   let total = 0
-  let url: string | undefined = `${rutaBuzon(buzon)}/mailFolders?includeHiddenFolders=true&$select=sizeInBytes&$top=100`
+  let url: string | undefined = `${rutaBuzon(buzon)}/mailFolders?includeHiddenFolders=true&$select=id&$top=100` +
+    `&$expand=singleValueExtendedProperties($filter=id eq '${PROPIEDAD_TAMANO}')`
   while (url) {
-    const pagina: { value: { sizeInBytes?: number }[], '@odata.nextLink'?: string } = await graph(url)
-    total += pagina.value.reduce((s, f) => s + (f.sizeInBytes ?? 0), 0)
+    const pagina: { value: { singleValueExtendedProperties?: { value: string }[] }[], '@odata.nextLink'?: string } = await graph(url)
+    total += pagina.value.reduce((s, f) => s + (Number(f.singleValueExtendedProperties?.[0]?.value) || 0), 0)
     url = pagina['@odata.nextLink']
   }
   await estado.update({ tamanoBytes: String(total), tamanoMedidoEn: new Date() })
