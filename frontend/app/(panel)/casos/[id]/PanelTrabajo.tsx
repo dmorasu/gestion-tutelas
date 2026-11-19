@@ -7,6 +7,11 @@ import Documento, { type DocumentoFila } from "@/components/ui/Documento"
 import SubirArchivos from "./SubirArchivos"
 import { FormDatosFaltantes, FormEntrega, FormInsumosMatriz, GRUPO_GENERAL, type ItemMatriz } from "./componentes/Matriz"
 import { TIPOS_DEVOLUCION, fechaHora, isoDesdeLocal } from "@/src/lib/formato"
+import { FileText, Inbox, Landmark } from "lucide-react"
+
+// Cabecera de cada tarjeta del trabajo (escrito, insumos, cierre), como las secciones de Nodex
+const CABECERA = "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5"
+const TITULO = "flex items-center gap-2 text-sm font-semibold text-slate-700"
 
 export type Insumo = { id: number, descripcion: string, minimo: boolean, fechaSolicitud: string | null, fechaLimite: string | null, fechaRecepcion: string | null }
 export type DevolucionFila = {
@@ -78,11 +83,11 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
   const pendientesInsumo = a.insumos.filter(i => !i.fechaRecepcion)
 
   return (
-    <div className="mt-5 space-y-5 border-t border-slate-100 pt-4 text-sm">
+    <>
       {/* ESCRITO */}
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{tipoEscrito}</h4>
+      <section className="tarjeta overflow-hidden text-sm">
+        <div className={CABECERA}>
+          <h3 className={TITULO}><FileText size={15} className="text-slate-400" />{tipoEscrito}</h3>
           <div className="flex flex-wrap gap-2">
             {puedeSubirEscrito && <SubirArchivos actuacionId={a.id} tipos={["ESCRITO", "ANEXO"]} />}
             {/* La ficha se genera sola al entregar; este botón es para revisarla antes */}
@@ -105,7 +110,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
             )}
           </div>
         </div>
-
+        <div className="space-y-3 p-5">
         {abierto === "devolverAux" && (
           <form action={d => ejecutar("devolver-auxiliar", { observacion: d.get("observacion") }, "Devuelto al auxiliar")} className="flex gap-2">
             <input name="observacion" required placeholder="Qué debe ajustar" className="campo" />
@@ -149,12 +154,13 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
             ))}
           </div>
         ))}
-      </div>
+        </div>
+      </section>
 
       {/* INSUMOS Y DATOS FALTANTES */}
-      <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insumos y datos faltantes</h4>
+      <section className="tarjeta overflow-hidden text-sm">
+        <div className={CABECERA}>
+          <h3 className={TITULO}><Inbox size={15} className="text-slate-400" />Insumos y datos faltantes</h3>
           {puedeTrabajar && !cerrada && (
             <div className="flex flex-wrap gap-2">
               {/* Reunión 18-nov: datos faltantes y expediente los pide la asistencia administrativa */}
@@ -165,6 +171,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
             </div>
           )}
         </div>
+        <div className="space-y-3 p-5">
         {abierto === "datos" && puedePedirDatos && (
           <FormDatosFaltantes key={textoDatos} generales={matriz.filter(i => i.grupo === GRUPO_GENERAL && i.clase === "DOCUMENTO")} textoInicial={textoDatos} pendiente={pendiente}
             enviar={(items, otros, adjuntarExpediente) => ejecutar("datos-faltantes", { items, otros, adjuntarExpediente }, "Solicitud de datos faltantes enviada")} />
@@ -216,33 +223,41 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
             <div className="flex flex-wrap gap-1.5">{sueltos.map(d => <Documento key={d.id} d={d} />)}</div>
           </div>
         )}
-      </div>
+        </div>
+      </section>
 
       {/* RADICACIÓN Y CIERRE */}
       {!cerrada && (puedeTrabajar || puedeCerrar) && (
-        <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
-          {puedeTrabajar && ["APROBADO", "ENTREGADO"].includes(a.estado) && (
-            <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "radicacion" ? "" : "radicacion")}>Registrar radicación</button>
-          )}
-          {puedeCerrar && <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "cierre" ? "" : "cierre")}>Cerrar actuación</button>}
-        </div>
-      )}
-      {abierto === "radicacion" && (
-        <form action={d => ejecutar("radicacion", { fecha: isoDesdeLocal(String(d.get("fecha"))) }, "Radicación registrada")} className="flex flex-wrap gap-2 items-end">
-          <div><label className="etiqueta">Radicada por la entidad el</label><input type="datetime-local" name="fecha" required className="campo" /></div>
-          <button disabled={pendiente} className="boton-primario">Guardar</button>
-        </form>
-      )}
-      {abierto === "cierre" && (
-        <form action={d => ejecutar("cerrar", { motivo: d.get("motivo") }, "Actuación cerrada", "¿Cerrar la actuación?")} className="flex flex-wrap gap-2 items-end">
-          <div className="flex-1 min-w-[16rem]">
-            <label className="etiqueta">Causal de cierre</label>
-            <select name="motivo" required className="campo">{motivosCierre.map(m => <option key={m}>{m}</option>)}</select>
+        <section className="tarjeta overflow-hidden text-sm">
+          <div className={CABECERA}>
+            <h3 className={TITULO}><Landmark size={15} className="text-slate-400" />Radicación y cierre</h3>
+            <div className="flex flex-wrap gap-2">
+              {puedeTrabajar && ["APROBADO", "ENTREGADO"].includes(a.estado) && (
+                <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "radicacion" ? "" : "radicacion")}>Registrar radicación</button>
+              )}
+              {puedeCerrar && <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "cierre" ? "" : "cierre")}>Cerrar actuación</button>}
+            </div>
           </div>
-          <button disabled={pendiente} className="boton-peligro">Cerrar</button>
-        </form>
+          {(abierto === "radicacion" || abierto === "cierre") && <div className="p-5">
+            {abierto === "radicacion" && (
+              <form action={d => ejecutar("radicacion", { fecha: isoDesdeLocal(String(d.get("fecha"))) }, "Radicación registrada")} className="flex flex-wrap items-end gap-2">
+                <div><label className="etiqueta">Radicada por la entidad el</label><input type="datetime-local" name="fecha" required className="campo" /></div>
+                <button disabled={pendiente} className="boton-primario">Guardar</button>
+              </form>
+            )}
+            {abierto === "cierre" && (
+              <form action={d => ejecutar("cerrar", { motivo: d.get("motivo") }, "Actuación cerrada", "¿Cerrar la actuación?")} className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[16rem] flex-1">
+                  <label className="etiqueta">Causal de cierre</label>
+                  <select name="motivo" required className="campo">{motivosCierre.map(m => <option key={m}>{m}</option>)}</select>
+                </div>
+                <button disabled={pendiente} className="boton-peligro">Cerrar</button>
+              </form>
+            )}
+          </div>}
+        </section>
       )}
-    </div>
+    </>
   )
 }
 

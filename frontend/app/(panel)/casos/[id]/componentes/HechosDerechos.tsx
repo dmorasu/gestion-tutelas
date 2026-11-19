@@ -33,7 +33,10 @@ export default function HechosDerechos({ casoId, resumen, derechosIds, derechos,
           </div>
           {puedeEditar && <button type="button" onClick={() => setEditando(true)} className="boton-icono" title="Editar" aria-label="Editar hechos y derechos"><Pencil size={15} /></button>}
         </div>
-        {resumen ? <p className="whitespace-pre-line text-slate-700">{resumen}</p> : <p className="text-xs text-amber-700">Sin resumen de los hechos.</p>}
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 px-4 py-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Resumen de los hechos</p>
+          {resumen ? <p className="mt-1 whitespace-pre-line leading-relaxed text-slate-700">{resumen}</p> : <p className="mt-1 text-xs text-amber-700">Sin resumen de los hechos.</p>}
+        </div>
       </div>
     )
   }

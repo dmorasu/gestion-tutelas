@@ -9,6 +9,7 @@ import Seccion from "@/components/ui/Seccion"
 import Dato from "@/components/ui/Dato"
 import Criticidad from "@/components/ui/Criticidad"
 import Semaforo from "@/components/ui/Semaforo"
+import Avatar from "@/components/ui/Avatar"
 import PanelActuacion, { type ActuacionDetalle, type Responsable } from "./PanelActuacion"
 import type { ArchivoCaso } from "./PanelTrabajo"
 import HistorialCaso, { type EventoCaso } from "./componentes/HistorialCaso"
@@ -210,43 +211,54 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
 
           {tab === "informacion" && (
             <>
+              {/* Lo que registra el auxiliar al leer la tutela va primero: lo piden la ficha y el correo de insumos */}
+              <Seccion titulo="Hechos y derechos">
+                <HechosDerechos casoId={caso.id} resumen={caso.resumenHechos} derechosIds={caso.derechosIds} derechos={derechos} puedeEditar={puedeRelacionar && caso.estado !== "CERRADO"} />
+              </Seccion>
+
               <Seccion titulo="Datos del caso">
-                <dl className="grid gap-5 sm:grid-cols-3">
-                  <Dato etiqueta="Número interno" valor={caso.numeroInterno} />
-                  <Dato etiqueta="Radicado" valor={<span className="font-mono">{radicado(caso.radicado)}</span>} />
+                <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
+                  <Dato etiqueta="Número interno" valor={<span className="font-semibold text-slate-900">{caso.numeroInterno}</span>} />
+                  <Dato etiqueta="Radicado" valor={<span className="font-mono">{radicado(caso.radicado)}</span>} className="sm:col-span-2" />
                   <Dato etiqueta="Tipo" valor={TIPOS_SOLICITUD[caso.tipoSolicitud]} />
-                  <Dato etiqueta="Juzgado" valor={caso.juzgado?.nombre} />
+                  <Dato etiqueta="Juzgado" valor={caso.juzgado?.nombre} className="sm:col-span-2" />
                   <Dato etiqueta="Calidad de la entidad" valor={caso.calidadEntidad.charAt(0) + caso.calidadEntidad.slice(1).toLowerCase()} />
-                  <Dato etiqueta="Llegó en" valor={`${ETAPAS[caso.etapaInicial]} · hoy en ${ETAPAS[caso.etapaActual]}`} />
+                  <Dato etiqueta="Etapas" valor={caso.etapaInicial === caso.etapaActual ? ETAPAS[caso.etapaActual] : `Llegó en ${ETAPAS[caso.etapaInicial].toLowerCase()} · hoy en ${ETAPAS[caso.etapaActual].toLowerCase()}`} />
                   <Dato etiqueta="Se factura en" valor={caso.fechaFacturacion ? new Date(caso.fechaFacturacion).toLocaleDateString("es-CO", { month: "long", year: "numeric", timeZone: "America/Bogota" }) : null} />
                   {caso.radicadosAlternos.length > 0 && (
-                    <Dato etiqueta="Radicados unidos" valor={<span className="font-mono">{caso.radicadosAlternos.map(radicado).join(", ")}</span>} className="sm:col-span-2" />
+                    <Dato etiqueta="Radicados unidos" valor={<span className="font-mono">{caso.radicadosAlternos.map(radicado).join(", ")}</span>} className="sm:col-span-3" />
                   )}
-                  <Dato etiqueta="Derechos involucrados" valor={caso.derechosInvolucrados} className="sm:col-span-3" />
+                  {/* El texto libre de antes solo si el caso aún no tiene los derechos del catálogo */}
+                  {!caso.derechosIds.length && caso.derechosInvolucrados && <Dato etiqueta="Derechos (registro anterior)" valor={caso.derechosInvolucrados} className="sm:col-span-3" />}
                   {caso.observaciones && <Dato etiqueta="Observaciones" valor={<span className="whitespace-pre-line">{caso.observaciones}</span>} className="sm:col-span-3" />}
                   {caso.motivoCierre && <Dato etiqueta="Causal de cierre" valor={caso.motivoCierre} className="sm:col-span-3" />}
                 </dl>
               </Seccion>
-              <Seccion titulo="Hechos y derechos">
-                <HechosDerechos casoId={caso.id} resumen={caso.resumenHechos} derechosIds={caso.derechosIds} derechos={derechos} puedeEditar={puedeRelacionar && caso.estado !== "CERRADO"} />
-              </Seccion>
-              <Seccion titulo="Casos relacionados">
+
+              <div className="grid gap-6 xl:grid-cols-2">
+                <Seccion titulo="Partes" acciones={caso.partes.length > 0 ? <span className="chip border-slate-200 bg-slate-50 text-slate-600">{caso.partes.length}</span> : null}>
+                  {caso.partes.length === 0 ? <p className="text-xs text-slate-500">Sin partes registradas.</p> : (
+                    <ul className="space-y-3">
+                      {caso.partes.map(p => (
+                        <li key={p.id} className="flex items-center gap-3">
+                          <Avatar nombre={p.nombre} tamano="sm" apagado={p.rol !== "ACCIONANTE"} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-slate-800">{p.nombre}</p>
+                            <p className="text-xs text-slate-500">{[p.tipoDocumento, p.numeroDocumento].filter(Boolean).join(" ") || "Sin documento"}</p>
+                          </div>
+                          <span className="chip border-slate-200 bg-slate-50 text-slate-600">{p.rol.charAt(0) + p.rol.slice(1).toLowerCase()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </Seccion>
+                <Seccion titulo={caso.tipoSolicitud === "PQRS" ? "Tutela relacionada" : "PQRS ligada"}>
+                  <PqrsLigada casoId={caso.id} esPqrs={caso.tipoSolicitud === "PQRS"} relacionados={relacionados} tiposPeticion={tiposPeticion} puedeCrear={gestiona && caso.estado !== "CERRADO"} />
+                </Seccion>
+              </div>
+
+              <Seccion titulo="Casos relacionados" acciones={porRevisar.length > 0 ? <span className="chip border-amber-200 bg-amber-50 text-amber-700">{porRevisar.length} por revisar</span> : null}>
                 <CasosRelacionados casoId={caso.id} vinculos={vinculos} tipos={tiposRelacion} puedeDecidir={puedeRelacionar} coordina={coordina} />
-              </Seccion>
-              <Seccion titulo={caso.tipoSolicitud === "PQRS" ? "Tutela relacionada" : "PQRS ligada"}>
-                <PqrsLigada casoId={caso.id} esPqrs={caso.tipoSolicitud === "PQRS"} relacionados={relacionados} tiposPeticion={tiposPeticion} puedeCrear={gestiona && caso.estado !== "CERRADO"} />
-              </Seccion>
-              <Seccion titulo="Partes">
-                {caso.partes.length === 0 ? <p className="text-xs text-slate-500">Sin partes registradas.</p> : (
-                  <ul className="divide-y divide-slate-100">
-                    {caso.partes.map(p => (
-                      <li key={p.id} className="flex flex-wrap items-baseline justify-between gap-2 py-2 text-sm">
-                        <span className="font-medium text-slate-800">{p.nombre}</span>
-                        <span className="text-xs text-slate-500">{p.rol.charAt(0) + p.rol.slice(1).toLowerCase()} · {p.tipoDocumento} {p.numeroDocumento}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </Seccion>
             </>
           )}
@@ -280,29 +292,36 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
           )}
         </div>
 
-        {/* COLUMNA LATERAL: plazos y responsables de la actuación que se mira */}
+        {/* COLUMNA LATERAL: responsables y, fuera de la pestaña de actuación (que ya los muestra), los plazos */}
         {actual && (
           <aside className="space-y-6">
-            <Seccion titulo={`Plazos · ${ETAPAS[actual.etapa]}`}>
-              <dl className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs text-slate-600">{ESTADOS_ACTUACION[actual.estado]}</span>
-                  {actual.semaforo && <Semaforo valor={actual.semaforo} />}
-                </div>
-                <Dato etiqueta="Límite de entrega (ANS)" valor={actual.fechaLimiteEntrega
-                  ? <><b className="text-slate-900">{fechaHora(actual.fechaLimiteEntrega)}</b>{!yaEntregada(actual.estado) && <span className="block text-slate-500">{tiempoRestante(actual.fechaLimiteEntrega)}</span>}</>
-                  : actual.requiereInsumos ? "Suspendido mientras llegan los insumos" : null} />
-                <Dato etiqueta={actual.fechaVencimientoInformada ? "Vence (informado por la entidad)" : "Vencimiento judicial"} valor={fechaHora(actual.fechaVencimiento)} />
-                <Dato etiqueta="Asignada" valor={fechaHora(actual.fechaAsignacion)} />
-                <Dato etiqueta="Cuenta desde" valor={fechaHora(actual.fechaAsignacionEfectiva)} />
-              </dl>
-            </Seccion>
+            {tab !== "actuacion" && (
+              <Seccion titulo={`Plazos · ${ETAPAS[actual.etapa]}`}>
+                <dl className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-600">{ESTADOS_ACTUACION[actual.estado]}</span>
+                    {actual.semaforo && <Semaforo valor={actual.semaforo} />}
+                  </div>
+                  <Dato etiqueta="Límite de entrega (ANS)" valor={actual.fechaLimiteEntrega
+                    ? <><b className="text-slate-900">{fechaHora(actual.fechaLimiteEntrega)}</b>{!yaEntregada(actual.estado) && <span className="block text-slate-500">{tiempoRestante(actual.fechaLimiteEntrega)}</span>}</>
+                    : actual.requiereInsumos ? "Suspendido mientras llegan los insumos" : null} />
+                  <Dato etiqueta={actual.fechaVencimientoInformada ? "Vence (informado por la entidad)" : "Vencimiento judicial"} valor={fechaHora(actual.fechaVencimiento)} />
+                </dl>
+              </Seccion>
+            )}
             <Seccion titulo="Responsables">
-              <dl className="space-y-4">
-                <Dato etiqueta="Auxiliar" valor={actual.auxiliar?.nombre ?? <span className="text-amber-700">Sin asignar</span>} />
-                <Dato etiqueta="Revisor" valor={actual.revisor?.nombre ?? <span className="text-amber-700">Sin asignar</span>} />
-                <Dato etiqueta="Equipo" valor={actual.equipo?.nombre} />
-              </dl>
+              <ul className="space-y-4">
+                {[["Auxiliar jurídico", actual.auxiliar?.nombre], ["Revisor", actual.revisor?.nombre]].map(([rol, nombre]) => (
+                  <li key={rol} className="flex items-center gap-3">
+                    <Avatar nombre={nombre ?? "?"} apagado={!nombre} />
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{rol}</p>
+                      <p className={clsx("truncate text-sm", nombre ? "font-medium text-slate-800" : "text-amber-700")}>{nombre ?? "Sin asignar"}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {actual.equipo && <p className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">Equipo <span className="font-medium text-slate-700">{actual.equipo.nombre}</span></p>}
             </Seccion>
           </aside>
         )}

@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react"
 import { toast } from "react-toastify"
 import { actualizarActuacion, asumirActuacion } from "../acciones"
+import clsx from "clsx"
+import { MessageSquareText, Pencil, Scale, Timer } from "lucide-react"
 import Semaforo from "@/components/ui/Semaforo"
+import Seccion from "@/components/ui/Seccion"
+import Dato from "@/components/ui/Dato"
 import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
@@ -74,56 +78,76 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
     ejecutar(() => actualizarActuacion(casoId, a.id, cambios), "Actuación actualizada")
   }
 
+  const limite = a.fechaLimiteEntrega
+  const entregada = yaEntregada(a.estado)
+  const tipoRespuesta = tiposRespuesta.find(t => t.id === a.tipoRespuestaId)?.nombre ?? null
+  const suspendido = a.datosFaltantesPendientes
+    ? "El ANS está suspendido hasta que lleguen los datos faltantes de la asignación. El término judicial sigue corriendo."
+    : a.requiereInsumos && !limite ? "El ANS está suspendido hasta que lleguen los insumos. El término judicial sigue corriendo." : null
+
   return (
-    <section className="tarjeta p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold">{ETAPAS[a.etapa]}</h3>
-          <Criticidad valor={a.criticidad} />
-          <span className="text-sm text-slate-600">{ESTADOS_ACTUACION[a.estado]}</span>
-          {a.semaforo && <Semaforo valor={a.semaforo} />}
+    <div className="space-y-6">
+      {/* ENCABEZADO: etapa, estado, lo que más importa (plazos y tipo de respuesta) y la ruta de pasos */}
+      <section className="tarjeta overflow-hidden">
+        <div className={clsx("h-1", BARRA_SEMAFORO[a.semaforo ?? "SIN_FECHA"] ?? "bg-slate-200")} />
+        <div className="p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">Actuación</p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h3 className="text-lg font-semibold text-slate-900">{ETAPAS[a.etapa]}</h3>
+                <Criticidad valor={a.criticidad} />
+                {a.semaforo && <Semaforo valor={a.semaforo} />}
+                {a.origenNulidad && <span className="chip border-slate-300 bg-slate-100 text-slate-700">Llegó como nulidad</span>}
+              </div>
+              <p className="mt-1 text-sm text-slate-500">{ESTADOS_ACTUACION[a.estado]} · {tipoEscrito(a)}</p>
+            </div>
+            <div className="flex gap-2">
+              {a.estado === "POR_ASUMIR" && (esResponsable || gestiona) && (
+                <button disabled={pendiente} className="boton-primario py-1.5" onClick={() => ejecutar(() => asumirActuacion(casoId, a.id), "Actuación asumida")}>Asumir</button>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Indicador icono={<Timer size={15} />} titulo="Entrega a la entidad (ANS)" destacado
+              valor={limite ? fechaHora(limite) : a.requiereInsumos ? "Suspendido" : "Sin fecha"}
+              pie={limite ? (entregada ? "Ya se entregó" : tiempoRestante(limite)) : a.requiereInsumos ? "Esperando insumos" : null} />
+            <Indicador icono={<Scale size={15} />} titulo="Vencimiento judicial" valor={a.fechaVencimiento ? fechaHora(a.fechaVencimiento) : "Sin fecha"}
+              pie={a.fechaVencimiento ? (a.fechaVencimientoInformada ? "Informado por la entidad" : "Calculado con el término") : null} />
+            <Indicador icono={<MessageSquareText size={15} />} titulo="Tipo de respuesta" valor={tipoRespuesta ?? "Sin definir"}
+              pie={a.requiereInsumos ? "Requiere insumos" : "Sin insumos"} apagado={!tipoRespuesta} />
+          </div>
+
+          {suspendido && <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">{suspendido}</p>}
+          {a.etapa === "NULIDAD" && a.estado !== "CERRADA" && <ClasificarNulidad casoId={casoId} actuacionId={a.id} puede={puedeTrabajar} />}
+
+          <div className="mt-2 border-t border-slate-100 pt-1">
+            <RutaActuacion actuacion={a} archivos={archivos} />
+          </div>
         </div>
-        <div className="flex gap-2">
-          {a.estado === "POR_ASUMIR" && (esResponsable || gestiona) && (
-            <button disabled={pendiente} className="boton-primario py-1.5" onClick={() => ejecutar(() => asumirActuacion(casoId, a.id), "Actuación asumida")}>Asumir</button>
-          )}
-          {puedeEditar && !editando && <button className="boton-secundario py-1.5" onClick={() => setEditando(true)}>Editar</button>}
-        </div>
-      </div>
+      </section>
 
-      {a.etapa === "NULIDAD" && a.estado !== "CERRADA" && <ClasificarNulidad casoId={casoId} actuacionId={a.id} puede={puedeTrabajar} />}
-
-      <RutaActuacion actuacion={a} archivos={archivos} />
-
-      {!editando ? (
-        <dl className="mt-4 grid sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
-          <Dato nombre="Asignación (correo)" valor={fechaHora(a.fechaAsignacion)} />
-          <Dato nombre="Cuenta desde (corte de las 3 p. m.)" valor={fechaHora(a.fechaAsignacionEfectiva)} />
-          <Dato nombre="Notificación" valor={fechaHora(a.fechaNotificacion)} />
-          <Dato nombre="Término" valor={a.terminoValor ? `${a.terminoValor} ${UNIDADES_TERMINO[a.terminoUnidad ?? ""]?.toLowerCase() ?? ""}` : "—"} />
-          <Dato nombre={a.fechaVencimientoInformada ? "Vencimiento (informado por la entidad)" : "Vencimiento judicial"} valor={fechaHora(a.fechaVencimiento)} />
-          <Dato nombre="Límite de entrega (ANS)" valor={`${fechaHora(a.fechaLimiteEntrega)}${a.fechaLimiteEntrega && !yaEntregada(a.estado) ? ` · ${tiempoRestante(a.fechaLimiteEntrega)}` : ""}`} destacado />
-          <Dato nombre="Auxiliar" valor={a.auxiliar?.nombre ?? "Sin asignar"} />
-          <Dato nombre="Revisor" valor={`${a.revisor?.nombre ?? "Sin asignar"}${a.equipo ? ` · ${a.equipo.nombre}` : ""}`} />
-          <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />
-          <Dato nombre="Insumos" valor={a.requiereInsumos ? "Requiere" : "No requiere"} />
-          <Dato nombre="Escrito" valor={tipoEscrito(a)} />
-          {a.origenNulidad && <Dato nombre="Llegó como nulidad" valor={`Clasificada el ${fechaHora(a.fechaClasificacion)}`} />}
-          <Dato nombre="Tipo de respuesta" valor={tiposRespuesta.find(t => t.id === a.tipoRespuestaId)?.nombre ?? "Sin definir"} />
-          {a.tipoPeticion && <Dato nombre="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
-          {porDerechoPeticion && a.etapa === "ACCION" && (
-            <p className="sm:col-span-3 text-xs text-slate-600">Tutela por derecho de petición: la contestación pide al juez hecho superado con la respuesta de la PQRS ligada (pestaña Información).</p>
-          )}
-          {a.loQueSePide && <div className="sm:col-span-3"><Dato nombre="Lo que se pide al juez" valor={a.loQueSePide} /></div>}
-          {a.datosFaltantesPendientes && (
-            <p className="sm:col-span-3 text-xs text-amber-700">El ANS está suspendido hasta que lleguen los datos faltantes de la asignación. El término judicial sigue corriendo.</p>
-          )}
-          {a.requiereInsumos && !a.datosFaltantesPendientes && !a.fechaLimiteEntrega && (
-            <p className="sm:col-span-3 text-xs text-amber-700">El ANS está suspendido hasta que lleguen los insumos. El término judicial sigue corriendo.</p>
-          )}
-        </dl>
-      ) : (
-        <form action={guardar} className="mt-4 grid sm:grid-cols-3 gap-3 text-sm">
+      {/* DATOS DE LA ACTUACIÓN (y su edición en el mismo lugar) */}
+      <Seccion titulo="Datos de la actuación"
+        acciones={puedeEditar && !editando ? <button className="boton-secundario py-1.5 text-xs" onClick={() => setEditando(true)}><Pencil size={13} />Editar</button> : null}>
+        {!editando ? (
+          <dl className="grid gap-x-6 gap-y-5 sm:grid-cols-3">
+            <Dato etiqueta="Asignada (correo)" valor={fechaHora(a.fechaAsignacion)} />
+            <Dato etiqueta="Cuenta desde (corte 3 p. m.)" valor={fechaHora(a.fechaAsignacionEfectiva)} />
+            <Dato etiqueta="Notificación" valor={a.fechaNotificacion ? fechaHora(a.fechaNotificacion) : null} />
+            <Dato etiqueta="Término" valor={a.terminoValor ? `${a.terminoValor} ${UNIDADES_TERMINO[a.terminoUnidad ?? ""]?.toLowerCase() ?? ""}` : null} />
+            <Dato etiqueta="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` · ${FUENTE_CRITICIDAD[a.criticidadFuente]}` : ""}`} />
+            <Dato etiqueta="Escrito" valor={tipoEscrito(a)} />
+            {a.tipoPeticion && <Dato etiqueta="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
+            {a.origenNulidad && <Dato etiqueta="Nulidad clasificada" valor={fechaHora(a.fechaClasificacion)} />}
+            {a.loQueSePide && <Dato etiqueta="Lo que se pide al juez" valor={<span className="whitespace-pre-line">{a.loQueSePide}</span>} className="sm:col-span-3" />}
+            {porDerechoPeticion && a.etapa === "ACCION" && (
+              <p className="text-xs text-slate-600 sm:col-span-3">Tutela por derecho de petición: la contestación pide al juez hecho superado con la respuesta de la PQRS ligada (pestaña Información).</p>
+            )}
+          </dl>
+        ) : (
+        <form action={guardar} className="grid gap-3 text-sm sm:grid-cols-3">
           <div>
             <label className="etiqueta">Notificación</label>
             <input type="datetime-local" name="fechaNotificacion" defaultValue={valorFechaHoraLocal(a.fechaNotificacion)} className="campo" />
@@ -193,7 +217,8 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
             <button disabled={pendiente} className="boton-primario">Guardar</button>
           </div>
         </form>
-      )}
+        )}
+      </Seccion>
 
       <PanelTrabajo
         casoId={casoId}
@@ -211,19 +236,24 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         tipoEscrito={tipoEscrito(a)}
       />
       {["ACCION", "IMPUGNACION", "DESACATO"].includes(a.etapa) && (
-        <div className="mt-5">
-          <Fallos casoId={casoId} actuacionId={a.id} decisiones={a.decisiones ?? []} sentidos={sentidos} puedeRegistrar={puedeTrabajar} coordina={coordina} />
-        </div>
+        <Fallos casoId={casoId} actuacionId={a.id} decisiones={a.decisiones ?? []} sentidos={sentidos} puedeRegistrar={puedeTrabajar} coordina={coordina} />
       )}
-    </section>
+    </div>
   )
 }
 
-function Dato({ nombre, valor, destacado }: { nombre: string, valor: string, destacado?: boolean }) {
+// Color de la franja superior según el semáforo: se ve de lejos cómo va la actuación
+const BARRA_SEMAFORO: Record<string, string> = {
+  VENCIDO: "bg-red-700", ROJO: "bg-red-500", AMARILLO: "bg-amber-400", VERDE: "bg-emerald-500", SIN_FECHA: "bg-slate-200", ENTREGADO: "bg-slate-400"
+}
+
+// Un indicador grande del encabezado (plazo o dato clave) con una línea de contexto
+function Indicador({ icono, titulo, valor, pie, destacado, apagado }: { icono: React.ReactNode, titulo: string, valor: string, pie?: string | null, destacado?: boolean, apagado?: boolean }) {
   return (
-    <div>
-      <dt className="text-xs text-slate-500">{nombre}</dt>
-      <dd className={destacado ? "font-semibold text-slate-900" : ""}>{valor}</dd>
+    <div className={clsx("rounded-lg border px-4 py-3", destacado ? "border-slate-800 bg-slate-800 text-white" : "border-slate-200 bg-slate-50/60")}>
+      <p className={clsx("flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide", destacado ? "text-slate-300" : "text-slate-400")}>{icono}{titulo}</p>
+      <p className={clsx("mt-1.5 text-sm font-semibold", destacado ? "text-white" : apagado ? "text-slate-400" : "text-slate-800")}>{valor}</p>
+      {pie && <p className={clsx("mt-0.5 text-xs", destacado ? "text-slate-300" : "text-slate-500")}>{pie}</p>}
     </div>
   )
 }

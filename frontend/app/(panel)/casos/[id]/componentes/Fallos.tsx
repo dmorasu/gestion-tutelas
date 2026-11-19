@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useState, useTransition } from "react"
 import { toast } from "react-toastify"
+import { Gavel } from "lucide-react"
 import { abrirCumplimiento, marcarSancion, pasoActuacion } from "../../acciones"
 import { INSTANCIAS, SENTIDOS, fechaHora, isoDesdeLocal } from "@/src/lib/formato"
 
@@ -56,12 +57,12 @@ export default function Fallos({ casoId, actuacionId, decisiones, sentidos, pued
   if (!decisiones.length && !puedeRegistrar) return null
 
   return (
-    <div className="space-y-2 border-t border-slate-100 pt-4 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Fallos</h4>
+    <section className="tarjeta overflow-hidden text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-slate-700"><Gavel size={15} className="text-slate-400" />Fallos</h3>
         {puedeRegistrar && <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(!abierto)}>Registrar fallo</button>}
       </div>
-
+      <div className="space-y-3 p-5">
       {abierto && (
         <form action={registrar} className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-2">
           <div>
@@ -114,6 +115,7 @@ export default function Fallos({ casoId, actuacionId, decisiones, sentidos, pued
           )}
         </div>
       ))}
-    </div>
+      </div>
+    </section>
   )
 }
