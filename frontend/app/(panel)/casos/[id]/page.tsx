@@ -55,6 +55,8 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   // Mismas reglas que el backend (services/permisosActuacion): el botón solo aparece si el paso se puede
   const revisa = (a: ActuacionDetalle) => coordina || (esRevisor && (a.revisorId === sesion.id || (!!a.equipo && a.equipo.id === sesion.equipoId)))
   const trabaja = (a: ActuacionDetalle) => gestiona || a.auxiliarId === sesion.id || revisa(a)
+  // Insumos: solo el auxiliar de la actuación o su revisor (como en services/permisosActuacion)
+  const pideInsumos = (a: ActuacionDetalle) => a.auxiliarId === sesion.id || (esRevisor && (a.revisorId === sesion.id || (!!a.equipo && a.equipo.id === sesion.equipoId)))
   const delRol = (codigo: string): Responsable[] => usuarios.filter(u => u.activo && u.roles.some(r => r.codigo === codigo)).map(u => ({ id: u.id, nombre: u.nombre }))
 
   // La actuación que se mira: la elegida o la abierta más reciente
@@ -150,6 +152,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
               archivos={archivos.filter(x => x.actuacionId === actual.id)}
               puedeTrabajar={trabaja(actual)}
               puedeRevisar={revisa(actual)}
+              puedePedirInsumos={pideInsumos(actual)}
               puedeCerrar={gestiona || revisa(actual)}
               motivosCierre={motivosCierre}
               sentidos={sentidos}

@@ -79,6 +79,7 @@ Convenciones heredadas de Nodex:
 | `tablero.ts` | Vistas `tablero.*` (Power BI) y `tablero_interno.*`, foto mensual del ANS con descuentos, datos de la pantalla |
 | `descuentos.ts` | Nivel y descuento por ANS, tope mensual y reincidencia (D29) |
 | `asistencia.ts` | Asistencia diaria, ANS-11 y aviso de reducción del equipo (D27) |
+| `cierreDia.ts` | Cierre del día: lo que movió cada persona (desde los cambios de estado de la bitácora), respondidas frente a su capacidad diaria y tiempo de respuesta por caso |
 
 **Correo y buzones** (`services/buzon/`):
 
@@ -91,6 +92,8 @@ Convenciones heredadas de Nodex:
 | `atencion.ts` | Qué está "por atender" y el aviso al coordinador de asignaciones con más de 30 minutos sin registrar |
 | `enlaces.ts` | Enlaces de SharePoint del correo: traerlos (Graph `/shares` o descarga directa), subirlos a mano o descartarlos |
 | `limpiezaBuzon.ts` | Quita del buzón los adjuntos con copia verificada en SharePoint |
+
+Al asociar un correo por radicado, primero se busca el del asunto y después los del cuerpo y los PDF.
 
 **Utilidades** (`utils/`): `asunto.ts` (lee `[Prefijo] [Criticidad] [Radicado] [Actuación] [Vence: …]` en cualquier orden y con o sin tildes), `radicado.ts`, `fechaColombia.ts` (UTC-5 fijo), y las de contraseñas e intentos de login copiadas de Nodex.
 
@@ -133,7 +136,8 @@ Pantallas:
 | `correos/[id]` | Barra de quién lo atiende (tomar, trasladar, soltar), el correo, enlaces de SharePoint, registro por pasos, asociar a cualquier caso, descartar, atender respuestas |
 | `casos` | Listado compacto (semáforo, caso y accionante, etapa y estado, criticidad, límite, responsables) con acciones rápidas por fila: ver, editar (modal) y eliminar |
 | `casos/nuevo` | Un caso a mano (formulario por pasos con resumen), varios casos (Excel o radicados de un correo) o una PQRS (con el ámbito activo) |
-| `casos/[id]` | Pestañas Actuación (`PanelTrabajo`), Información (con la PQRS ligada), Documentos, Correos, **Bitácora** (notas de las personas y movimientos en una línea de tiempo; la URL sigue siendo `?tab=historial`) y columna de plazos y responsables |
+| `casos/[id]` | Pestañas Actuación (`PanelTrabajo`, con la ruta de pasos `componentes/RutaActuacion`: hecho, en curso, pendiente ahora con responsable y plazo, y el último envío con sus documentos), Información (con la PQRS ligada), Documentos, Correos, **Bitácora** (notas de las personas y movimientos en una línea de tiempo; la URL sigue siendo `?tab=historial`) y columna de plazos y responsables |
+| `cierre-dia` | Cierre del día (`GET /seguimiento/cierre-dia?dia=`): por persona y por caso, con selector de día |
 | `tablero` | Tablero de la operación (mismas vistas que Power BI); descuentos internos |
 | `seguimiento`, `indicadores`, `alertas`, `informes`, `asistencia` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel, asistencia del equipo |
 | `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración. Usuarios y equipos con el diseño de Nodex: perfiles en columnas, avatar de iniciales, interruptores, menú "⋯" y modales para crear |
@@ -142,7 +146,7 @@ Pantallas:
 
 **Hecho:**
 - Bloque 1: tres buzones, asunto normalizado, número interno, criticidad, roles y equipos, reparto por equipo, plantillas y acuse.
-- Bloque 2: expediente en SharePoint, flujo completo del escrito, asignación manual, en Excel y desde un correo con varios radicados, correo libre, expediente del juzgado pedido al cliente.
+- Bloque 2: expediente en SharePoint, flujo completo del escrito, asignación manual, en Excel y desde un correo con varios radicados, correo libre. Los insumos los piden solo el auxiliar de la actuación y su revisor; ya no hay botón para pedir el expediente del juzgado.
 - Bloque 3: tablero diario, indicadores ANS, alertas, informes y archivo maestro.
 - Bandeja de trabajo: por atender, tomar y trasladar, aviso a los 30 minutos y enlaces de SharePoint.
 - Diseño: correos corporativos con vista previa, detalle del caso como Nodex, formulario de asignación por pasos.

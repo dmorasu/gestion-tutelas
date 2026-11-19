@@ -11,7 +11,7 @@ import { parametro } from '../services/parametros'
 import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
 import { normalizarRadicado, normalizarRadicadoPqrs } from '../utils/radicado'
 import { crearPqrsLigada } from '../services/pqrs'
-import { exigirResponsable, exigirRevisor, alcanceActuaciones } from '../services/permisosActuacion'
+import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
@@ -359,11 +359,12 @@ router.post('/actuaciones/:id/asumir', param('id').isInt(), manejarErroresEntrad
 type Paso = (req: Request, a: Actuacion) => Promise<unknown>
 
 // Carga la actuación, revisa el permiso y responde con el resultado del paso
-const paso = (permiso: 'RESPONSABLE' | 'REVISOR', fn: Paso) => async (req: Request, res: Response) => {
+const paso = (permiso: 'RESPONSABLE' | 'REVISOR' | 'INSUMOS', fn: Paso) => async (req: Request, res: Response) => {
   try {
     const a = await Actuacion.findByPk(Number(req.params.id))
     if (!a) throw new ErrorNegocio('La actuación no existe', 404)
     if (permiso === 'REVISOR') exigirRevisor(req, a)
+    else if (permiso === 'INSUMOS') exigirQuienPideInsumos(req, a)
     else exigirResponsable(req, a)
     res.json((await fn(req, a)) ?? { ok: true })
   } catch (error) {
@@ -399,7 +400,7 @@ router.post('/actuaciones/:id/datos-faltantes', param('id').isInt(), body('detal
   paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({ actuacionId: a.id, detalle: req.body.detalle, para: req.body.para, usuarioId: req.usuario!.id })))
 
 router.post('/actuaciones/:id/insumos', param('id').isInt(), body('insumos').isArray({ min: 1 }).withMessage('Indique al menos un insumo'), manejarErroresEntrada,
-  paso('RESPONSABLE', (req, a) => flujo.solicitarInsumos({ actuacionId: a.id, insumos: req.body.insumos, usuarioId: req.usuario!.id })))
+  paso('INSUMOS', (req, a) => flujo.solicitarInsumos({ actuacionId: a.id, insumos: req.body.insumos, usuarioId: req.usuario!.id })))
 
 router.post('/actuaciones/:id/insumos/recibidos', param('id').isInt(), body('insumoIds').isArray(), body('fecha').optional({ values: 'falsy' }).isISO8601(), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.confirmarInsumos({

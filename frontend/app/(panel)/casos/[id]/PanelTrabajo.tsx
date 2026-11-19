@@ -24,6 +24,7 @@ type Props = {
   archivos: ArchivoCaso[]
   puedeTrabajar: boolean
   puedeRevisar: boolean
+  puedePedirInsumos: boolean
   puedeCerrar: boolean
   motivosCierre: string[]
   tipoEscrito: string
@@ -32,19 +33,14 @@ type Props = {
 // Cómo se nombra cada documento dentro de la versión del escrito
 const PREFIJO_DOC: Record<string, string> = { ANEXO: "Anexo · ", RESPUESTA: "Respuesta de la entidad · " }
 
-const TEXTO_EXPEDIENTE = "Copia completa del expediente judicial del proceso (escrito de tutela o de la acción, auto admisorio, anexos y actuaciones posteriores), tal como obra en el despacho."
-
 const ESTADOS_ESCRITO: Record<string, string> = {
   BORRADOR: "En elaboración", EN_REVISION: "Con el revisor", AJUSTE_INTERNO: "Ajuste pedido por el revisor",
   ENTREGADO: "Entregado", DEVUELTO: "Devuelto por la entidad", APROBADO: "Aprobado"
 }
 
-export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
+export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "devolverAux" | "respuesta" | "radicacion" | "cierre">("")
-  // Texto con el que abre la solicitud de datos faltantes (el del expediente viene ya escrito)
-  const [textoDatos, setTextoDatos] = useState("")
-  const pedirDatos = (texto: string) => { setTextoDatos(texto); setAbierto(abierto === "datos" && textoDatos === texto ? "" : "datos") }
   const cerrada = a.estado === "CERRADA"
 
   const ejecutar = (paso: string, cuerpo: Record<string, unknown>, mensaje: string, confirmar?: string) => {
@@ -138,21 +134,19 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Insumos y datos faltantes</h4>
           {puedeTrabajar && !cerrada && (
             <div className="flex flex-wrap gap-2">
-              <button className="boton-secundario py-1.5 text-xs" onClick={() => pedirDatos("")}>Pedir datos faltantes</button>
-              {/* El manual (§4) no deja escribirle al juzgado en nombre de la entidad: el expediente se le pide al cliente */}
-              <button className="boton-secundario py-1.5 text-xs" onClick={() => pedirDatos(TEXTO_EXPEDIENTE)}>Pedir expediente del juzgado</button>
-              <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "insumos" ? "" : "insumos")}>Pedir insumos</button>
+              <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "datos" ? "" : "datos")}>Pedir datos faltantes</button>
+              {puedePedirInsumos && <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "insumos" ? "" : "insumos")}>Pedir insumos</button>}
               <SubirArchivos actuacionId={a.id} tipos={["INSUMO", "SOPORTE"]} />
             </div>
           )}
         </div>
         {abierto === "datos" && (
           <form action={d => ejecutar("datos-faltantes", { detalle: d.get("detalle") }, "Solicitud de datos faltantes enviada")} className="space-y-2">
-            <textarea key={textoDatos} name="detalle" required rows={4} defaultValue={textoDatos} placeholder="Qué información falta (sale en el hilo de la asignación)" className="campo" />
+            <textarea name="detalle" required rows={4} placeholder="Qué información falta (sale en el hilo de la asignación)" className="campo" />
             <button disabled={pendiente} className="boton-primario">Enviar solicitud</button>
           </form>
         )}
-        {abierto === "insumos" && <FormInsumos pendiente={pendiente} enviar={insumos => ejecutar("insumos", { insumos }, "Solicitud de insumos enviada")} />}
+        {abierto === "insumos" && puedePedirInsumos && <FormInsumos pendiente={pendiente} enviar={insumos => ejecutar("insumos", { insumos }, "Solicitud de insumos enviada")} />}
         {a.insumos.length === 0 && <p className="text-slate-500">Sin insumos pedidos.</p>}
         {a.insumos.length > 0 && (
           <ul className="divide-y divide-slate-100">

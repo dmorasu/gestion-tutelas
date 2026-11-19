@@ -161,6 +161,10 @@ export const asociarCorreo = async (correo: Correo) => {
   // 2. Por el número interno del caso y, si no, por el radicado (respondió en otro hilo o escribió de nuevo)
   const numeros = numerosInternos(correo)
   let casos = numeros.length ? await Caso.findAll({ where: { numeroInterno: numeros }, attributes: ['id'] }) : []
+  // El radicado del asunto manda: el cuerpo y los PDF suelen citar otros procesos (la tutela de
+  // origen, un fallo anterior) y, si dos de ellos son casos, el correo quedaría sin asociar
+  const delAsunto = leerAsunto(correo.asunto).radicado
+  if (!casos.length && delAsunto) casos = await Caso.findAll({ where: { radicado: delAsunto }, attributes: ['id'] })
   if (!casos.length && correo.radicados.length) casos = await Caso.findAll({ where: { radicado: correo.radicados }, attributes: ['id'] })
   if (casos.length !== 1) return
   const caso = casos[0]

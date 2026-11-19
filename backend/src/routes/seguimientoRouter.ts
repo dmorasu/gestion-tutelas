@@ -7,6 +7,7 @@ import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { alcanceActuaciones } from '../services/permisosActuacion'
 import { tableroDiario, calcularAns } from '../services/indicadores'
+import { cierreDelDia } from '../services/cierreDia'
 import { detectarAlertas, emitirAlerta, descartarAlerta, NOMBRES_ALERTA } from '../services/alertas'
 import { generarInforme, periodoAnterior } from '../services/informes'
 import { cargarArchivoMaestro } from '../services/archivoMaestro'
@@ -24,6 +25,15 @@ const carga = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 *
 router.get('/tablero', async (req, res) => {
   try {
     res.json(await tableroDiario(alcanceActuaciones(req)))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Cierre del día: lo que respondió cada persona y en qué casos (cada perfil, lo que ve)
+router.get('/cierre-dia', query('dia').optional().isISO8601(), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await cierreDelDia(alcanceActuaciones(req), req.query.dia ? String(req.query.dia).slice(0, 10) : undefined))
   } catch (error) {
     responderError(res, error)
   }

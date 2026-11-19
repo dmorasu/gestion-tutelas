@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, ChartColumn, UserCheck, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, ChartColumn, UserCheck, CalendarCheck, type LucideIcon } from "lucide-react"
 import { fetchApi } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { NOMBRES_ROLES, modulosPermitidos, soloConsulta, tieneRol, type CodigoRol } from "@/src/auth/permisos"
@@ -11,6 +11,7 @@ const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string
   "/correos": { Icono: Inbox, fondo: "from-cyan-400 to-sky-600", sombra: "shadow-cyan-500/30", borde: "hover:border-cyan-300", halo: "bg-cyan-400" },
   "/casos": { Icono: LayoutList, fondo: "from-orange-400 to-red-600", sombra: "shadow-orange-500/30", borde: "hover:border-orange-300", halo: "bg-orange-400" },
   "/seguimiento": { Icono: Gauge, fondo: "from-slate-600 to-slate-900", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-500" },
+  "/cierre-dia": { Icono: CalendarCheck, fondo: "from-slate-500 to-slate-800", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-400" },
   "/tablero": { Icono: ChartColumn, fondo: "from-blue-400 to-indigo-600", sombra: "shadow-blue-500/30", borde: "hover:border-blue-300", halo: "bg-blue-400" },
   "/asistencia": { Icono: UserCheck, fondo: "from-lime-400 to-green-600", sombra: "shadow-lime-500/30", borde: "hover:border-lime-300", halo: "bg-lime-400" },
   "/indicadores": { Icono: Target, fondo: "from-emerald-400 to-teal-600", sombra: "shadow-emerald-500/30", borde: "hover:border-emerald-300", halo: "bg-emerald-400" },

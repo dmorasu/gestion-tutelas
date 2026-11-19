@@ -22,7 +22,7 @@ New-Mailbox -Shared -Name "Insumos tutelas" -PrimarySmtpAddress insumosdmc@gomez
 New-Mailbox -Shared -Name "Entregas tutelas" -PrimarySmtpAddress entregasdmc@gomezpinedaabogados.com
 
 # El cliente escribe desde fuera de la firma: los buzones deben aceptar correo externo
-"asignacionsdmc","insumosdmc","entrega" | ForEach-Object {
+"asignacionsdmc","insumosdmc","entregasdmc" | ForEach-Object {
   Set-Mailbox "$_@gomezpinedaabogados.com" -RequireSenderAuthenticationEnabled $false
 }
 ```

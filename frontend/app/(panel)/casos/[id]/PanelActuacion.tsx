@@ -7,6 +7,7 @@ import Semaforo from "@/components/ui/Semaforo"
 import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
+import RutaActuacion from "./componentes/RutaActuacion"
 import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal, yaEntregada } from "@/src/lib/formato"
 
 export type Responsable = { id: number, nombre: string }
@@ -18,17 +19,18 @@ export type ActuacionDetalle = {
   origenImpugnacion: string | null, datosFaltantesPendientes: boolean, decisiones: DecisionFila[], tipoPeticion: string | null,
   auxiliar: Responsable | null, revisor: Responsable | null, equipo: { id: number, nombre: string } | null
   insumos: Insumo[], escritos: EscritoFila[]
+  fechaAsumida?: string | null, fechaCierre?: string | null, radicaciones?: { fechaRadicacion: string }[]
 }
 
 type Props = {
   casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number,
   auxiliares: Responsable[], revisores: Responsable[], archivos: ArchivoCaso[]
-  puedeTrabajar: boolean, puedeRevisar: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
+  puedeTrabajar: boolean, puedeRevisar: boolean, puedePedirInsumos: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
@@ -79,6 +81,8 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           {puedeEditar && !editando && <button className="boton-secundario py-1.5" onClick={() => setEditando(true)}>Editar</button>}
         </div>
       </div>
+
+      <RutaActuacion actuacion={a} archivos={archivos} />
 
       {!editando ? (
         <dl className="mt-4 grid sm:grid-cols-3 gap-x-6 gap-y-3 text-sm">
@@ -177,6 +181,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         archivos={archivos}
         puedeTrabajar={puedeTrabajar}
         puedeRevisar={puedeRevisar}
+        puedePedirInsumos={puedePedirInsumos}
         puedeCerrar={puedeCerrar}
         motivosCierre={motivosCierre}
         tipoEscrito={tipoEscrito(a)}

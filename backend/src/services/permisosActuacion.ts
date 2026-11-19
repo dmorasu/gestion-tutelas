@@ -33,6 +33,12 @@ export const exigirResponsable = (req: Request, a: Responsables) => {
   if (a.auxiliarId !== req.usuario!.id && !esRevisorDe(req, a)) throw new ErrorNegocio('Esta actuación no está asignada a usted', 403)
 }
 
+// Los insumos los piden solo el auxiliar de la actuación y el revisor (decisión de la firma): son
+// quienes saben qué necesita el escrito. Ni asistencia ni coordinación los piden por ellos
+export const exigirQuienPideInsumos = (req: Request, a: Responsables) => {
+  if (a.auxiliarId !== req.usuario!.id && !esRevisorDe(req, a)) throw new ErrorNegocio('Los insumos los piden el auxiliar jurídico de la actuación o su revisor', 403)
+}
+
 export const exigirRevisor = (req: Request, a: Responsables) => {
   if (tieneRol(req, ROLES.COORDINADOR)) return
   if (!esRevisorDe(req, a)) throw new ErrorNegocio('Solo el revisor del equipo o el coordinador pueden hacer esto', 403)
