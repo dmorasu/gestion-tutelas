@@ -25,10 +25,12 @@ const alternar = <T,>(lista: T[], x: T) => (lista.includes(x) ? lista.filter(y =
 
 // ── Datos faltantes: la lista general (documentos de la acción) más "otros" ──
 export function FormDatosFaltantes({ generales, textoInicial, pendiente, enviar }: {
-  generales: ItemMatriz[], textoInicial: string, pendiente: boolean, enviar: (items: string[], otros: string) => void
+  generales: ItemMatriz[], textoInicial: string, pendiente: boolean, enviar: (items: string[], otros: string, adjuntarExpediente: boolean) => void
 }) {
   const [marcados, setMarcados] = useState<string[]>([])
   const [otros, setOtros] = useState(textoInicial)
+  // El modelo de la firma adjunta el borrador de solicitud del expediente al despacho (1.1)
+  const [adjuntar, setAdjuntar] = useState(true)
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 p-3">
       <div className="grid gap-0.5 sm:grid-cols-2">
@@ -38,7 +40,10 @@ export function FormDatosFaltantes({ generales, textoInicial, pendiente, enviar 
         <label className="etiqueta">Otros (uno por línea)</label>
         <textarea value={otros} onChange={e => setOtros(e.target.value)} rows={2} className="campo" />
       </div>
-      <button disabled={pendiente || (!marcados.length && !otros.trim())} onClick={() => enviar(marcados, otros)} className="boton-primario">
+      <label className="flex items-center gap-2 text-xs text-slate-600">
+        <input type="checkbox" checked={adjuntar} onChange={e => setAdjuntar(e.target.checked)} /> Adjuntar el borrador de solicitud del expediente al despacho
+      </label>
+      <button disabled={pendiente || (!marcados.length && !otros.trim())} onClick={() => enviar(marcados, otros, adjuntar)} className="boton-primario">
         Enviar solicitud{marcados.length ? ` (${marcados.length + (otros.trim() ? otros.trim().split("\n").length : 0)})` : ""}
       </button>
     </div>

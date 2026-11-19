@@ -83,6 +83,10 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
           <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{tipoEscrito}</h4>
           <div className="flex flex-wrap gap-2">
             {puedeSubirEscrito && <SubirArchivos actuacionId={a.id} tipos={["ESCRITO", "ANEXO"]} />}
+            {/* La ficha se genera sola al entregar; este botón es para revisarla antes */}
+            {puedeTrabajar && !cerrada && (
+              <button disabled={pendiente} className="boton-secundario py-1.5 text-xs" onClick={() => ejecutar("ficha", {}, "Ficha técnica generada: quedó en los documentos")}>Generar ficha técnica</button>
+            )}
             {puedeTrabajar && enElaboracion && (
               <button disabled={pendiente} className="boton-primario py-1.5 text-xs" onClick={() => ejecutar("revision", {}, "Enviado al revisor")}>Enviar a revisión</button>
             )}
@@ -161,7 +165,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
         </div>
         {abierto === "datos" && puedePedirDatos && (
           <FormDatosFaltantes key={textoDatos} generales={matriz.filter(i => i.grupo === GRUPO_GENERAL && i.clase === "DOCUMENTO")} textoInicial={textoDatos} pendiente={pendiente}
-            enviar={(items, otros) => ejecutar("datos-faltantes", { items, otros }, "Solicitud de datos faltantes enviada")} />
+            enviar={(items, otros, adjuntarExpediente) => ejecutar("datos-faltantes", { items, otros, adjuntarExpediente }, "Solicitud de datos faltantes enviada")} />
         )}
         {abierto === "insumos" && puedePedirInsumos && <FormInsumosMatriz matriz={matriz} pendiente={pendiente} enviar={insumos => ejecutar("insumos", { insumos }, "Solicitud de insumos enviada")} />}
         {(a.datosSolicitados ?? []).length > 0 && (

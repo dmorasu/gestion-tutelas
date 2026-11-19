@@ -15,6 +15,7 @@ import { TIPOS_RELACION } from '../models/casos'
 import { crearPqrsLigada } from '../services/pqrs'
 import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, exigirQuienReasigna, responsablesDelRegistro, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
+import { generarFicha } from '../services/documentosWord'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
 import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
@@ -516,8 +517,16 @@ router.post('/actuaciones/:id/correo', param('id').isInt(), body('buzon').isIn(B
 router.post('/actuaciones/:id/datos-faltantes', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(),
   body('items').optional().isArray(), body('otros').optional({ values: 'null' }).isString().isLength({ max: 4000 }), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({
-    actuacionId: a.id, items: (req.body.items ?? []).map(String), otros: req.body.otros ?? req.body.detalle ?? null, para: req.body.para, usuarioId: req.usuario!.id
+    actuacionId: a.id, items: (req.body.items ?? []).map(String), otros: req.body.otros ?? req.body.detalle ?? null, para: req.body.para,
+    adjuntarExpediente: req.body.adjuntarExpediente !== false, usuarioId: req.usuario!.id
   })))
+
+// Ficha técnica del caso en Word (modelo de la firma), a pedido: queda en la carpeta del escrito vigente
+router.post('/actuaciones/:id/ficha', param('id').isInt(), manejarErroresEntrada,
+  paso('RESPONSABLE', async (req, a) => {
+    const archivo = await generarFicha({ actuacionId: a.id, usuarioId: req.usuario!.id })
+    return { id: archivo.id, nombre: archivo.nombre }
+  }))
 
 router.post('/actuaciones/:id/insumos', param('id').isInt(), body('insumos').isArray({ min: 1 }).withMessage('Indique al menos un insumo'), manejarErroresEntrada,
   paso('INSUMOS', (req, a) => flujo.solicitarInsumos({ actuacionId: a.id, insumos: req.body.insumos, usuarioId: req.usuario!.id })))

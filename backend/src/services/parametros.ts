@@ -42,6 +42,13 @@ export const PARAMETROS_BASE = {
   HORAS_ALTO: { valor: 48, fuente: 'Manual §13', descripcion: 'Alto: vence en menos de estas horas (y más que el crítico)' },
   // Reunión 18-nov: los modelos de la firma nombran a la entidad; el nombre no va en el código (CLAUDE.md)
   ENTIDAD_NOMBRE: { valor: '', descripcion: 'Nombre de la entidad como va en los correos al cliente (por ejemplo, en la solicitud de insumos). Vacío = "la entidad"' },
+  // Datos de los escritos que genera la app (solicitud del expediente al despacho, modelo 1.1)
+  ENTIDAD_NOMBRE_LEGAL: { valor: '', descripcion: 'Nombre completo de la entidad accionada como va en los escritos (por ejemplo, "Distrito … – Secretaría de …")' },
+  ENTIDAD_NIT: { valor: '', descripcion: 'NIT de la entidad para los escritos' },
+  APODERADO_NOMBRE: { valor: '', descripcion: 'Apoderado de la entidad que firma los escritos generados' },
+  APODERADO_CEDULA: { valor: '', descripcion: 'Cédula del apoderado' },
+  APODERADO_TARJETA: { valor: '', descripcion: 'Tarjeta profesional del apoderado' },
+  APODERADO_CORREO: { valor: '', descripcion: 'Correo de notificaciones del apoderado' },
   PREFIJO_ASUNTO: { valor: process.env.PREFIJO_ASUNTO || 'GPA', fuente: 'Correo del cliente §4', descripcion: 'Primer bloque del asunto de los correos de salida, entre corchetes' },
   // Destinatarios que define el cliente en la fase inicial (manual §9 y §10.2): se llenan en Parámetros
   CORREOS_INSUMOS: { valor: [] as string[], descripcion: 'A quién se piden los insumos (enlace operativo del cliente)' },

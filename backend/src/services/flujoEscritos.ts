@@ -1,8 +1,9 @@
 import { Op } from 'sequelize'
 import { Actuacion, Archivo, Caso, Correo, Devolucion, Escrito, ItemCatalogo, RadicacionJuzgado, SolicitudInsumo } from '../models'
-import { enviarPlantilla, listaCorreo } from './buzon/correosSalida'
+import { enviarPlantilla, listaCorreo, NOTA_EXPEDIENTE } from './buzon/correosSalida'
+import { generarFicha, solicitudExpediente } from './documentosWord'
 import { compartirCarpeta } from './almacenamiento'
-import { carpetaActuacion } from './expediente'
+import { carpetaActuacion, guardarEnExpediente } from './expediente'
 import { asignacionEfectiva, finDeDiasHabilesSiguientes } from './plazos'
 import { parametro } from './parametros'
 import { recalcularPlazos } from './registroCasos'
@@ -41,17 +42,26 @@ const unirItems = (items: string[] = [], otros?: string | null) =>
 
 // ── Datos faltantes de la asignación (buzón de asignaciones, en el hilo de la asignación) ──
 // Reunión 18-nov: los pide la asistencia, marcando la lista general de la matriz de insumos
-export const solicitarDatosFaltantes = async (d: { actuacionId: number, items?: string[], otros?: string | null, para?: string[], usuarioId: number }) => {
+export const solicitarDatosFaltantes = async (d: { actuacionId: number, items?: string[], otros?: string | null, para?: string[], adjuntarExpediente?: boolean, usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
   const pedidos = unirItems(d.items, d.otros)
   if (!pedidos.length) throw new ErrorNegocio('Marque o escriba qué datos faltan')
   const asignacion = await Correo.findOne({ where: { actuacionId: a.id, proposito: 'ASIGNACION' }, attributes: ['id', 'remitente'] })
   const para = d.para?.length ? d.para : asignacion?.remitente ? [asignacion.remitente] : []
   if (!para.length) throw new ErrorNegocio('La asignación no llegó por correo: indique a quién pedir los datos')
+  // Modelo de la firma: va el borrador de solicitud del expediente al despacho (1.1), que también queda
+  // en el expediente del caso
+  const borrador = d.adjuntarExpediente !== false ? await solicitudExpediente(a.id) : null
   const correo = await enviarPlantilla({
-    codigo: 'SOLICITUD_DATOS_FALTANTES', actuacionId: a.id, para, responderACorreoId: asignacion?.id ?? null, extra: { detalle: listaCorreo(pedidos) }, usuarioId: d.usuarioId
+    codigo: 'SOLICITUD_DATOS_FALTANTES', actuacionId: a.id, para, responderACorreoId: asignacion?.id ?? null,
+    extra: { detalle: listaCorreo(pedidos), notaExpediente: borrador ? NOTA_EXPEDIENTE : '' }, adjuntos: borrador ? [borrador] : [], usuarioId: d.usuarioId
   })
   exigirEnviado(correo)
+  if (borrador) {
+    const archivo = await guardarEnExpediente({ actuacionId: a.id, sub: 'Soportes', ...borrador, tipo: 'SOPORTE', usuarioId: d.usuarioId })
+      .catch(error => { console.error('❌ Borrador del expediente al expediente del caso', error); return null })
+    await archivo?.update({ correoId: correo.id })
+  }
   // D6: sin los insumos mínimos de la asignación el ANS no corre hasta que lleguen
   const yaPedidos = new Set(a.datosSolicitados.map(x => x.nombre))
   await a.update({ datosFaltantesPendientes: true, datosSolicitados: [...a.datosSolicitados, ...pedidos.filter(x => !yaPedidos.has(x)).map(nombre => ({ nombre, recibido: false }))] })
@@ -215,6 +225,8 @@ export const entregar = async (d: { actuacionId: number, documentos?: string[], 
   const cc = correosDe('CORREOS_COPIA_ENTREGA')
   if (!para.length) throw new ErrorNegocio('Falta el correo de la dependencia que recibe: configure CORREOS_ENTREGA en Parámetros')
 
+  // La ficha técnica va siempre con el escrito (modelo de entrega): se genera con los datos de este momento
+  await generarFicha({ actuacionId: a.id, escritoId: escrito.id, fechaEntrega: new Date(), entregados: [...documentos, ...anexos], usuarioId: d.usuarioId })
   const carpeta = carpetaActuacion(a.caso!, a.etapa, `Escritos/V${escrito.version}`)
   const { enlace } = await compartirCarpeta(carpeta, [...para, ...cc], parametro<number>('DIAS_VIGENCIA_ENLACE'))
   const correo = await enviarPlantilla({

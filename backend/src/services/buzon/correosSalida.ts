@@ -37,7 +37,7 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
   },
   SOLICITUD_DATOS_FALTANTES: {
     asunto: `${ASUNTO_BASE} - SOLICITUD DATOS FALTANTES`,
-    cuerpo: `Cordial saludo.\n\nUna vez revisada la documentación remitida respecto de la acción constitucional de la referencia, evidenciamos que no se cuenta con la totalidad de los documentos o la información necesarios para efectuar la revisión y elaborar el escrito correspondiente.\n\n{{ficha}}\n\nEn consecuencia, agradecemos remitir, según corresponda, los siguientes documentos faltantes:\n\n{{detalle}}\n\nAgradecemos remitir lo solicitado lo antes posible, con el fin de contar con los elementos necesarios para efectuar el análisis del caso y preparar oportunamente el escrito correspondiente.\n\n${FIRMA}`
+    cuerpo: `Cordial saludo.\n\nUna vez revisada la documentación remitida respecto de la acción constitucional de la referencia, evidenciamos que no se cuenta con la totalidad de los documentos o la información necesarios para efectuar la revisión y elaborar el escrito correspondiente.\n\n{{ficha}}\n\nEn consecuencia, agradecemos remitir, según corresponda, los siguientes documentos faltantes:\n\n{{detalle}}\n\n{{notaExpediente}}\n\nAgradecemos remitir lo solicitado lo antes posible, con el fin de contar con los elementos necesarios para efectuar el análisis del caso y preparar oportunamente el escrito correspondiente.\n\n${FIRMA}`
   },
   ACUSE_DATOS_FALTANTES: {
     asunto: `${ASUNTO_BASE} - CONFIRMACIÓN RECIBIDO INFORMACIÓN FALTANTE`,
@@ -68,7 +68,7 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
 export const MARCADORES = [
   'prefijo', 'prefijoAsunto', 'criticidad', 'estado', 'radicado', 'radicadoFormato', 'numeroInterno', 'accionante', 'despacho', 'actuacion', 'etapa', 'tipoAccion',
   'vence', 'tiempoRestante', 'venceInsumos', 'fechaAsignacion', 'entidad', 'derechos', 'hechos', 'auxiliar', 'revisor', 'enlace', 'detalle', 'documentos', 'anexos',
-  'version', 'fechaEntrega', 'cantidad', 'tipoAlerta', 'ficha'
+  'version', 'fechaEntrega', 'cantidad', 'tipoAlerta', 'notaExpediente', 'ficha'
 ] as const
 
 // Inserta las que falten y pasa al texto vigente las que siguen siendo el borrador de la firma: las que
@@ -160,6 +160,9 @@ const prefijoAsunto = () => {
 }
 const nombreEntidad = () => (parametro<string>('ENTIDAD_NOMBRE') ?? '').trim() || 'la entidad'
 
+// Frase del modelo de datos faltantes cuando va el borrador de solicitud del expediente (modelo 1.1)
+export const NOTA_EXPEDIENTE = 'Adjunto se remite borrador de solicitud del expediente digital para presentar ante el Despacho, con su respectivo poder, en caso de requerirlo.'
+
 // Lista de ítems para el cuerpo ("- …", que el HTML vuelve viñetas)
 export const listaCorreo = (items: string[], vacio = 'Ninguno.') => (items.length ? items.map(x => `- ${x}`).join('\n') : vacio)
 
@@ -170,6 +173,7 @@ const ejemplo = (codigo: CodigoPlantilla): Record<string, string> => ({
   accionante: 'Nombre del accionante', despacho: 'Juzgado 1 Civil del Circuito', actuacion: 'CONTESTACIÓN', etapa: 'Contestación', tipoAccion: 'DE TUTELA',
   vence: '20/11/2026 17:00', tiempoRestante: '2 días', venceInsumos: '19/11/2026 15:00', fechaAsignacion: '17/11/2026 09:12', entidad: nombreEntidad(),
   derechos: 'petición', hechos: 'al parecer fue radicada una petición el 24 de septiembre de 2026, de la que el accionante manifiesta no haber recibido respuesta.',
+  notaExpediente: NOTA_EXPEDIENTE,
   auxiliar: 'Laura Gómez', revisor: 'Andrés Rojas', version: codigo === 'ENTREGA_V2' ? '2' : '1', fechaEntrega: '19/11/2026 11:40', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER',
   documentos: listaCorreo(['Ficha técnica del caso', 'Contestación de acción de tutela']), anexos: listaCorreo(['Comparendo', 'Constancia de notificación por aviso']),
   // Solo las entregas llevan enlace (y con él, el botón)
@@ -187,7 +191,7 @@ export const vistaPrevia = (codigo: CodigoPlantilla, base: BasePlantilla) =>
   renderizar(codigo, base, ejemplo(codigo), codigo !== 'ACUSE_PAQUETE', logoDataUri())
 
 // Tiempo que falta para el vencimiento, como lo pide el modelo de entrega ("1 día y 3 horas")
-const tiempoRestante = (vence: Date | null) => {
+export const tiempoRestante = (vence: Date | null) => {
   if (!vence) return ''
   const horas = Math.round((vence.getTime() - Date.now()) / 3_600_000)
   if (horas <= 0) return 'vencido'
@@ -243,6 +247,7 @@ export const valoresDeActuacion = async (actuacionId: number, extra: Record<stri
     anexos: '',
     version: '1',
     fechaEntrega: '',
+    notaExpediente: '',
     ...extra
   }
   return { actuacion: a, valores }
@@ -259,6 +264,8 @@ export type DatosEnvio = {
   // Correo (id en la app) al que se responde: el envío queda en su mismo hilo
   responderACorreoId?: number | null
   extra?: Record<string, string>
+  // Documentos que viajan con el correo (el borrador de solicitud del expediente, por ejemplo)
+  adjuntos?: { nombre: string, tipoMime: string, contenido: Buffer }[]
   usuarioId: number | null
 }
 
@@ -299,7 +306,7 @@ export const enviarPlantilla = async (d: DatosEnvio) => {
     // Solo se responde en el hilo si el original entró por el mismo buzón (Graph exige su id allí)
     const responderA = original?.graphId && original.buzon === buzon ? original.graphId : undefined
     const logo = logoIncrustado()
-    const enviado = await enviarCorreo(buzon, { para, cc: d.cc, asunto, html, responderA, adjuntos: logo ? [logo] : [] })
+    const enviado = await enviarCorreo(buzon, { para, cc: d.cc, asunto, html, responderA, adjuntos: [...(logo ? [logo] : []), ...(d.adjuntos ?? [])] })
     return Correo.create({ ...registro, estado: 'ENVIADO', graphId: enviado.graphId, conversationId: enviado.conversationId, fechaCorreo: enviado.enviadoEn })
   } catch (error) {
     // Queda el registro con el error para reintentar desde el caso: no se pierde el intento
