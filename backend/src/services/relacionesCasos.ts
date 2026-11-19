@@ -182,9 +182,12 @@ export const unirCasos = async (d: { principalId: number, absorbidoId: number, m
   if (!d.motivo.trim()) throw new ErrorNegocio('Indique por qué se unen los casos')
   if (d.principalId === d.absorbidoId) throw new ErrorNegocio('Es el mismo caso')
   const archivosMovidos = await db.transaction(async transaction => {
+    // Primero se bloquean las dos filas y después se leen con sus partes y actuaciones: Postgres no
+    // deja FOR UPDATE sobre una consulta con uniones externas
+    await Caso.findAll({ where: { id: [d.principalId, d.absorbidoId] }, attributes: ['id'], order: [['id', 'ASC']], transaction, lock: transaction.LOCK.UPDATE })
     const [principal, absorbido] = await Promise.all([d.principalId, d.absorbidoId].map(id => Caso.findByPk(id, {
       include: [{ model: Parte, required: false }, { model: Actuacion, attributes: ['id', 'etapa', 'estado', 'fechaAsignacion'], required: false }],
-      transaction, lock: transaction.LOCK.UPDATE
+      transaction
     })))
     if (!principal || !absorbido) throw new ErrorNegocio('El caso no existe', 404)
     if (principal.tipoSolicitud !== absorbido.tipoSolicitud) throw new ErrorNegocio('Solo se unen casos del mismo tipo (tutela con tutela, PQRS con PQRS)')
