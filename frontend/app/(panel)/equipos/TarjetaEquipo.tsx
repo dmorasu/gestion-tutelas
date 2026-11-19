@@ -11,7 +11,8 @@ import Avatar from "@/components/ui/Avatar"
 export type Persona = { id: number, nombre: string, rol: "REVISOR" | "AUXILIAR", equipoId: number | null, equipo: string | null }
 type Props = { equipo: { id: number, nombre: string, etapas: string[], activo: boolean }, miembros: Persona[], otros: Persona[] }
 
-export const ETAPAS_EQUIPO = Object.entries(ETAPAS).filter(([k]) => k !== "PQRS")
+// La nulidad no es de ningún equipo: se reparte entre todos los auxiliares hasta que se clasifica
+export const ETAPAS_EQUIPO = Object.entries(ETAPAS).filter(([k]) => k !== "PQRS" && k !== "NULIDAD")
 
 export default function TarjetaEquipo({ equipo, miembros, otros }: Props) {
   const [pendiente, iniciar] = useTransition()

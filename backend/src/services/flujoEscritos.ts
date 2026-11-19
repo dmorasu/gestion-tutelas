@@ -1,15 +1,15 @@
 import { Op } from 'sequelize'
-import { Actuacion, Archivo, Caso, Correo, Devolucion, Escrito, ItemCatalogo, RadicacionJuzgado, SolicitudInsumo } from '../models'
+import { Actuacion, Archivo, Caso, Correo, Decision, Devolucion, Escrito, HistorialCaso, ItemCatalogo, RadicacionJuzgado, SolicitudInsumo, Usuario } from '../models'
 import { enviarPlantilla, listaCorreo, NOTA_EXPEDIENTE } from './buzon/correosSalida'
 import { generarFicha, solicitudExpediente } from './documentosWord'
-import { compartirCarpeta } from './almacenamiento'
+import { carpetaCaso, compartirCarpeta, moverArchivo } from './almacenamiento'
 import { carpetaActuacion, guardarEnExpediente } from './expediente'
 import { asignacionEfectiva, finDeDiasHabilesSiguientes } from './plazos'
 import { parametro } from './parametros'
 import { recalcularPlazos } from './registroCasos'
-import { revisorDeEquipo } from './reparto'
+import { repartir, revisorDeEquipo } from './reparto'
 import { textoFechaHora } from '../utils/fechaColombia'
-import { tipoEscrito, DOCUMENTOS_ENTREGA, type DocumentoEntrega } from './constantes'
+import { tipoEscrito, DOCUMENTOS_ENTREGA, ETAPAS_PROCESO, NOMBRES_ETAPAS, type DocumentoEntrega, type Etapa } from './constantes'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -174,6 +174,7 @@ const exigirInsumosSiEmergencia = async (a: Actuacion) => {
 // El escrito que se está armando; si no hay o el último fue devuelto, empieza la versión siguiente
 export const escritoEnElaboracion = async (actuacionId: number) => {
   const a = await cargarActuacion(actuacionId)
+  if (a.etapa === 'NULIDAD') throw new ErrorNegocio('Clasifique primero en qué etapa queda la nulidad')
   await exigirInsumosSiEmergencia(a)
   const ultimo = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']] })
   if (ultimo && ABIERTOS.includes(ultimo.estado)) return ultimo
@@ -313,4 +314,54 @@ export const cerrarActuacion = async (d: { actuacionId: number, motivo: string }
   // Sin otras actuaciones abiertas, el caso también se cierra con la misma causal
   const abiertas = await Actuacion.count({ where: { casoId: a.casoId, estado: { [Op.ne]: 'CERRADA' } } })
   if (!abiertas) await Caso.update({ estado: 'CERRADO', fechaCierre: ahora, motivoCierre: d.motivo.trim().slice(0, 200) }, { where: { id: a.casoId }, individualHooks: true })
+}
+
+// =====================================
+// NULIDAD (reunión 18-nov)
+// El auxiliar que la recibió revisa el caso y decide en qué etapa queda el radicado. La actuación pasa a
+// esa etapa y se reparte de nuevo al equipo que la atiende (puede tocarle a él mismo); sus documentos van
+// a la carpeta de la etapa. La fecha de asignación no cambia: el ANS cuenta desde que llegó la nulidad
+// =====================================
+export const clasificarNulidad = async (d: { actuacionId: number, etapa: Etapa, nota?: string | null, usuario: { id: number, nombre: string } }) => {
+  const a = await cargarActuacion(d.actuacionId)
+  if (a.etapa !== 'NULIDAD') throw new ErrorNegocio('Esta actuación no es una nulidad por clasificar')
+  if (!(ETAPAS_PROCESO as readonly string[]).includes(d.etapa)) throw new ErrorNegocio('Indique la etapa en que queda: contestación, impugnación, cumplimiento, requerimiento previo o desacato')
+  const abierta = await Actuacion.findOne({ where: { casoId: a.casoId, etapa: d.etapa, estado: { [Op.ne]: 'CERRADA' }, id: { [Op.ne]: a.id } }, attributes: ['id'] })
+  if (abierta) throw new ErrorNegocio(`El caso ya tiene abierta la etapa de ${NOMBRES_ETAPAS[d.etapa].toLowerCase()}: registre la nulidad como nota en esa actuación y cierre esta`)
+
+  const reparto = await repartir(d.etapa)
+  await a.update({
+    etapa: d.etapa, origenNulidad: true, fechaClasificacion: new Date(),
+    // Empieza de nuevo con quien atiende la etapa; si no hay auxiliares en ella, sigue con el actual
+    estado: 'POR_ASUMIR', fechaAsumida: null,
+    ...(reparto.auxiliarId ? reparto : {}),
+    fechaImpugnacion: d.etapa === 'IMPUGNACION' ? a.fechaAsignacion : null
+  })
+  await Caso.update({ etapaActual: d.etapa }, { where: { id: a.casoId }, individualHooks: true })
+  // D12: el cumplimiento atiende los fallos desfavorables que lo esperaban
+  if (d.etapa === 'CUMPLIMIENTO') {
+    const delCaso = await Actuacion.findAll({ where: { casoId: a.casoId }, attributes: ['id'] })
+    await Decision.update({ actuacionCumplimientoId: a.id }, { where: { requiereCumplimiento: true, actuacionCumplimientoId: null, actuacionId: delCaso.map(x => x.id) } })
+  }
+  await recalcularPlazos(a.id)
+  await HistorialCaso.create({
+    casoId: a.casoId, actuacionId: a.id, seccion: 'NULIDAD', accion: 'MODIFICADO',
+    cambios: [{ campo: 'Queda en', antes: 'Nulidad', despues: NOMBRES_ETAPAS[d.etapa] }, ...(d.nota?.trim() ? [{ campo: 'Nota', antes: null, despues: d.nota.trim().slice(0, 2000) }] : [])],
+    usuarioId: d.usuario.id, nombreUsuario: d.usuario.nombre, origen: 'Casos'
+  })
+
+  // Los documentos que llegaron con la nulidad pasan a la carpeta de la etapa (SharePoint va aparte:
+  // si falla, el archivo queda donde estaba y ligado a la actuación)
+  const anterior = `${carpetaCaso(a.caso!)}/${NOMBRES_ETAPAS.NULIDAD}/`
+  for (const archivo of await Archivo.findAll({ where: { actuacionId: a.id } })) {
+    if (!archivo.proveedor || !archivo.ruta?.startsWith(anterior)) continue
+    const sub = archivo.ruta.slice(anterior.length).split('/').slice(0, -1).join('/')
+    try {
+      await archivo.update(await moverArchivo({ proveedor: archivo.proveedor, ruta: archivo.ruta, itemId: archivo.itemId, webUrl: archivo.webUrl }, `${carpetaCaso(a.caso!)}/${NOMBRES_ETAPAS[d.etapa]}${sub ? `/${sub}` : ''}`))
+    } catch (error) {
+      console.error('❌ No se pudo mover el documento de la nulidad', archivo.id, error)
+    }
+  }
+  const auxiliar = reparto.auxiliarId ? await Usuario.findByPk(reparto.auxiliarId, { attributes: ['nombre'] }) : null
+  return { etapa: d.etapa, auxiliar: auxiliar?.nombre ?? null }
 }

@@ -205,6 +205,14 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
               </button>
             ))}
           </div>
+          {/* Reunión 18-nov: la nulidad es excepcional. La reparte el sistema a cualquier auxiliar con cupo,
+              que decide en qué etapa queda el radicado */}
+          <button type="button" onClick={() => setEtapa("NULIDAD")} aria-pressed={etapa === "NULIDAD"}
+            className={clsx("mt-2 w-full rounded-lg border border-dashed px-3 py-2 text-left transition sm:w-auto",
+              etapa === "NULIDAD" ? "border-slate-800 bg-slate-800 text-white" : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50")}>
+            <span className="text-xs font-semibold">Nulidad</span>
+            <span className={clsx("ml-2 text-[11px]", etapa === "NULIDAD" ? "text-slate-300" : "text-slate-500")}>Opción excepcional: el auxiliar define después en qué etapa queda</span>
+          </button>
         </div>
         {etapa === "IMPUGNACION" && (
           <div>

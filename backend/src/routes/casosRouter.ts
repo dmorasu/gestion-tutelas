@@ -8,7 +8,7 @@ import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { DOCUMENTOS_ENTREGA, DOCUMENTO_DE_ESCRITO, ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
+import { DOCUMENTOS_ENTREGA, DOCUMENTO_DE_ESCRITO, ETAPAS_PROCESO, ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
 import { normalizarRadicado, normalizarRadicadoPqrs, raizProceso } from '../utils/radicado'
 import { dondeRadicado, sugerirRelaciones, relacionesDe, decidirRelacion, relacionarManual, unirCasos, NOMBRES_RELACION } from '../services/relacionesCasos'
 import { TIPOS_RELACION } from '../models/casos'
@@ -520,6 +520,11 @@ router.post('/actuaciones/:id/datos-faltantes', requiereRol(ROLES.ASISTENTE, ROL
     actuacionId: a.id, items: (req.body.items ?? []).map(String), otros: req.body.otros ?? req.body.detalle ?? null, para: req.body.para,
     adjuntarExpediente: req.body.adjuntarExpediente !== false, usuarioId: req.usuario!.id
   })))
+
+// Nulidad (reunión 18-nov): quien la tiene decide en qué etapa queda y el caso pasa al equipo de esa etapa
+router.post('/actuaciones/:id/clasificar-nulidad', param('id').isInt(), body('etapa').isIn(ETAPAS_PROCESO).withMessage('Indique la etapa en que queda'),
+  body('nota').optional({ values: 'null' }).isString().isLength({ max: 2000 }), manejarErroresEntrada,
+  paso('RESPONSABLE', (req, a) => flujo.clasificarNulidad({ actuacionId: a.id, etapa: req.body.etapa, nota: req.body.nota, usuario: { id: req.usuario!.id!, nombre: req.usuario!.nombre } })))
 
 // Ficha técnica del caso en Word (modelo de la firma), a pedido: queda en la carpeta del escrito vigente
 router.post('/actuaciones/:id/ficha', param('id').isInt(), manejarErroresEntrada,

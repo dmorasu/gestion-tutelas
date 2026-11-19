@@ -40,7 +40,10 @@ const AJUSTES: string[] = [
   `ALTER TABLE solicitudes_insumos ADD COLUMN IF NOT EXISTS clase VARCHAR(12)`,
   `ALTER TABLE escritos ADD COLUMN IF NOT EXISTS "documentosEntregados" JSONB NOT NULL DEFAULT '[]'`,
   `ALTER TABLE escritos ADD COLUMN IF NOT EXISTS "anexosEntregados" JSONB NOT NULL DEFAULT '[]'`,
-  `ALTER TABLE plantillas_correo ADD COLUMN IF NOT EXISTS editada BOOLEAN NOT NULL DEFAULT false`
+  `ALTER TABLE plantillas_correo ADD COLUMN IF NOT EXISTS editada BOOLEAN NOT NULL DEFAULT false`,
+  // Nulidades
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "origenNulidad" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "fechaClasificacion" TIMESTAMPTZ`
 ]
 
 // Una tabla que aún no existe se salta: sync() la acaba de crear completa con el modelo

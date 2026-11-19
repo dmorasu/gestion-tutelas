@@ -50,7 +50,7 @@ const TIPOS_DOC: Record<string, string> = { ESCRITO: 'el escrito', ANEXO: 'un an
 
 const legible = (campo: string, valor: string | null) => {
   if (valor === null) return null
-  if (campo === 'Estado' || campo === 'Etapa actual') return ESTADOS_ACTUACION[valor] ?? NOMBRES_ETAPAS[valor as Etapa] ?? valor
+  if (campo === 'Estado' || campo === 'Etapa actual' || campo === 'Etapa') return ESTADOS_ACTUACION[valor] ?? NOMBRES_ETAPAS[valor as Etapa] ?? valor
   if (campo === 'Estado del escrito') return ESTADOS_ESCRITO[valor] ?? valor
   if (campo === 'Criticidad') return NOMBRES_CRITICIDAD[valor as Criticidad] ?? valor
   if (campo === 'Tipo de devolución') return TIPOS_DEVOLUCION[valor] ?? valor
@@ -109,6 +109,7 @@ const describir = (h: HistorialCaso, etapa: string | null): Pick<EventoCaso, 'ti
       const relacion = (cambio(c, 'Relación')?.despues ?? '').toLowerCase()
       return { tipo: 'RELACION', titulo: cambio(c, 'Decisión')?.despues === 'Descartada' ? `Descartó la relación con ${otro}` : `Relacionó con ${otro}${relacion ? ` (${relacion})` : ''}` }
     }
+    case 'NULIDAD': return { tipo: 'ESTADO', titulo: `Clasificó la nulidad: queda en ${(cambio(c, 'Queda en')?.despues ?? '').toLowerCase()}` }
     case 'UNION': return { tipo: 'RELACION', titulo: `Unió a este caso ${cambio(c, 'Caso unido')?.despues ?? 'otro caso'}` }
     default: return { tipo: 'DATOS', titulo: 'Cambio en el caso' }
   }

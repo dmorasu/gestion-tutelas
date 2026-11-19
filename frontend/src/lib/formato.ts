@@ -35,8 +35,12 @@ export const ETAPAS: Record<string, string> = {
   CUMPLIMIENTO: "Cumplimiento",
   REQUERIMIENTO_PREVIO: "Requerimiento previo",
   DESACATO: "Desacato",
+  NULIDAD: "Nulidad",
   PQRS: "PQRS"
 }
+
+// Etapas en que puede quedar una nulidad al clasificarla (y las que atienden los equipos)
+export const ETAPAS_PROCESO = ["ACCION", "IMPUGNACION", "CUMPLIMIENTO", "REQUERIMIENTO_PREVIO", "DESACATO"]
 
 export const TIPOS_SOLICITUD: Record<string, string> = { TUTELA: "Tutela", ACCION_CUMPLIMIENTO: "Acción de cumplimiento", PQRS: "PQRS" }
 
@@ -97,7 +101,7 @@ export const TIPOS_PETICION: Record<string, string> = { GENERAL: "Petición gene
 // El escrito de cada actuación (D9 y D14)
 export const TIPOS_ESCRITO: Record<string, string> = {
   ACCION: "Contestación de la acción", IMPUGNACION: "Escrito de impugnación", DESCORRE: "Respuesta a la impugnación del accionante (descorre)",
-  CUMPLIMIENTO: "Memorial de cumplimiento", REQUERIMIENTO_PREVIO: "Respuesta al requerimiento previo", DESACATO: "Respuesta al incidente de desacato", PQRS: "Respuesta a la PQRS"
+  CUMPLIMIENTO: "Memorial de cumplimiento", REQUERIMIENTO_PREVIO: "Respuesta al requerimiento previo", DESACATO: "Respuesta al incidente de desacato", NULIDAD: "Nulidad por clasificar", PQRS: "Respuesta a la PQRS"
 }
 export const tipoEscrito = (a: { etapa: string, origenImpugnacion?: string | null }) =>
   TIPOS_ESCRITO[a.etapa === "IMPUGNACION" && a.origenImpugnacion === "ACCIONANTE" ? "DESCORRE" : a.etapa] ?? "Escrito"

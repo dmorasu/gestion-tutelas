@@ -21,7 +21,7 @@ export type ArchivoCaso = DocumentoFila & { tipo: string, escritoId: number | nu
 
 type Props = {
   casoId: number
-  actuacion: { id: number, estado: string, insumos: Insumo[], escritos: EscritoFila[], datosSolicitados?: { nombre: string, recibido: boolean }[] }
+  actuacion: { id: number, etapa?: string, estado: string, insumos: Insumo[], escritos: EscritoFila[], datosSolicitados?: { nombre: string, recibido: boolean }[] }
   // Matriz de insumos (catálogo) y documentos de la entrega (modelos de la firma)
   matriz: ItemMatriz[]
   documentosEntrega: Record<string, string>
@@ -55,6 +55,8 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
   const [textoDatos, setTextoDatos] = useState("")
   const pedirDatos = (texto: string) => { setTextoDatos(texto); setAbierto(abierto === "datos" && textoDatos === texto ? "" : "datos") }
   const cerrada = a.estado === "CERRADA"
+  // La nulidad sin clasificar todavía no tiene escrito: primero se decide en qué etapa queda
+  const sinEtapa = a.etapa === "NULIDAD"
 
   const ejecutar = (paso: string, cuerpo: Record<string, unknown>, mensaje: string, confirmar?: string) => {
     if (confirmar && !confirm(confirmar)) return
@@ -69,7 +71,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
   const escritos = [...a.escritos].sort((x, y) => y.version - x.version)
   const actual = escritos[0] ?? null
   const enElaboracion = actual && ["BORRADOR", "AJUSTE_INTERNO"].includes(actual.estado)
-  const puedeSubirEscrito = puedeTrabajar && !cerrada && (!actual || ["BORRADOR", "AJUSTE_INTERNO", "DEVUELTO"].includes(actual.estado) || (actual.estado === "EN_REVISION" && puedeRevisar))
+  const puedeSubirEscrito = puedeTrabajar && !cerrada && !sinEtapa && (!actual || ["BORRADOR", "AJUSTE_INTERNO", "DEVUELTO"].includes(actual.estado) || (actual.estado === "EN_REVISION" && puedeRevisar))
   const deEscrito = (id: number) => archivos.filter(x => x.escritoId === id)
   const insumosRecibidos = archivos.filter(x => !x.escritoId && x.tipo === "INSUMO")
   const sueltos = archivos.filter(x => !x.escritoId && x.tipo !== "INSUMO")
@@ -84,7 +86,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
           <div className="flex flex-wrap gap-2">
             {puedeSubirEscrito && <SubirArchivos actuacionId={a.id} tipos={["ESCRITO", "ANEXO"]} />}
             {/* La ficha se genera sola al entregar; este botón es para revisarla antes */}
-            {puedeTrabajar && !cerrada && (
+            {puedeTrabajar && !cerrada && !sinEtapa && (
               <button disabled={pendiente} className="boton-secundario py-1.5 text-xs" onClick={() => ejecutar("ficha", {}, "Ficha técnica generada: quedó en los documentos")}>Generar ficha técnica</button>
             )}
             {puedeTrabajar && enElaboracion && (

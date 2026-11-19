@@ -29,8 +29,13 @@ export const TIPOS_SOLICITUD = ['TUTELA', 'ACCION_CUMPLIMIENTO', 'PQRS'] as cons
 export type TipoSolicitud = typeof TIPOS_SOLICITUD[number]
 
 // Etapas del flujo. Un caso puede tener varias actuaciones abiertas a la vez (D12)
-export const ETAPAS = ['ACCION', 'IMPUGNACION', 'CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO', 'PQRS'] as const
+// NULIDAD (reunión 18-nov): opción excepcional al registrar. Se reparte entre cualquier auxiliar con cupo
+// (ningún equipo la atiende), quien decide en qué etapa queda el radicado; ahí pasa al equipo de esa etapa
+export const ETAPAS = ['ACCION', 'IMPUGNACION', 'CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO', 'NULIDAD', 'PQRS'] as const
 export type Etapa = typeof ETAPAS[number]
+
+// Las etapas en que puede quedar una nulidad, y las que atienden los equipos
+export const ETAPAS_PROCESO = ['ACCION', 'IMPUGNACION', 'CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO'] as const satisfies readonly Etapa[]
 
 export const NOMBRES_ETAPAS: Record<Etapa, string> = {
   ACCION: 'Contestación',
@@ -38,6 +43,7 @@ export const NOMBRES_ETAPAS: Record<Etapa, string> = {
   CUMPLIMIENTO: 'Cumplimiento',
   REQUERIMIENTO_PREVIO: 'Requerimiento previo',
   DESACATO: 'Desacato',
+  NULIDAD: 'Nulidad',
   PQRS: 'PQRS'
 }
 
@@ -49,6 +55,7 @@ export const ETAPA_EN_ASUNTO: Record<Etapa, string> = {
   CUMPLIMIENTO: 'CUMPLIMIENTO',
   REQUERIMIENTO_PREVIO: 'REQUERIMIENTO PREVIO',
   DESACATO: 'DESACATO',
+  NULIDAD: 'NULIDAD',
   PQRS: 'PQRS'
 }
 
@@ -126,6 +133,8 @@ export const TIPOS_ESCRITO = {
   CUMPLIMIENTO: 'Memorial de cumplimiento',
   REQUERIMIENTO_PREVIO: 'Respuesta al requerimiento previo',
   DESACATO: 'Respuesta al incidente de desacato',
+  // Mientras no se clasifica no hay escrito: el auxiliar decide primero en qué etapa queda
+  NULIDAD: 'Nulidad por clasificar',
   PQRS: 'Respuesta a la PQRS'
 } as const
 export type TipoEscrito = keyof typeof TIPOS_ESCRITO

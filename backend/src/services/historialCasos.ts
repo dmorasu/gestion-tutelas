@@ -37,6 +37,7 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
   },
   ACTUACION: {
     estado: { etiqueta: 'Estado' },
+    etapa: { etiqueta: 'Etapa' },
     fechaNotificacion: { etiqueta: 'Notificación', formato: 'fechaHora' },
     terminoValor: { etiqueta: 'Término' },
     terminoUnidad: { etiqueta: 'Unidad del término' },

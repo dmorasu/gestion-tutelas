@@ -8,6 +8,7 @@ import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
 import RutaActuacion from "./componentes/RutaActuacion"
+import ClasificarNulidad from "./componentes/ClasificarNulidad"
 import type { ItemMatriz } from "./componentes/Matriz"
 import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal, yaEntregada } from "@/src/lib/formato"
 
@@ -22,6 +23,7 @@ export type ActuacionDetalle = {
   insumos: Insumo[], escritos: EscritoFila[]
   fechaAsumida?: string | null, fechaCierre?: string | null, radicaciones?: { fechaRadicacion: string }[]
   tipoRespuestaId?: number | null, datosSolicitados?: { nombre: string, recibido: boolean }[]
+  origenNulidad?: boolean, fechaClasificacion?: string | null
 }
 
 type Props = {
@@ -89,6 +91,8 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         </div>
       </div>
 
+      {a.etapa === "NULIDAD" && a.estado !== "CERRADA" && <ClasificarNulidad casoId={casoId} actuacionId={a.id} puede={puedeTrabajar} />}
+
       <RutaActuacion actuacion={a} archivos={archivos} />
 
       {!editando ? (
@@ -104,6 +108,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />
           <Dato nombre="Insumos" valor={a.requiereInsumos ? "Requiere" : "No requiere"} />
           <Dato nombre="Escrito" valor={tipoEscrito(a)} />
+          {a.origenNulidad && <Dato nombre="Llegó como nulidad" valor={`Clasificada el ${fechaHora(a.fechaClasificacion)}`} />}
           <Dato nombre="Tipo de respuesta" valor={tiposRespuesta.find(t => t.id === a.tipoRespuestaId)?.nombre ?? "Sin definir"} />
           {a.tipoPeticion && <Dato nombre="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
           {porDerechoPeticion && a.etapa === "ACCION" && (

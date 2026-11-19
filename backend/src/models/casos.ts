@@ -278,6 +278,15 @@ export class Actuacion extends Model {
   @Column(DataType.DATE)
   declare fechaImpugnacion: Date | null
 
+  // Llegó como nulidad y el auxiliar la clasificó en esta etapa (reunión 18-nov)
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare origenNulidad: boolean
+
+  @Column(DataType.DATE)
+  declare fechaClasificacion: Date | null
+
   // PQRS (D23): general (15 días hábiles), documentos e información (10) o consulta (30)
   @Column(DataType.STRING(15))
   declare tipoPeticion: string | null

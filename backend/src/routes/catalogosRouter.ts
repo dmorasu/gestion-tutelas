@@ -227,7 +227,8 @@ router.get('/equipos', async (_req, res) => {
   res.json(equipos)
 })
 
-const validarEtapas = body('etapas').optional().isArray().custom((etapas: string[]) => etapas.every(e => (ETAPAS as readonly string[]).includes(e))).withMessage('Etapa no válida')
+// La nulidad no es de ningún equipo: se reparte entre todos los auxiliares hasta que se clasifica
+const validarEtapas = body('etapas').optional().isArray().custom((etapas: string[]) => etapas.every(e => e !== 'NULIDAD' && (ETAPAS as readonly string[]).includes(e))).withMessage('Etapa no válida')
 
 router.post('/equipos', administran, body('nombre').isString().trim().notEmpty().withMessage('Falta el nombre'), validarEtapas, manejarErroresEntrada, async (req, res) => {
   try {
