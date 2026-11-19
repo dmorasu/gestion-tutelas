@@ -94,10 +94,36 @@ export async function borradorCorreo(actuacionId: number): Promise<Resultado> {
   return { ok: true, datos: await r.json() }
 }
 
-// ¿El radicado ya es un caso? (el formulario de registro lo consulta al completar los 23 dígitos)
+// ¿El radicado ya es un caso? (el formulario de registro lo consulta al completar los 23 dígitos).
+// mismoProceso: casos con el radicado igual salvo los dos últimos dígitos (otra instancia o recurso)
+type CasoBuscado = { id: number, numeroInterno: string | null, radicado: string, estado: string, actuaciones: { id: number, etapa: string, estado: string }[] }
 export async function buscarPorRadicado(radicado: string) {
   const r = await fetchApi(`/casos/radicado/${encodeURIComponent(radicado)}`)
   if (!r.ok) return null
-  const { caso } = await r.json() as { caso: { id: number, numeroInterno: string | null, estado: string, actuaciones: { id: number, etapa: string, estado: string }[] } | null }
-  return caso ? { ...caso, radicadoBuscado: radicado } : null
+  const { caso, mismoProceso } = await r.json() as { caso: CasoBuscado | null, mismoProceso: CasoBuscado[] }
+  return { caso, mismoProceso: mismoProceso ?? [], radicadoBuscado: radicado }
+}
+
+// Casos relacionados (reunión 18-nov): confirmar o descartar lo que sugiere la app, relacionar a mano y unir
+export async function decidirRelacion(casoId: number, relacionId: number, datos: { estado: "CONFIRMADA" | "DESCARTADA", tipo?: string, nota?: string | null }): Promise<Resultado> {
+  const r = await fetchApi(`/casos/relaciones/${relacionId}`, { method: "PATCH", body: JSON.stringify(datos) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true }
+}
+
+export async function relacionarCaso(casoId: number, datos: { otro: string, tipo: string, nota?: string | null }): Promise<Resultado> {
+  const r = await fetchApi(`/casos/${casoId}/relaciones`, { method: "POST", body: JSON.stringify(datos) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true }
+}
+
+// Solo el coordinador: el otro caso pasa entero a este
+export async function unirCaso(casoId: number, otroCasoId: number, motivo: string): Promise<Resultado> {
+  const r = await fetchApi(`/casos/${casoId}/unir`, { method: "POST", body: JSON.stringify({ otroCasoId, motivo }) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  revalidatePath("/casos")
+  return { ok: true, datos: await r.json() }
 }

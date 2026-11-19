@@ -10,6 +10,7 @@ import { leerAsunto, etapaPorTexto } from '../../utils/asunto'
 import { parametro } from '../parametros'
 import type { Buzon } from '../constantes'
 import { ejecutarConContexto } from '../../utils/contextoPeticion'
+import { dondeNumeroInterno, dondeRadicado } from '../relacionesCasos'
 
 // =====================================
 // LECTURA DE LOS TRES BUZONES (asignaciones, insumos, entregas)
@@ -160,12 +161,13 @@ export const asociarCorreo = async (correo: Correo) => {
 
   // 2. Por el número interno del caso y, si no, por el radicado (respondió en otro hilo o escribió de nuevo)
   const numeros = numerosInternos(correo)
-  let casos = numeros.length ? await Caso.findAll({ where: { numeroInterno: numeros }, attributes: ['id'] }) : []
+  // Con los números y radicados de los casos que se le unieron (reunión 18-nov)
+  let casos = numeros.length ? await Caso.findAll({ where: dondeNumeroInterno(numeros), attributes: ['id'] }) : []
   // El radicado del asunto manda: el cuerpo y los PDF suelen citar otros procesos (la tutela de
   // origen, un fallo anterior) y, si dos de ellos son casos, el correo quedaría sin asociar
   const delAsunto = leerAsunto(correo.asunto).radicado
-  if (!casos.length && delAsunto) casos = await Caso.findAll({ where: { radicado: delAsunto }, attributes: ['id'] })
-  if (!casos.length && correo.radicados.length) casos = await Caso.findAll({ where: { radicado: correo.radicados }, attributes: ['id'] })
+  if (!casos.length && delAsunto) casos = await Caso.findAll({ where: dondeRadicado(delAsunto), attributes: ['id'] })
+  if (!casos.length && correo.radicados.length) casos = await Caso.findAll({ where: dondeRadicado(correo.radicados), attributes: ['id'] })
   if (casos.length !== 1) return
   const caso = casos[0]
   const abiertas = await Actuacion.findAll({ where: { casoId: caso.id, estado: { [Op.ne]: 'CERRADA' } }, attributes: ['id', 'casoId', 'etapa', 'estado'], order: [['fechaAsignacion', 'DESC']] })

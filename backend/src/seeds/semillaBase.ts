@@ -47,6 +47,8 @@ export const sembrarBase = async () => {
     if (!(await Caso.count({ where: { numeroInterno: { [Op.ne]: null } } }))) await db.query(`ALTER SEQUENCE ${SECUENCIA_NUMERO_INTERNO} RESTART WITH 1`)
     for (const caso of sinNumero) await caso.update({ numeroInterno: await siguienteNumeroInterno(undefined, caso.createdAt) })
   }
+  // Reunión 18-nov: los casos de antes de la fecha de facturación toman la de su primera asignación
+  await db.query(`UPDATE casos c SET "fechaFacturacion" = (SELECT min(a."fechaAsignacion") FROM actuaciones a WHERE a."casoId" = c.id) WHERE c."fechaFacturacion" IS NULL`)
   await sembrarParametros()
   await sembrarMediosDias()
   await sembrarPlantillas()

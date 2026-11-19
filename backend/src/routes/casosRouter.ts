@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { body, param } from 'express-validator'
 import { Op, fn, col, where as condicionSql, type WhereOptions } from 'sequelize'
-import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso, Rol } from '../models'
+import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso, Rol, CasoRelacion } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol, tieneRol } from '../middleware/auth'
 import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos'
@@ -9,7 +9,9 @@ import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
 import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
-import { normalizarRadicado, normalizarRadicadoPqrs } from '../utils/radicado'
+import { normalizarRadicado, normalizarRadicadoPqrs, raizProceso } from '../utils/radicado'
+import { dondeRadicado, sugerirRelaciones, relacionesDe, decidirRelacion, relacionarManual, unirCasos, NOMBRES_RELACION } from '../services/relacionesCasos'
+import { TIPOS_RELACION } from '../models/casos'
 import { crearPqrsLigada } from '../services/pqrs'
 import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, exigirQuienReasigna, responsablesDelRegistro, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
@@ -92,9 +94,19 @@ router.get('/', async (req, res) => {
       const alfanumerico = normalizarRadicadoPqrs(q)
       const [porRadicado, porNumero, porParte] = await Promise.all([
         digitos.length >= 5 || alfanumerico.length >= 4
-          ? Caso.findAll({ where: { radicado: { [Op.or]: [...(digitos.length >= 5 ? [{ [Op.like]: `%${digitos}%` }] : []), { [Op.like]: `%${alfanumerico}%` }] } }, attributes: ['id'], limit: 500 })
+          ? Caso.findAll({
+            where: {
+              [Op.or]: [
+                { radicado: { [Op.or]: [...(digitos.length >= 5 ? [{ [Op.like]: `%${digitos}%` }] : []), { [Op.like]: `%${alfanumerico}%` }] } },
+                // El radicado de un caso que se unió a este
+                { radicadosAlternos: { [Op.overlap]: [digitos, alfanumerico].filter(Boolean) } }
+              ]
+            },
+            attributes: ['id'],
+            limit: 500
+          })
           : [],
-        Caso.findAll({ where: { numeroInterno: { [Op.iLike]: `%${q}%` } }, attributes: ['id'], limit: 500 }),
+        Caso.findAll({ where: { [Op.or]: [{ numeroInterno: { [Op.iLike]: `%${q}%` } }, { numerosInternosAlternos: { [Op.overlap]: [q.toUpperCase()] } }] }, attributes: ['id'], limit: 500 }),
         Parte.findAll({ where: { [Op.or]: condicionesParte(q) }, attributes: ['casoId'], limit: 500 })
       ])
       w.casoId = [...new Set([...porRadicado.map(c => c.id), ...porNumero.map(c => c.id), ...porParte.map(p => p.casoId)])]
@@ -173,10 +185,17 @@ router.get('/radicado/:radicado', async (req, res) => {
   try {
     const texto = String(req.params.radicado)
     const radicado = req.query.tipo === 'PQRS' ? normalizarRadicadoPqrs(texto) : normalizarRadicado(texto)
-    const caso = radicado.length === 23 || (req.query.tipo === 'PQRS' && radicado.length >= 4)
-      ? await Caso.findOne({ where: { radicado }, attributes: ['id', 'numeroInterno', 'estado'], include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado'] }] })
+    const completo = radicado.length === 23 || (req.query.tipo === 'PQRS' && radicado.length >= 4)
+    const caso = completo
+      ? await Caso.findOne({ where: dondeRadicado(radicado), attributes: ['id', 'numeroInterno', 'radicado', 'estado'], include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado'] }] })
       : null
-    res.json({ caso })
+    // Reunión 18-nov: el mismo proceso puede llegar con los dos últimos dígitos distintos (otra
+    // instancia o recurso). Se avisa para sumar la actuación al caso que ya existe
+    const raiz = !caso && req.query.tipo !== 'PQRS' ? raizProceso(radicado) : null
+    const mismoProceso = raiz
+      ? await Caso.findAll({ where: { radicado: { [Op.like]: `${raiz}%` } }, attributes: ['id', 'numeroInterno', 'radicado', 'estado'], include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado'] }], limit: 5 })
+      : []
+    res.json({ caso, mismoProceso })
   } catch (error) {
     responderError(res, error)
   }
@@ -227,7 +246,11 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
       include: [{ model: Actuacion, attributes: ['id', 'etapa', 'estado', 'fechaLimiteEntrega', 'tipoPeticion'] }]
     })
     const notas = await NotaCaso.count({ where: { casoId: caso.id } })
-    res.json({ caso: datos, correos, archivos, relacionados, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    // Casos que pueden ser el mismo o antecedentes del accionante (reunión 18-nov). Se buscan también
+    // al abrir el caso: así aparecen los de antes de la regla y los que llegaron después de este
+    await sugerirRelaciones(caso.id).catch(error => console.error('❌ Relaciones del caso', error))
+    const vinculos = await relacionesDe(caso.id)
+    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
@@ -245,6 +268,49 @@ router.post('/:id/notas', param('id').isInt(), body('texto').isString().trim().i
       if (!visibles) throw new ErrorNegocio('Este caso no está a su cargo', 403)
       if (actuacionId && !(await Actuacion.count({ where: { id: actuacionId, casoId } }))) throw new ErrorNegocio('La etapa no es de este caso')
       res.status(201).json(await NotaCaso.create({ casoId, actuacionId, usuarioId: req.usuario!.id, nombreUsuario: req.usuario!.nombre, texto: String(req.body.texto).trim() }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+// ── Casos relacionados (reunión 18-nov) ──
+// Deciden y relacionan quienes trabajan el caso (las mismas reglas de las notas): el auxiliar es quien
+// valora el antecedente (por ejemplo, para alegar temeridad)
+const exigirQuienTrabajaCaso = async (req: Request, casoId: number) => {
+  if (!(await Actuacion.count({ where: { casoId, ...alcance(req) } }))) throw new ErrorNegocio('Este caso no está a su cargo', 403)
+}
+
+router.post('/:id/relaciones', param('id').isInt(), body('otro').isString().trim().notEmpty().withMessage('Escriba el número interno o el radicado del otro caso'),
+  body('tipo').isIn(TIPOS_RELACION), body('nota').optional({ values: 'null' }).isString().isLength({ max: 2000 }), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      await exigirQuienTrabajaCaso(req, Number(req.params.id))
+      res.status(201).json(await relacionarManual({ casoId: Number(req.params.id), otro: req.body.otro, tipo: req.body.tipo, nota: req.body.nota, usuario: { id: req.usuario!.id!, nombre: req.usuario!.nombre } }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+router.patch('/relaciones/:id', param('id').isInt(), body('estado').isIn(['CONFIRMADA', 'DESCARTADA']), body('tipo').optional({ values: 'null' }).isIn(TIPOS_RELACION),
+  body('nota').optional({ values: 'null' }).isString().isLength({ max: 2000 }), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const r = await CasoRelacion.findByPk(Number(req.params.id), { attributes: ['casoId', 'relacionadoId'] })
+      if (!r) throw new ErrorNegocio('La relación no existe', 404)
+      // Basta con trabajar uno de los dos casos
+      await exigirQuienTrabajaCaso(req, r.casoId).catch(() => exigirQuienTrabajaCaso(req, r.relacionadoId))
+      res.json(await decidirRelacion({ relacionId: Number(req.params.id), estado: req.body.estado, tipo: req.body.tipo, nota: req.body.nota, usuario: { id: req.usuario!.id!, nombre: req.usuario!.nombre } }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+// Unir otro caso a este (eran el mismo proceso): solo el coordinador
+router.post('/:id/unir', requiereRol(ROLES.COORDINADOR), param('id').isInt(), body('otroCasoId').isInt(),
+  body('motivo').isString().trim().notEmpty().withMessage('Indique por qué se unen los casos'), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      res.json(await unirCasos({ principalId: Number(req.params.id), absorbidoId: Number(req.body.otroCasoId), motivo: req.body.motivo, usuario: { id: req.usuario!.id!, nombre: req.usuario!.nombre } }))
     } catch (error) {
       responderError(res, error)
     }

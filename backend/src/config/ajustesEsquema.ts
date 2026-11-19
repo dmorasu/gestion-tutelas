@@ -26,7 +26,11 @@ const AJUSTES: string[] = [
   `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "casoRelacionadoId" INTEGER REFERENCES casos(id) ON DELETE SET NULL`,
   `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "tipoPeticion" VARCHAR(15)`,
   `ALTER TABLE radicados_otros_operadores ALTER COLUMN radicado TYPE VARCHAR(40)`,
-  `ALTER TABLE radicados_otros_operadores ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'JUDICIAL'`
+  `ALTER TABLE radicados_otros_operadores ADD COLUMN IF NOT EXISTS tipo VARCHAR(10) DEFAULT 'JUDICIAL'`,
+  // 2026-11-19 · Reunión 18-nov: facturación por radicado y casos unidos
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "fechaFacturacion" TIMESTAMPTZ`,
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "radicadosAlternos" VARCHAR(40)[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "numerosInternosAlternos" VARCHAR(20)[] NOT NULL DEFAULT '{}'`
 ]
 
 // Una tabla que aún no existe se salta: sync() la acaba de crear completa con el modelo

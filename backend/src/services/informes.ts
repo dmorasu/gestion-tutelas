@@ -8,6 +8,7 @@ import { NOMBRES_ALERTA } from './alertas'
 import { sumarDias, textoFechaHora, enBogota } from '../utils/fechaColombia'
 import { formatoRadicado } from '../utils/radicado'
 import { ErrorNegocio } from '../utils/errores'
+import { casosAFacturar } from './facturacion'
 
 // =====================================
 // INFORMES SEMANAL Y MENSUAL (correo del cliente, punto 5; manual §21.2 y §26)
@@ -15,7 +16,7 @@ import { ErrorNegocio } from '../utils/errores'
 // D28: novedades procesales (fallos y radicaciones) y bloqueos (lo que frena la entrega), para que
 // el coordinador anexe las acciones.
 // Mensual: lo mismo para el mes, la matriz de casos abiertos y la relación de casos causados para
-// la factura (primer escrito entregado en el mes: radicado, despacho, asignación y entrega).
+// la factura (reunión 18-nov: cada radicado una vez, en el mes de su primera asignación; ver facturacion.ts).
 // Sin nombres ni documentos de los accionantes: el manual pide minimizar datos personales en los
 // reportes (§23). El Excel queda en SharePoint (Informes/AAAA) y en la app.
 // =====================================
@@ -207,13 +208,22 @@ export const generarInforme = async (d: { tipo: 'SEMANAL' | 'MENSUAL', desde: st
   hoja(libro, 'ANS incumplidos', [{ titulo: 'Indicador', ancho: 12 }, { titulo: 'Caso', ancho: 16 }, { titulo: 'Radicado', ancho: 30 }, { titulo: 'Detalle', ancho: 70 }],
     ans.flatMap(i => i.incumplidos.map(f => [i.codigo, f.numeroInterno ?? '', f.radicado ? formatoRadicado(f.radicado) : '', f.detalle])))
 
-  // Relación para la factura: casos cuyo primer escrito se entregó en el mes (§26.1)
+  // Relación para la factura: cada radicado una vez, en el mes de su primera asignación (reunión 18-nov)
   if (d.tipo === 'MENSUAL') {
-    const primeros = entregas.filter(e => e.version === 1)
+    const { facturables, incluidos } = await casosAFacturar(ini, fin)
     hoja(libro, 'Facturación', [
-      { titulo: 'Radicado', ancho: 30 }, { titulo: 'Caso', ancho: 16 }, { titulo: 'Despacho', ancho: 34 }, { titulo: 'Fecha de asignación', ancho: 19 }, { titulo: 'Fecha de entrega', ancho: 19 }
-    ], primeros.map(e => [formatoRadicado(e.actuacion?.caso?.radicado ?? ''), e.actuacion?.caso?.numeroInterno ?? '', e.actuacion?.caso?.juzgado?.nombre ?? '',
-      fecha(e.actuacion?.fechaAsignacion), fecha(e.fechaEntregaEntidad)]))
+      { titulo: 'Radicado', ancho: 30 }, { titulo: 'Caso', ancho: 16 }, { titulo: 'Despacho', ancho: 34 }, { titulo: 'Etapa con la que llegó', ancho: 22 },
+      { titulo: 'Primera asignación', ancho: 19 }, { titulo: 'Radicados unidos', ancho: 34 }, { titulo: 'Otro operador', ancho: 13 }
+    ], facturables.map(c => [formatoRadicado(c.radicado), c.numeroInterno ?? '', c.juzgado?.nombre ?? '', NOMBRES_ETAPAS[c.etapaInicial] ?? c.etapaInicial,
+      fecha(c.fechaFacturacion), c.radicadosAlternos.map(formatoRadicado).join(', '), c.deOtroOperador ? 'Sí' : '']))
+    // Los que no se cobran aparte por ser el mismo proceso de otro radicado que llegó antes
+    if (incluidos.length) {
+      hoja(libro, 'No facturados (mismo proceso)', [
+        { titulo: 'Radicado', ancho: 30 }, { titulo: 'Caso', ancho: 16 }, { titulo: 'Primera asignación', ancho: 19 }, { titulo: 'Incluido en el pago de', ancho: 46 }
+      ], incluidos.map(x => [formatoRadicado(x.caso.radicado), x.caso.numeroInterno ?? '', fecha(x.caso.fechaFacturacion),
+        `${x.con.numeroInterno ?? ''} (${formatoRadicado(x.con.radicado)})`]))
+    }
+    Object.assign(resumen, { facturables: facturables.length })
   }
 
   const contenido = Buffer.from(await libro.xlsx.writeBuffer())

@@ -15,7 +15,7 @@ import { NOMBRES_ALERTA } from './alertas'
 export type EventoCaso = {
   clave: string
   fecha: string
-  tipo: 'NOTA' | 'CREADO' | 'ESTADO' | 'ASIGNACION' | 'PLAZOS' | 'INSUMO' | 'ESCRITO' | 'DEVOLUCION' | 'RADICACION' | 'CORREO_SALIDA' | 'CORREO_ENTRADA' | 'DOCUMENTO' | 'ALERTA' | 'DATOS'
+  tipo: 'NOTA' | 'CREADO' | 'ESTADO' | 'ASIGNACION' | 'PLAZOS' | 'INSUMO' | 'ESCRITO' | 'DEVOLUCION' | 'RADICACION' | 'CORREO_SALIDA' | 'CORREO_ENTRADA' | 'DOCUMENTO' | 'ALERTA' | 'DATOS' | 'RELACION'
   titulo: string
   detalle: string | null
   cambios: CambioCampo[]
@@ -103,6 +103,13 @@ const describir = (h: HistorialCaso, etapa: string | null): Pick<EventoCaso, 'ti
     }
     case 'RADICACION': return { tipo: 'RADICACION', titulo: 'Registró la radicación en el juzgado' }
     case 'DECISION': return { tipo: 'RADICACION', titulo: 'Registró una decisión judicial' }
+    // Reunión 18-nov: casos relacionados y unidos
+    case 'RELACION': {
+      const otro = cambio(c, 'Caso relacionado')?.despues ?? 'otro caso'
+      const relacion = (cambio(c, 'Relación')?.despues ?? '').toLowerCase()
+      return { tipo: 'RELACION', titulo: cambio(c, 'Decisión')?.despues === 'Descartada' ? `Descartó la relación con ${otro}` : `Relacionó con ${otro}${relacion ? ` (${relacion})` : ''}` }
+    }
+    case 'UNION': return { tipo: 'RELACION', titulo: `Unió a este caso ${cambio(c, 'Caso unido')?.despues ?? 'otro caso'}` }
     default: return { tipo: 'DATOS', titulo: 'Cambio en el caso' }
   }
 }

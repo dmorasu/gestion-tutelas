@@ -15,12 +15,13 @@ import HistorialCaso, { type EventoCaso } from "./componentes/HistorialCaso"
 import DocumentosCaso, { type DocumentoCaso } from "./componentes/DocumentosCaso"
 import CorreosCaso, { type CorreoCaso } from "./componentes/CorreosCaso"
 import PqrsLigada, { type CasoRelacionado } from "./componentes/PqrsLigada"
+import CasosRelacionados, { type Vinculo } from "./componentes/CasosRelacionados"
 
 type Detalle = {
   caso: {
     id: number, radicado: string, numeroInterno: string | null, tipoSolicitud: string, calidadEntidad: string, etapaInicial: string, etapaActual: string, estado: string,
     derechosInvolucrados: string | null, observaciones: string | null, deOtroOperador: boolean, createdAt: string, motivoCierre: string | null,
-    porDerechoPeticion: boolean, casoRelacionadoId: number | null,
+    porDerechoPeticion: boolean, casoRelacionadoId: number | null, radicadosAlternos: string[], numerosInternosAlternos: string[], fechaFacturacion: string | null,
     juzgado: { nombre: string } | null, registradoPor: { nombre: string } | null,
     partes: { id: number, rol: string, tipoDocumento: string | null, numeroDocumento: string | null, nombre: string }[]
     actuaciones: ActuacionDetalle[]
@@ -30,6 +31,8 @@ type Detalle = {
   motivosCierre: string[]
   sentidos: Record<string, string[]>
   relacionados: CasoRelacionado[]
+  vinculos: Vinculo[]
+  tiposRelacion: Record<string, string>
   notas: number
   tiposPeticion: Record<string, string>
   envio: string
@@ -46,7 +49,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, notas, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, vinculos, tiposRelacion, notas, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
     obtener<Usuario[]>("/catalogos/usuarios")
@@ -70,13 +73,18 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
 
   const pestanas: { clave: Pestana, nombre: string, Icono: LucideIcon, insignia?: number | string | false }[] = [
     { clave: "actuacion", nombre: "Actuación", Icono: Briefcase },
-    { clave: "informacion", nombre: "Información", Icono: Info },
+    { clave: "informacion", nombre: "Información", Icono: Info, insignia: vinculos.some(v => v.estado === "SUGERIDA") && "Por revisar" },
     { clave: "documentos", nombre: "Documentos", Icono: FileText, insignia: archivos.length > 0 && archivos.length },
     { clave: "correos", nombre: "Correos", Icono: Mail, insignia: correos.some(c => c.porRevisar) ? "Por revisar" : correos.length > 0 && correos.length },
     // Bitácora: las notas de las personas y los movimientos del caso en una sola línea de tiempo
     { clave: "historial", nombre: "Bitácora", Icono: NotebookPen, insignia: notas > 0 && notas }
   ]
   const accionantes = caso.partes.filter(p => p.rol === "ACCIONANTE")
+  // Reunión 18-nov: avisar al auxiliar, antes de trabajar, que el caso puede existir ya o que el
+  // accionante figura en otro radicado (para valorar la temeridad)
+  const porRevisar = vinculos.filter(v => v.estado === "SUGERIDA")
+  const temeridad = vinculos.filter(v => v.estado === "CONFIRMADA" && v.tipo === "TEMERIDAD")
+  const puedeRelacionar = gestiona || actuaciones.some(a => trabaja(a))
 
   return (
     <div className="space-y-6 pt-2">
@@ -104,6 +112,24 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
 
       {caso.deOtroOperador && (
         <p className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800">El archivo maestro asigna este radicado a otro operador (ANS-13). Suspenda la elaboración hasta que el supervisor defina el operador.</p>
+      )}
+      {(porRevisar.length > 0 || temeridad.length > 0) && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {porRevisar.length > 0 && (
+            <p>
+              Antes de trabajarlo, revise {porRevisar.length === 1 ? "este caso" : "estos casos"}:{" "}
+              {porRevisar.map((v, i) => (
+                <span key={v.id}>{i > 0 && ", "}<Link href={`/casos/${v.otro.id}`} className="font-semibold underline">{v.otro.numeroInterno}</Link> ({(tiposRelacion[v.tipo] ?? v.tipo).toLowerCase()})</span>
+              ))}.{" "}
+              <Link href={enlace({ tab: "informacion" })} className="underline">Confirmar o descartar</Link>
+            </p>
+          )}
+          {temeridad.length > 0 && (
+            <p className={clsx(porRevisar.length > 0 && "mt-1")}>
+              Posible temeridad con {temeridad.map((v, i) => <span key={v.id}>{i > 0 && ", "}<Link href={`/casos/${v.otro.id}`} className="font-semibold underline">{v.otro.numeroInterno}</Link></span>)}.
+            </p>
+          )}
+        </div>
       )}
       {(envio === "SIMULADO" || almacen === "LOCAL") && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">
@@ -173,10 +199,17 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
                   <Dato etiqueta="Juzgado" valor={caso.juzgado?.nombre} />
                   <Dato etiqueta="Calidad de la entidad" valor={caso.calidadEntidad.charAt(0) + caso.calidadEntidad.slice(1).toLowerCase()} />
                   <Dato etiqueta="Llegó en" valor={`${ETAPAS[caso.etapaInicial]} · hoy en ${ETAPAS[caso.etapaActual]}`} />
+                  <Dato etiqueta="Se factura en" valor={caso.fechaFacturacion ? new Date(caso.fechaFacturacion).toLocaleDateString("es-CO", { month: "long", year: "numeric", timeZone: "America/Bogota" }) : null} />
+                  {caso.radicadosAlternos.length > 0 && (
+                    <Dato etiqueta="Radicados unidos" valor={<span className="font-mono">{caso.radicadosAlternos.map(radicado).join(", ")}</span>} className="sm:col-span-2" />
+                  )}
                   <Dato etiqueta="Derechos involucrados" valor={caso.derechosInvolucrados} className="sm:col-span-3" />
                   {caso.observaciones && <Dato etiqueta="Observaciones" valor={<span className="whitespace-pre-line">{caso.observaciones}</span>} className="sm:col-span-3" />}
                   {caso.motivoCierre && <Dato etiqueta="Causal de cierre" valor={caso.motivoCierre} className="sm:col-span-3" />}
                 </dl>
+              </Seccion>
+              <Seccion titulo="Casos relacionados">
+                <CasosRelacionados casoId={caso.id} vinculos={vinculos} tipos={tiposRelacion} puedeDecidir={puedeRelacionar} coordina={coordina} />
               </Seccion>
               <Seccion titulo={caso.tipoSolicitud === "PQRS" ? "Tutela relacionada" : "PQRS ligada"}>
                 <PqrsLigada casoId={caso.id} esPqrs={caso.tipoSolicitud === "PQRS"} relacionados={relacionados} tiposPeticion={tiposPeticion} puedeCrear={gestiona && caso.estado !== "CERRADO"} />

@@ -8,6 +8,7 @@ import { parametro } from './parametros'
 import { repartir, revisorDeEquipo } from './reparto'
 import { enviarPlantilla } from './buzon/correosSalida'
 import { archivarAdjuntos } from './expediente'
+import { dondeRadicado, sugerirRelaciones } from './relacionesCasos'
 import { TIPOS_PETICION, type Criticidad, type Etapa, type TipoPeticion, type TipoSolicitud, type UnidadTermino } from './constantes'
 
 export type DatosRegistro = {
@@ -15,6 +16,9 @@ export type DatosRegistro = {
   // Sin correo (registro manual o cargue): fecha y hora de asignación de la entidad
   fechaAsignacion?: string | null
   radicado: string
+  // Reunión 18-nov: llegó con el radicado de otra instancia del mismo proceso y se suma al caso que
+  // ya existe. Se guarda para que los correos con ese radicado sigan encontrando el caso
+  radicadoAlterno?: string | null
   tipoSolicitud: TipoSolicitud
   etapa: Etapa
   juzgadoId?: number | null
@@ -120,11 +124,16 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
 
     const deOtroOperador = !!(await RadicadoOtroOperador.findOne({ where: { radicado }, attributes: ['id'], transaction }))
 
-    let caso = await Caso.findOne({ where: { radicado }, transaction, lock: transaction.LOCK.UPDATE })
+    // También por el radicado de un caso que se le unió (era el mismo proceso)
+    let caso = await Caso.findOne({ where: dondeRadicado(radicado), transaction, lock: transaction.LOCK.UPDATE })
     if (caso) {
       const abierta = await Actuacion.findOne({ where: { casoId: caso.id, etapa: datos.etapa, estado: { [Op.ne]: 'CERRADA' } }, attributes: ['id'], transaction })
       if (abierta) throw new ErrorNegocio('El caso ya tiene una actuación abierta en esa etapa: asocie el correo a ella')
-      await caso.update({ etapaActual: datos.etapa, estado: 'ABIERTO', fechaCierre: null, motivoCierre: null, deOtroOperador }, { transaction })
+      const alterno = datos.radicadoAlterno ? normalizarSegunTipo(datos.radicadoAlterno, datos.tipoSolicitud) : null
+      const radicadosAlternos = alterno && alterno !== caso.radicado && (esPqrs ? esRadicadoPqrsValido(alterno) : esRadicadoValido(alterno)) && !caso.radicadosAlternos.includes(alterno)
+        ? [...caso.radicadosAlternos, alterno]
+        : caso.radicadosAlternos
+      await caso.update({ etapaActual: datos.etapa, estado: 'ABIERTO', fechaCierre: null, motivoCierre: null, deOtroOperador, radicadosAlternos }, { transaction })
     } else {
       caso = await Caso.create({
         radicado,
@@ -139,6 +148,8 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
         porDerechoPeticion: !!datos.porDerechoPeticion,
         casoRelacionadoId: datos.casoRelacionadoId ?? null,
         deOtroOperador,
+        // Se factura una vez, en el mes de esta primera asignación (reunión 18-nov)
+        fechaFacturacion: fechaAsignacion,
         registradoPorId: usuarioId
       }, { transaction })
       const partes = (datos.partes ?? []).filter(p => p.nombre?.trim())
@@ -203,6 +214,9 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
     return { casoId: caso.id, actuacionId: actuacion.id, numeroInterno: caso.numeroInterno, deOtroOperador, remitente: correo?.remitente ?? null, correoId: correo?.id ?? null }
   })
 
+  // Casos que pueden ser el mismo o antecedentes del accionante: quedan sugeridos para quien lo revise
+  const sugeridas = await sugerirRelaciones(resultado.casoId).catch(error => { console.error('❌ Relaciones del caso', error); return 0 })
+
   // Confirmación de recibido con el número interno (fuera de la transacción: si el correo falla,
   // el registro queda hecho y el error se ve en el caso para reenviarlo)
   // Los adjuntos pasan de la bandeja al expediente (fuera de la transacción: es SharePoint)
@@ -214,5 +228,5 @@ export const registrarAsignacion = async (datos: DatosRegistro, usuarioId: numbe
     }).catch(error => ({ estado: 'ERROR', error: String(error instanceof Error ? error.message : error) }))
     acuse = { estado: enviado.estado, error: enviado.error ?? null }
   }
-  return { casoId: resultado.casoId, actuacionId: resultado.actuacionId, numeroInterno: resultado.numeroInterno, deOtroOperador: resultado.deOtroOperador, acuse }
+  return { casoId: resultado.casoId, actuacionId: resultado.actuacionId, numeroInterno: resultado.numeroInterno, deOtroOperador: resultado.deOtroOperador, acuse, sugeridas }
 }

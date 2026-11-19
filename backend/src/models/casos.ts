@@ -79,6 +79,25 @@ export class Caso extends Model {
   @Column(DataType.BOOLEAN)
   declare deOtroOperador: boolean
 
+  // Reunión 18-nov: el radicado se factura una sola vez, en el mes de su primera asignación (la de la
+  // etapa con la que llegó, sea contestación, requerimiento o desacato). Las actuaciones siguientes
+  // del mismo radicado van incluidas en ese pago
+  @Column(DataType.DATE)
+  declare fechaFacturacion: Date | null
+
+  // Radicados de los casos que se unieron a este (eran el mismo proceso): los correos y las
+  // asignaciones que lleguen con ellos siguen encontrando este caso
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.ARRAY(DataType.STRING(40)))
+  declare radicadosAlternos: string[]
+
+  // Números internos de esos casos unidos (el cliente pudo haber respondido citándolos)
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.ARRAY(DataType.STRING(20)))
+  declare numerosInternosAlternos: string[]
+
   @ForeignKey(() => Usuario)
   @Column(DataType.INTEGER)
   declare registradoPorId: number | null
@@ -504,4 +523,62 @@ export class Decision extends Model {
   @AllowNull(false)
   @Column(DataType.BOOLEAN)
   declare sancionAtribuible: boolean
+}
+
+// =====================================
+// RELACIÓN ENTRE CASOS (reunión 18-nov)
+// Dos radicados que pueden ser el mismo asunto. La app sugiere y una persona decide:
+// - MISMO_PROCESO: el mismo proceso con otro radicado (otra instancia o recurso, o mal digitado). Se
+//   factura una sola vez (el que llegó primero) y el coordinador puede unirlos en un solo caso
+// - TEMERIDAD: el mismo accionante por los mismos hechos en otra tutela. Cada radicado se factura
+// - ANTECEDENTE: el accionante figura en otro caso, sin que sea el mismo asunto. Cada radicado se factura
+// Se guarda una fila por pareja (casoId es el más antiguo) y se lee en los dos sentidos
+// =====================================
+export const TIPOS_RELACION = ['MISMO_PROCESO', 'TEMERIDAD', 'ANTECEDENTE'] as const
+export type TipoRelacion = typeof TIPOS_RELACION[number]
+
+@Table({ tableName: 'casos_relaciones', indexes: [{ unique: true, fields: ['casoId', 'relacionadoId'] }] })
+export class CasoRelacion extends Model {
+  @ForeignKey(() => Caso)
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare casoId: number
+
+  @BelongsTo(() => Caso, { foreignKey: 'casoId', onDelete: 'CASCADE' })
+  declare caso?: Caso
+
+  @ForeignKey(() => Caso)
+  @AllowNull(false)
+  @Column(DataType.INTEGER)
+  declare relacionadoId: number
+
+  @BelongsTo(() => Caso, { foreignKey: 'relacionadoId', onDelete: 'CASCADE' })
+  declare relacionado?: Caso
+
+  @AllowNull(false)
+  @Column(DataType.STRING(20))
+  declare tipo: TipoRelacion
+
+  // SUGERIDA por la app, CONFIRMADA o DESCARTADA por una persona. La descartada no se vuelve a sugerir
+  @Default('SUGERIDA')
+  @AllowNull(false)
+  @Column(DataType.STRING(12))
+  declare estado: 'SUGERIDA' | 'CONFIRMADA' | 'DESCARTADA'
+
+  // Por qué la sugirió la app (mismo documento, radicado igual salvo la instancia…) o la nota de quien decidió
+  @Column(DataType.STRING(300))
+  declare motivo: string | null
+
+  @Column(DataType.TEXT)
+  declare nota: string | null
+
+  @ForeignKey(() => Usuario)
+  @Column(DataType.INTEGER)
+  declare decididoPorId: number | null
+
+  @BelongsTo(() => Usuario, 'decididoPorId')
+  declare decididoPor?: Usuario
+
+  @Column(DataType.DATE)
+  declare fechaDecision: Date | null
 }

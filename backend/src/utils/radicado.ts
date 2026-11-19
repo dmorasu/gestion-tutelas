@@ -43,3 +43,11 @@ export const formatoRadicado = (radicado: string) =>
   esRadicadoValido(radicado)
     ? [radicado.slice(0, 5), radicado.slice(5, 7), radicado.slice(7, 9), radicado.slice(9, 12), radicado.slice(12, 16), radicado.slice(16, 21), radicado.slice(21)].join('-')
     : radicado
+
+// Los 21 primeros dígitos identifican el proceso (despacho, año y consecutivo); los dos últimos son el
+// recurso o la instancia. Dos radicados con la misma raíz son el mismo proceso en otra instancia
+export const raizProceso = (radicado: string) => (esRadicadoValido(radicado) ? radicado.slice(0, 21) : null)
+
+// Cuántos dígitos cambian entre dos radicados de 23 (para sospechar uno mal digitado)
+export const digitosDistintos = (a: string, b: string) =>
+  a.length === b.length ? [...a].filter((c, i) => c !== b[i]).length : Infinity

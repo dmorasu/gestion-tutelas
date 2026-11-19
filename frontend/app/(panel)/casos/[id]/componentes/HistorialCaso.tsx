@@ -6,7 +6,7 @@ import clsx from "clsx"
 import { agregarNota } from "../../acciones"
 import Avatar from "@/components/ui/Avatar"
 import {
-  Bell, CalendarClock, FileText, FileUp, Flag, History, Inbox, Landmark, MailOpen, MessageSquareText, PencilLine, Send, Sparkles, Undo2, UserCog,
+  Bell, CalendarClock, FileText, FileUp, Flag, History, Inbox, Landmark, MailOpen, MessageSquareText, PencilLine, Send, Sparkles, Undo2, UserCog, Link2,
   type LucideIcon
 } from "lucide-react"
 
@@ -31,7 +31,8 @@ const ESTILO_TIPO: Record<string, { Icono: LucideIcon, color: string }> = {
   CORREO_ENTRADA: { Icono: MailOpen, color: "bg-teal-100 text-teal-700" },
   DOCUMENTO: { Icono: FileUp, color: "bg-teal-100 text-teal-700" },
   ALERTA: { Icono: Bell, color: "bg-red-100 text-red-600" },
-  DATOS: { Icono: PencilLine, color: "bg-slate-100 text-slate-600" }
+  DATOS: { Icono: PencilLine, color: "bg-slate-100 text-slate-600" },
+  RELACION: { Icono: Link2, color: "bg-slate-200 text-slate-700" }
 }
 
 const FILTROS: { clave: string, nombre: string, tipos: string[] | null }[] = [
@@ -44,6 +45,7 @@ const FILTROS: { clave: string, nombre: string, tipos: string[] | null }[] = [
   { clave: "documentos", nombre: "Documentos", tipos: ["DOCUMENTO"] },
   { clave: "asignacion", nombre: "Asignaciones y plazos", tipos: ["ASIGNACION", "PLAZOS"] },
   { clave: "alertas", nombre: "Alertas", tipos: ["ALERTA"] },
+  { clave: "relaciones", nombre: "Casos relacionados", tipos: ["RELACION"] },
   { clave: "datos", nombre: "Datos", tipos: ["DATOS"] }
 ]
 

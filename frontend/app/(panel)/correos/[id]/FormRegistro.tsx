@@ -12,7 +12,7 @@ import { CRITICIDADES, ETAPAS, ESTADOS_ACTUACION, UNIDADES_TERMINO, isoDesdeLoca
 
 export type Juzgado = { id: number, nombre: string }
 type Parte = { tipoDocumento: string, numeroDocumento: string, nombre: string }
-type CasoEncontrado = { id: number, numeroInterno: string | null, estado: string, actuaciones: { id: number, etapa: string, estado: string }[], radicadoBuscado: string }
+type Hallazgo = NonNullable<Awaited<ReturnType<typeof buscarPorRadicado>>>
 
 type Props = {
   // Sin correo: registro manual (la asignación llegó por otro medio) y la fecha la indica el asistente
@@ -68,7 +68,9 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
   const [pendiente, iniciar] = useTransition()
   const [errores, setErrores] = useState<string[]>([])
   const [radicado, setRadicado] = useState(casoExistente?.radicado ?? sugerencia.radicado ?? "")
-  const [hallazgo, setHallazgo] = useState<CasoEncontrado | null>(null)
+  const [hallazgo, setHallazgo] = useState<Hallazgo | null>(null)
+  // Radicado de otra instancia con el que llegó, cuando se suma al caso que ya existe (reunión 18-nov)
+  const [radicadoAlterno, setRadicadoAlterno] = useState<string | null>(null)
   const [tipo, setTipo] = useState(sugerencia.tipoSolicitud === "ACCION_CUMPLIMIENTO" ? "ACCION_CUMPLIMIENTO" : "TUTELA")
   // La etapa viene del asunto normalizado; si se adivinó por el texto, el asistente la confirma aquí
   const [etapa, setEtapa] = useState(sugerencia.etapa && sugerencia.etapa !== "PQRS" ? sugerencia.etapa : "ACCION")
@@ -81,7 +83,9 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
   const digitos = radicado.replace(/\D/g, "")
   const completo = digitos.length === 23
   // Solo vale si es del radicado que está escrito ahora (si se corrige, el aviso viejo desaparece)
-  const encontrado = completo && hallazgo?.radicadoBuscado === digitos ? hallazgo : null
+  const vigente = completo && hallazgo?.radicadoBuscado === digitos ? hallazgo : null
+  const encontrado = vigente?.caso ?? null
+  const mismoProceso = vigente?.mismoProceso ?? []
   // El caso nuevo que en realidad ya existe: se abre otra etapa sobre él, sin pedir de nuevo juzgado y partes
   const existente = casoExistente ?? (encontrado ? { id: encontrado.id, radicado: digitos } : null)
   const etapaAbierta = encontrado?.actuaciones.find(a => a.etapa === etapa && a.estado !== "CERRADA")
@@ -102,6 +106,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
     const cuerpo = {
       ...(!correoId && { fechaAsignacion: isoDesdeLocal(String(datos.get("fechaAsignacion") ?? "")) }),
       radicado: digitos,
+      radicadoAlterno: existente && radicadoAlterno !== digitos ? radicadoAlterno : null,
       tipoSolicitud: tipo,
       etapa,
       juzgadoId: Number(datos.get("juzgadoId")) || null,
@@ -137,7 +142,7 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
         <div className={clsx("grid gap-4", amplio && "sm:grid-cols-[1fr,16rem]")}>
           <div>
             <label className="etiqueta">Radicado del proceso</label>
-            <input value={radicado} onChange={e => setRadicado(e.target.value)} readOnly={!!casoExistente} required autoFocus={amplio}
+            <input value={radicado} onChange={e => { setRadicado(e.target.value); setRadicadoAlterno(null) }} readOnly={!!casoExistente} required autoFocus={amplio}
               placeholder="76001-31-03-001-2026-00123-00" className={clsx("campo font-mono text-base", completo && "border-emerald-400")} />
             <p className={clsx("mt-1.5 flex items-center gap-1.5 text-xs", completo ? "text-emerald-700" : "text-slate-500")}>
               {completo ? <><CheckCircle2 size={13} /> {formatoRadicado(digitos)}</> : `${digitos.length} de 23 dígitos`}
@@ -150,6 +155,25 @@ export default function FormRegistro({ correoId, sugerencia, juzgados, casoExist
             </div>
           )}
         </div>
+        {!encontrado && !casoExistente && mismoProceso.length > 0 && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <div className="space-y-1.5">
+              <p>El radicado es igual al de otro caso salvo los dos últimos dígitos (instancia o recurso). Si es el mismo proceso, súmelo a ese caso: se factura una sola vez.</p>
+              {mismoProceso.map(c => (
+                <p key={c.id} className="flex flex-wrap items-center gap-2">
+                  <Link href={`/casos/${c.id}`} className="font-semibold underline">{c.numeroInterno}</Link>
+                  <span className="font-mono">{formatoRadicado(c.radicado)}</span>
+                  <span>({c.actuaciones.map(a => ETAPAS[a.etapa]).join(", ")})</span>
+                  <button type="button" onClick={() => { setRadicadoAlterno(digitos); setRadicado(c.radicado) }} className="boton-secundario py-1 text-[11px]">Sumar a este caso</button>
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+        {encontrado && !casoExistente && radicadoAlterno && (
+          <p className="text-xs text-slate-500">Se suma con el radicado {formatoRadicado(radicadoAlterno)}, que queda guardado en el caso.</p>
+        )}
         {encontrado && !casoExistente && (
           <div className={clsx("flex items-start gap-2 rounded-lg border px-3 py-2 text-xs", etapaAbierta ? "border-red-200 bg-red-50 text-red-800" : "border-sky-200 bg-sky-50 text-sky-900")}>
             <AlertTriangle size={14} className="mt-0.5 shrink-0" />
