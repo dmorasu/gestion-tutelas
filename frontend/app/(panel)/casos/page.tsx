@@ -9,12 +9,12 @@ import AccionesFila from "./AccionesFila"
 
 type Fila = {
   id: number, etapa: string, estado: string, criticidad: string, fechaAsignacion: string, fechaVencimiento: string | null, fechaLimiteEntrega: string | null, semaforo: string,
-  fechaVencimientoInformada: string | null, auxiliarId: number | null, revisorId: number | null,
+  fechaVencimientoInformada: string | null, auxiliarId: number | null, revisorId: number | null, equipoId: number | null,
   caso: { id: number, radicado: string, numeroInterno: string | null, deOtroOperador: boolean, partes: { nombre: string }[], juzgado: { nombre: string } | null },
   auxiliar: { nombre: string } | null, revisor: { nombre: string } | null, equipo: { nombre: string } | null
 }
 type Equipo = { id: number, nombre: string }
-type Usuario = { id: number, nombre: string, activo: boolean, roles: { codigo: string }[] }
+type Usuario = { id: number, nombre: string, activo: boolean, equipoId: number | null, roles: { codigo: string }[] }
 
 export default async function CasosPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const sesion = await obtenerSesion()
@@ -26,13 +26,17 @@ export default async function CasosPage({ searchParams }: { searchParams: Promis
     obtener<Usuario[]>("/catalogos/usuarios")
   ])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
-  const delRol = (codigo: string) => usuarios.filter(u => u.activo && u.roles.some(r => r.codigo === codigo)).map(u => ({ id: u.id, nombre: u.nombre }))
+  const delRol = (codigo: string) => usuarios.filter(u => u.activo && u.roles.some(r => r.codigo === codigo)).map(u => ({ id: u.id, nombre: u.nombre, equipoId: u.equipoId }))
   const auxiliares = delRol("AUXILIAR")
   const revisores = delRol("REVISOR")
   // Mismas reglas del backend: asistencia y coordinación todo; el auxiliar o el revisor, lo suyo
   const puedeEditar = (a: Fila) => tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"]) || a.auxiliarId === sesion.id || a.revisorId === sesion.id
   const veTodo = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const esRevisor = tieneRol(sesion.roles, ["REVISOR"])
+  // Reasignar (como services/permisosActuacion): el coordinador, todo; el revisor, entre los auxiliares de su equipo
+  const reasigna = (a: Fila) => coordina ? "TODO" as const : esRevisor && !!sesion.equipoId && a.equipoId === sesion.equipoId ? "EQUIPO" as const : null
+  // El asistente elimina lo registrado por error mientras nadie lo haya asumido; el coordinador, lo no entregado
+  const puedeEliminar = (a: Fila) => coordina || (tieneRol(sesion.roles, ["ASISTENTE"]) && a.estado === "POR_ASUMIR")
   const paginas = Math.ceil(total / 50)
   const enlacePagina = (p: number) => `/casos?${new URLSearchParams({ ...Object.fromEntries(query), pagina: String(p) })}`
 
@@ -130,7 +134,7 @@ export default async function CasosPage({ searchParams }: { searchParams: Promis
                   <p className="text-[11px] text-slate-400">{a.revisor?.nombre ?? "Sin revisor"}{a.equipo && ` · ${a.equipo.nombre}`}</p>
                 </td>
                 <td className="sticky right-0 bg-white py-2 group-hover:bg-slate-50">
-                  <AccionesFila a={a} puedeEditar={puedeEditar(a)} coordina={coordina} auxiliares={auxiliares} revisores={revisores} />
+                  <AccionesFila a={a} puedeEditar={puedeEditar(a)} reasigna={reasigna(a)} puedeEliminar={puedeEliminar(a)} auxiliares={reasigna(a) === "EQUIPO" ? auxiliares.filter(u => u.equipoId === sesion.equipoId) : auxiliares} revisores={revisores} />
                 </td>
               </tr>
             ))}

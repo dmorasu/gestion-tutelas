@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { body, param } from 'express-validator'
-import { Op, type WhereOptions } from 'sequelize'
-import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso } from '../models'
+import { Op, fn, col, where as condicionSql, type WhereOptions } from 'sequelize'
+import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso, Rol } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol, tieneRol } from '../middleware/auth'
 import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos'
@@ -11,7 +11,7 @@ import { parametro } from '../services/parametros'
 import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
 import { normalizarRadicado, normalizarRadicadoPqrs } from '../utils/radicado'
 import { crearPqrsLigada } from '../services/pqrs'
-import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, alcanceActuaciones } from '../services/permisosActuacion'
+import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, exigirQuienReasigna, responsablesDelRegistro, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
@@ -32,8 +32,9 @@ const rangoSemaforo = (color: string) => {
   const amarillo = new Date(ahora + parametro<number>('SEMAFORO_HORAS_AMARILLO') * HORA)
   switch (color) {
     case 'VENCIDO': return { [Op.lt]: new Date(ahora) }
-    case 'ROJO': return { [Op.gte]: new Date(ahora), [Op.lt]: rojo }
-    case 'AMARILLO': return { [Op.gte]: rojo, [Op.lt]: amarillo }
+    // Igual que services/plazos.semaforo: el rojo incluye el límite exacto
+    case 'ROJO': return { [Op.gte]: new Date(ahora), [Op.lte]: rojo }
+    case 'AMARILLO': return { [Op.gt]: rojo, [Op.lt]: amarillo }
     case 'VERDE': return { [Op.gte]: amarillo }
     case 'SIN_FECHA': return { [Op.is]: null }
     default: return undefined
@@ -41,6 +42,18 @@ const rangoSemaforo = (color: string) => {
 }
 
 const alcance = alcanceActuaciones
+
+// Búsqueda del accionante (reunión 18-nov): el nombre con las palabras en cualquier orden ("Pérez Juan"
+// encuentra "Juan Carlos Pérez") y el documento aunque esté a medias o con puntos
+const condicionesParte = (q: string): WhereOptions[] => {
+  const palabras = q.split(/\s+/).filter(p => p.length >= 2).slice(0, 6)
+  const condiciones: WhereOptions[] = [{ nombre: { [Op.iLike]: `%${q}%` } }]
+  if (palabras.length > 1) condiciones.push({ [Op.and]: palabras.map(p => ({ nombre: { [Op.iLike]: `%${p}%` } })) })
+  const documento = q.replace(/[^0-9a-z]/gi, '')
+  // Se comparan los dos sin puntos ni guiones: el documento puede venir guardado como "1.234.567"
+  if (documento.length >= 4) condiciones.push(condicionSql(fn('regexp_replace', col('numeroDocumento'), '[^0-9A-Za-z]', '', 'g'), { [Op.iLike]: `%${documento}%` }))
+  return condiciones
+}
 
 // Mientras se esperan insumos el ANS está suspendido (sin fecha límite), pero el término judicial
 // sigue corriendo: el semáforo cae al vencimiento para no esconder la urgencia
@@ -82,7 +95,7 @@ router.get('/', async (req, res) => {
           ? Caso.findAll({ where: { radicado: { [Op.or]: [...(digitos.length >= 5 ? [{ [Op.like]: `%${digitos}%` }] : []), { [Op.like]: `%${alfanumerico}%` }] } }, attributes: ['id'], limit: 500 })
           : [],
         Caso.findAll({ where: { numeroInterno: { [Op.iLike]: `%${q}%` } }, attributes: ['id'], limit: 500 }),
-        Parte.findAll({ where: { [Op.or]: [{ nombre: { [Op.iLike]: `%${q}%` } }, { numeroDocumento: q }] }, attributes: ['casoId'], limit: 500 })
+        Parte.findAll({ where: { [Op.or]: condicionesParte(q) }, attributes: ['casoId'], limit: 500 })
       ])
       w.casoId = [...new Set([...porRadicado.map(c => c.id), ...porNumero.map(c => c.id), ...porParte.map(p => p.casoId)])]
     }
@@ -149,7 +162,7 @@ router.post('/',
   manejarErroresEntrada,
   async (req, res) => {
     try {
-      res.status(201).json(await registrarAsignacion({ ...req.body, correoId: null }, req.usuario!.id))
+      res.status(201).json(await registrarAsignacion(responsablesDelRegistro(req, { ...req.body, correoId: null }), req.usuario!.id))
     } catch (error) {
       responderError(res, error)
     }
@@ -269,13 +282,20 @@ router.patch('/actuaciones/:id',
       const actuacion = await Actuacion.findByPk(Number(req.params.id))
       if (!actuacion) throw new ErrorNegocio('La actuación no existe', 404)
       exigirResponsable(req, actuacion)
-      // Repartir excepcionalmente es del coordinador (roles del cliente)
-      if (CAMBIAN_RESPONSABLE.some(c => c in req.body) && !tieneRol(req, ROLES.COORDINADOR)) throw new ErrorNegocio('Solo el coordinador reasigna responsables', 403)
       const cambios: Record<string, unknown> = Object.fromEntries(CAMPOS_EDITABLES.filter(c => c in req.body).map(c => [c, req.body[c] === '' ? null : req.body[c]]))
+      const reasigna = CAMBIAN_RESPONSABLE.filter(c => c in cambios && cambios[c] !== actuacion[c as 'auxiliarId'])
+      const auxiliar = reasigna.includes('auxiliarId') && cambios.auxiliarId
+        ? await Usuario.findByPk(Number(cambios.auxiliarId), { attributes: ['id', 'equipoId', 'activo'], include: [{ model: Rol, attributes: ['codigo'], through: { attributes: [] } }] })
+        : null
+      if (reasigna.length) {
+        if (cambios.auxiliarId && !(auxiliar?.activo && auxiliar.roles?.some(r => r.codigo === ROLES.AUXILIAR))) throw new ErrorNegocio('Escoja un auxiliar jurídico activo')
+        exigirQuienReasigna(req, actuacion, Object.fromEntries(reasigna.map(c => [c, cambios[c]])), auxiliar?.equipoId)
+      } else {
+        // Lo que no cambia no se reescribe (el formulario manda todos los campos)
+        for (const c of CAMBIAN_RESPONSABLE) delete cambios[c]
+      }
       // Nuevo auxiliar sin equipo ni revisor indicados: los de su equipo
-      if (cambios.auxiliarId && !('equipoId' in cambios)) {
-        const auxiliar = await Usuario.findByPk(Number(cambios.auxiliarId), { attributes: ['id', 'equipoId'] })
-        if (!auxiliar) throw new ErrorNegocio('El auxiliar no existe')
+      if (auxiliar && !('equipoId' in cambios)) {
         cambios.equipoId = auxiliar.equipoId
         if (!('revisorId' in cambios)) cambios.revisorId = await revisorDeEquipo(auxiliar.equipoId)
       }
@@ -293,12 +313,15 @@ router.patch('/actuaciones/:id',
 // Eliminar una actuación registrada por error (asignación duplicada, mal digitada). Solo si no se ha
 // entregado nada a la entidad: lo entregado es parte del servicio y se cierra, no se borra. Si era la
 // única actuación, se va el caso. El correo de la asignación vuelve a la bandeja para registrarlo bien
-router.delete('/actuaciones/:id', requiereRol(ROLES.COORDINADOR), param('id').isInt(),
+// Reunión 18-nov: el asistente también elimina lo que no era un caso, pero solo antes de que alguien
+// lo asuma (después ya hay trabajo del auxiliar y lo decide el coordinador)
+router.delete('/actuaciones/:id', requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE), param('id').isInt(),
   body('motivo').isString().trim().notEmpty().withMessage('Indique por qué se elimina'), manejarErroresEntrada,
   async (req, res) => {
     try {
-      const actuacion = await Actuacion.findByPk(Number(req.params.id), { attributes: ['id', 'casoId', 'etapa'] })
+      const actuacion = await Actuacion.findByPk(Number(req.params.id), { attributes: ['id', 'casoId', 'etapa', 'estado'] })
       if (!actuacion) throw new ErrorNegocio('La actuación no existe', 404)
+      if (!tieneRol(req, ROLES.COORDINADOR) && actuacion.estado !== 'POR_ASUMIR') throw new ErrorNegocio('Ya la asumió el auxiliar: la elimina el coordinador', 403)
       const entregados = await Escrito.count({ where: { actuacionId: actuacion.id, fechaEntregaEntidad: { [Op.ne]: null } } })
       if (entregados) throw new ErrorNegocio('Ya se entregó un escrito a la entidad: la actuación se cierra con su causal, no se elimina')
       const casoId = actuacion.casoId
@@ -396,7 +419,8 @@ router.post('/actuaciones/:id/correo', param('id').isInt(), body('buzon').isIn(B
     })
   }))
 
-router.post('/actuaciones/:id/datos-faltantes', param('id').isInt(), body('detalle').isString().trim().notEmpty().withMessage('Indique qué datos faltan'), manejarErroresEntrada,
+// Datos faltantes y expediente (reunión 18-nov): los pide la asistencia administrativa, no el auxiliar
+router.post('/actuaciones/:id/datos-faltantes', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(), body('detalle').isString().trim().notEmpty().withMessage('Indique qué datos faltan'), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({ actuacionId: a.id, detalle: req.body.detalle, para: req.body.para, usuarioId: req.usuario!.id })))
 
 router.post('/actuaciones/:id/insumos', param('id').isInt(), body('insumos').isArray({ min: 1 }).withMessage('Indique al menos un insumo'), manejarErroresEntrada,

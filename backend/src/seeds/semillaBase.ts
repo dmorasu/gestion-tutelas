@@ -5,6 +5,7 @@ import { NOMBRES_ROLES } from '../services/constantes'
 import { sembrarParametros } from '../services/parametros'
 import { sembrarPlantillas } from '../services/buzon/correosSalida'
 import { SECUENCIA_NUMERO_INTERNO, siguienteNumeroInterno } from '../services/registroCasos'
+import { sembrarCatalogos } from './catalogosBase'
 
 // Equipos iniciales del correo del cliente (1 revisor por cada 4 auxiliares). Solo si no hay ninguno:
 // después se ajustan en la pantalla de Equipos
@@ -49,4 +50,5 @@ export const sembrarBase = async () => {
   await sembrarParametros()
   await sembrarMediosDias()
   await sembrarPlantillas()
+  await sembrarCatalogos()
 }

@@ -23,18 +23,18 @@ export type ActuacionDetalle = {
 }
 
 type Props = {
-  casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number,
+  casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number, reasigna: "TODO" | "EQUIPO" | null,
   auxiliares: Responsable[], revisores: Responsable[], archivos: ArchivoCaso[]
   puedeTrabajar: boolean, puedeRevisar: boolean, puedePedirInsumos: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, reasigna, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
-  const puedeEditar = gestiona || esResponsable
+  const puedeEditar = gestiona || esResponsable || !!reasigna
 
   const ejecutar = (fn: () => Promise<{ ok: boolean, errores?: string[] }>, mensaje: string) =>
     iniciar(async () => {
@@ -56,10 +56,12 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
     }
     // Solo se envía si cambió: enviarla la deja "puesta a mano" y el recálculo ya no la toca
     if (datos.get("criticidad") !== a.criticidad) cambios.criticidad = datos.get("criticidad")
-    if (coordina) {
+    if (reasigna) {
       const auxiliarId = Number(datos.get("auxiliarId")) || null
-      const revisorId = Number(datos.get("revisorId")) || null
       if (auxiliarId !== a.auxiliarId) cambios.auxiliarId = auxiliarId
+    }
+    if (reasigna === "TODO") {
+      const revisorId = Number(datos.get("revisorId")) || null
       if (revisorId !== a.revisorId) cambios.revisorId = revisorId
     }
     ejecutar(() => actualizarActuacion(casoId, a.id, cambios), "Actuación actualizada")
@@ -143,23 +145,23 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
               {Object.entries(ESTADOS_ACTUACION).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          {coordina && (
-            <>
-              <div>
-                <label className="etiqueta">Auxiliar</label>
-                <select name="auxiliarId" defaultValue={a.auxiliarId ?? ""} className="campo">
-                  <option value="">— Sin asignar —</option>
-                  {auxiliares.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="etiqueta">Revisor</label>
-                <select name="revisorId" defaultValue={a.revisorId ?? ""} className="campo">
-                  <option value="">— Sin asignar —</option>
-                  {revisores.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                </select>
-              </div>
-            </>
+          {reasigna && (
+            <div>
+              <label className="etiqueta">Auxiliar</label>
+              <select name="auxiliarId" defaultValue={a.auxiliarId ?? ""} className="campo">
+                {(reasigna === "TODO" || !a.auxiliarId) && <option value="">— Sin asignar —</option>}
+                {auxiliares.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
+          )}
+          {reasigna === "TODO" && (
+            <div>
+              <label className="etiqueta">Revisor</label>
+              <select name="revisorId" defaultValue={a.revisorId ?? ""} className="campo">
+                <option value="">— Sin asignar —</option>
+                {revisores.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
           )}
           <div className="flex flex-col justify-end gap-1">
             <label className="flex items-center gap-2"><input type="checkbox" name="requiereInsumos" defaultChecked={a.requiereInsumos} /> Requiere insumos</label>
@@ -182,6 +184,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         puedeTrabajar={puedeTrabajar}
         puedeRevisar={puedeRevisar}
         puedePedirInsumos={puedePedirInsumos}
+        puedePedirDatos={gestiona}
         puedeCerrar={puedeCerrar}
         motivosCierre={motivosCierre}
         tipoEscrito={tipoEscrito(a)}

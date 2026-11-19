@@ -1,12 +1,12 @@
 import { Usuario, Rol, UsuarioRol, Equipo } from './usuarios'
-import { Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo } from './catalogos'
+import { Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo, ItemCatalogo } from './catalogos'
 import { Caso, Parte, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision } from './casos'
 import { Correo, Archivo, HistorialCaso, EnlaceCorreo, NotaCaso } from './correos'
 import { Alerta, Informe, AnsPeriodo, Asistencia } from './seguimiento'
 
 export const modelos = [
   Usuario, Rol, UsuarioRol, Equipo,
-  Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo,
+  Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo, ItemCatalogo,
   Caso, Parte, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision,
   Correo, Archivo, HistorialCaso, EnlaceCorreo, NotaCaso,
   Alerta, Informe, AnsPeriodo, Asistencia
@@ -14,7 +14,7 @@ export const modelos = [
 
 export {
   Usuario, Rol, UsuarioRol, Equipo,
-  Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo,
+  Juzgado, MotivoDevolucion, DiaNoHabil, Parametro, RadicadoOtroOperador, SincronizacionBuzon, PlantillaCorreo, ItemCatalogo,
   Caso, Parte, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision,
   Correo, Archivo, HistorialCaso, EnlaceCorreo, NotaCaso,
   Alerta, Informe, AnsPeriodo, Asistencia

@@ -1,6 +1,7 @@
 import { Router } from 'express'
-import { body, param } from 'express-validator'
-import { Parametro, DiaNoHabil, Juzgado, Usuario, Rol, MotivoDevolucion, Equipo, PlantillaCorreo } from '../models'
+import { body, param, query } from 'express-validator'
+import { Parametro, DiaNoHabil, Juzgado, Usuario, Rol, MotivoDevolucion, Equipo, PlantillaCorreo, ItemCatalogo } from '../models'
+import { CATALOGOS } from '../models/catalogos'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { cargarParametros, parametro, PARAMETROS_BASE } from '../services/parametros'
@@ -82,6 +83,58 @@ router.post('/juzgados', requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE), body('
 
 router.get('/motivos-devolucion', async (_req, res) => {
   res.json(await MotivoDevolucion.findAll({ where: { activo: true }, order: [['nombre', 'ASC']] }))
+})
+
+// ── Catálogos editables: derechos, tipos de respuesta y matriz de insumos (reunión 18-nov) ──
+// Los formularios piden solo los activos; Configuración los pide todos (?todos=1)
+router.get('/items', query('catalogo').isIn(CATALOGOS), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await ItemCatalogo.findAll({
+      where: { catalogo: String(req.query.catalogo), ...(req.query.todos === '1' ? {} : { activo: true }) },
+      order: [['grupo', 'ASC NULLS FIRST'], ['orden', 'ASC'], ['id', 'ASC']]
+    }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+const validarItem = [
+  body('nombre').optional().isString().trim().isLength({ min: 1, max: 400 }).withMessage('Escriba el nombre (hasta 400 caracteres)'),
+  body('grupo').optional({ values: 'null' }).isString().trim().isLength({ max: 120 }),
+  body('clase').optional({ values: 'null' }).isIn(['DOCUMENTO', 'INFORMACION'])
+]
+
+router.post('/items', administran, body('catalogo').isIn(CATALOGOS), body('nombre').exists().withMessage('Escriba el nombre'), ...validarItem, manejarErroresEntrada, async (req, res) => {
+  try {
+    const { catalogo, nombre } = req.body
+    // La matriz de insumos siempre va por grupo y clase: así se filtra al pedir datos o insumos
+    if (catalogo === 'INSUMO' && !(req.body.grupo?.trim() && req.body.clase)) throw new ErrorNegocio('Indique el grupo y si es documento o información')
+    const orden = (await ItemCatalogo.max<number, ItemCatalogo>('orden', { where: { catalogo } })) ?? 0
+    // Lo crea la firma: no es supuesto
+    res.status(201).json(await ItemCatalogo.create({
+      catalogo, nombre, grupo: catalogo === 'INSUMO' ? req.body.grupo.trim() : null, clase: catalogo === 'INSUMO' ? req.body.clase : null, orden: orden + 1
+    }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Renombrar, cambiar de grupo, confirmar el supuesto o apagar. No se borran: los casos guardan la
+// referencia y el informe de tiempos los sigue agrupando aunque ya no se usen
+router.put('/items/:id', administran, param('id').isInt(), ...validarItem, body('activo').optional().isBoolean(), body('supuesto').optional().isBoolean(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const item = await ItemCatalogo.findByPk(Number(req.params.id))
+    if (!item) throw new ErrorNegocio('El ítem no existe', 404)
+    const cambios: Record<string, unknown> = {}
+    for (const campo of ['nombre', 'activo', 'supuesto'] as const) if (campo in req.body) cambios[campo] = req.body[campo]
+    if (item.catalogo === 'INSUMO') for (const campo of ['grupo', 'clase'] as const) if (req.body[campo]) cambios[campo] = req.body[campo]
+    // Editarlo a mano es confirmarlo
+    if (cambios.nombre !== undefined) cambios.supuesto = false
+    await item.update(cambios)
+    res.json(item)
+  } catch (error) {
+    responderError(res, error)
+  }
 })
 
 // ── Usuarios y perfiles ──

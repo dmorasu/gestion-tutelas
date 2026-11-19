@@ -155,7 +155,8 @@ export const semaforo = (limite: Date | null | undefined, ahora = new Date()): S
   if (!limite) return 'SIN_FECHA'
   const horas = (new Date(limite).getTime() - ahora.getTime()) / HORA
   if (horas < 0) return 'VENCIDO'
-  if (horas < parametro<number>('SEMAFORO_HORAS_ROJO')) return 'ROJO'
+  // Reunión 18-nov: rojo con el término igual o menor a las horas del parámetro
+  if (horas <= parametro<number>('SEMAFORO_HORAS_ROJO')) return 'ROJO'
   if (horas < parametro<number>('SEMAFORO_HORAS_AMARILLO')) return 'AMARILLO'
   return 'VERDE'
 }

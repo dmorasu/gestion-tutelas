@@ -35,7 +35,7 @@ type Detalle = {
   envio: string
   almacen: string
 }
-type Usuario = { id: number, nombre: string, activo: boolean, roles: { codigo: string }[] }
+type Usuario = { id: number, nombre: string, activo: boolean, equipoId: number | null, roles: { codigo: string }[] }
 
 type Pestana = "actuacion" | "informacion" | "documentos" | "correos" | "historial"
 
@@ -57,6 +57,8 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const trabaja = (a: ActuacionDetalle) => gestiona || a.auxiliarId === sesion.id || revisa(a)
   // Insumos: solo el auxiliar de la actuación o su revisor (como en services/permisosActuacion)
   const pideInsumos = (a: ActuacionDetalle) => a.auxiliarId === sesion.id || (esRevisor && (a.revisorId === sesion.id || (!!a.equipo && a.equipo.id === sesion.equipoId)))
+  // Reasignar (como services/permisosActuacion): el coordinador, todo; el revisor, entre los auxiliares de su equipo
+  const reasigna = (a: ActuacionDetalle) => coordina ? "TODO" as const : esRevisor && !!sesion.equipoId && a.equipo?.id === sesion.equipoId ? "EQUIPO" as const : null
   const delRol = (codigo: string): Responsable[] => usuarios.filter(u => u.activo && u.roles.some(r => r.codigo === codigo)).map(u => ({ id: u.id, nombre: u.nombre }))
 
   // La actuación que se mira: la elegida o la abierta más reciente
@@ -147,7 +149,8 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
               gestiona={gestiona}
               coordina={coordina}
               usuarioId={sesion.id}
-              auxiliares={delRol("AUXILIAR")}
+              reasigna={reasigna(actual)}
+              auxiliares={reasigna(actual) === "EQUIPO" ? usuarios.filter(u => u.activo && u.equipoId === sesion.equipoId && u.roles.some(r => r.codigo === "AUXILIAR")).map(u => ({ id: u.id, nombre: u.nombre })) : delRol("AUXILIAR")}
               revisores={delRol("REVISOR")}
               archivos={archivos.filter(x => x.actuacionId === actual.id)}
               puedeTrabajar={trabaja(actual)}

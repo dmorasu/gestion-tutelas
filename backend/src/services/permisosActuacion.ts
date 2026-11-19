@@ -39,6 +39,22 @@ export const exigirQuienPideInsumos = (req: Request, a: Responsables) => {
   if (a.auxiliarId !== req.usuario!.id && !esRevisorDe(req, a)) throw new ErrorNegocio('Los insumos los piden el auxiliar jurídico de la actuación o su revisor', 403)
 }
 
+// Reasignar (reunión 18-nov): el reparto es automático; el coordinador cambia cualquier responsable
+// y el revisor mueve la actuación entre los auxiliares de su propio equipo, sin cambiar de equipo ni
+// de revisor (eso ya es redistribuir entre equipos, que es del coordinador)
+export const exigirQuienReasigna = (req: Request, a: Responsables, cambios: { auxiliarId?: unknown, revisorId?: unknown, equipoId?: unknown }, equipoDelNuevo: number | null | undefined) => {
+  if (tieneRol(req, ROLES.COORDINADOR)) return
+  if (!esRevisorDe(req, a)) throw new ErrorNegocio('Reasignan el coordinador o el revisor del equipo', 403)
+  if ('revisorId' in cambios || 'equipoId' in cambios) throw new ErrorNegocio('Cambiar el revisor o el equipo es del coordinador', 403)
+  if (!cambios.auxiliarId) throw new ErrorNegocio('Indique el auxiliar')
+  if (!req.usuario!.equipoId || equipoDelNuevo !== req.usuario!.equipoId) throw new ErrorNegocio('El revisor reasigna solo entre los auxiliares de su equipo', 403)
+}
+
+// Al registrar, el reparto es automático. Solo el coordinador puede escoger a mano el auxiliar o el
+// revisor; si otro perfil los manda, se ignoran y reparte el sistema
+export const responsablesDelRegistro = <T extends { auxiliarId?: unknown, revisorId?: unknown }>(req: Request, datos: T): T =>
+  tieneRol(req, ROLES.COORDINADOR) ? datos : { ...datos, auxiliarId: null, revisorId: null }
+
 export const exigirRevisor = (req: Request, a: Responsables) => {
   if (tieneRol(req, ROLES.COORDINADOR)) return
   if (!esRevisorDe(req, a)) throw new ErrorNegocio('Solo el revisor del equipo o el coordinador pueden hacer esto', 403)

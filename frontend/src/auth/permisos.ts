@@ -28,6 +28,7 @@ export const MODULOS: Modulo[] = [
   { href: "/informes", nombre: "Informes", descripcion: "Semanal y mensual en Excel", roles: ["COORDINADOR", "REVISOR", "ASISTENTE"] },
   { href: "/asistencia", nombre: "Asistencia", descripcion: "Equipo mínimo del día (ANS-11)", roles: ["COORDINADOR", "ASISTENTE"] },
   { href: "/equipos", nombre: "Equipos", descripcion: "Revisores, auxiliares y etapas", roles: ["COORDINADOR"] },
+  { href: "/catalogos", nombre: "Catálogos", descripcion: "Derechos, tipos de respuesta y matriz de insumos", roles: ["COORDINADOR"] },
   { href: "/plantillas", nombre: "Plantillas de correo", descripcion: "Textos de los correos de salida", roles: ["COORDINADOR"] },
   { href: "/archivo-maestro", nombre: "Archivo maestro", descripcion: "PQRS y radicados que atiende otro equipo", roles: ["COORDINADOR"] },
   { href: "/parametros", nombre: "Parámetros", descripcion: "Plazos, ANS y días no hábiles", roles: ["COORDINADOR"] },

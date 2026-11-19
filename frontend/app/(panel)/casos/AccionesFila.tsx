@@ -11,12 +11,13 @@ import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, isoDesdeLocal, valorFechaHoraL
 type Persona = { id: number, nombre: string }
 export type FilaAcciones = {
   id: number, etapa: string, estado: string, criticidad: string, fechaVencimientoInformada: string | null,
-  auxiliarId: number | null, revisorId: number | null, caso: { id: number, numeroInterno: string | null }
+  auxiliarId: number | null, revisorId: number | null, equipoId?: number | null, caso: { id: number, numeroInterno: string | null }
 }
 
 // Acciones rápidas de una fila del tablero de casos: ver, editar lo básico y eliminar lo registrado por error
-export default function AccionesFila({ a, puedeEditar, coordina, auxiliares, revisores }: {
-  a: FilaAcciones, puedeEditar: boolean, coordina: boolean, auxiliares: Persona[], revisores: Persona[]
+// reasigna: TODO (coordinador: auxiliar y revisor) o EQUIPO (revisor: solo el auxiliar, entre los de su equipo)
+export default function AccionesFila({ a, puedeEditar, reasigna, puedeEliminar, auxiliares, revisores }: {
+  a: FilaAcciones, puedeEditar: boolean, reasigna: "TODO" | "EQUIPO" | null, puedeEliminar: boolean, auxiliares: Persona[], revisores: Persona[]
 }) {
   const [editando, setEditando] = useState(false)
   const [eliminando, setEliminando] = useState(false)
@@ -31,10 +32,12 @@ export default function AccionesFila({ a, puedeEditar, coordina, auxiliares, rev
     }
     // Solo si cambió: enviarla la deja "puesta a mano" y el recálculo ya no la toca
     if (d.get("criticidad") !== a.criticidad) cambios.criticidad = d.get("criticidad")
-    if (coordina) {
+    if (reasigna) {
       const auxiliarId = Number(d.get("auxiliarId")) || null
-      const revisorId = Number(d.get("revisorId")) || null
       if (auxiliarId !== a.auxiliarId) cambios.auxiliarId = auxiliarId
+    }
+    if (reasigna === "TODO") {
+      const revisorId = Number(d.get("revisorId")) || null
       if (revisorId !== a.revisorId) cambios.revisorId = revisorId
     }
     iniciar(async () => {
@@ -56,7 +59,7 @@ export default function AccionesFila({ a, puedeEditar, coordina, auxiliares, rev
     <div className="flex items-center justify-end gap-0.5">
       <Link href={`/casos/${a.caso.id}?actuacion=${a.id}`} className="boton-icono" title="Ver" aria-label={`Ver ${nombre}`}><Eye size={15} /></Link>
       {puedeEditar && <button type="button" onClick={() => setEditando(true)} className="boton-icono" title="Editar" aria-label={`Editar ${nombre}`}><Pencil size={15} /></button>}
-      {coordina && (
+      {puedeEliminar && (
         <button type="button" onClick={() => setEliminando(true)} disabled={entregada} className="boton-icono-peligro"
           title={entregada ? "Ya se entregó a la entidad: se cierra, no se elimina" : "Eliminar"} aria-label={`Eliminar ${nombre}`}>
           <Trash2 size={15} />
@@ -81,23 +84,23 @@ export default function AccionesFila({ a, puedeEditar, coordina, auxiliares, rev
             <label className="etiqueta">Vencimiento informado por la entidad</label>
             <input type="datetime-local" name="vence" defaultValue={valorFechaHoraLocal(a.fechaVencimientoInformada)} className="campo" />
           </div>
-          {coordina && (
-            <>
-              <div>
-                <label className="etiqueta">Auxiliar</label>
-                <select name="auxiliarId" defaultValue={a.auxiliarId ?? ""} className="campo">
-                  <option value="">Sin asignar</option>
-                  {auxiliares.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="etiqueta">Revisor</label>
-                <select name="revisorId" defaultValue={a.revisorId ?? ""} className="campo">
-                  <option value="">Sin asignar</option>
-                  {revisores.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-                </select>
-              </div>
-            </>
+          {reasigna && (
+            <div>
+              <label className="etiqueta">Auxiliar</label>
+              <select name="auxiliarId" defaultValue={a.auxiliarId ?? ""} className="campo">
+                {(reasigna === "TODO" || !a.auxiliarId) && <option value="">Sin asignar</option>}
+                {auxiliares.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
+          )}
+          {reasigna === "TODO" && (
+            <div>
+              <label className="etiqueta">Revisor</label>
+              <select name="revisorId" defaultValue={a.revisorId ?? ""} className="campo">
+                <option value="">Sin asignar</option>
+                {revisores.map(u => <option key={u.id} value={u.id}>{u.nombre}</option>)}
+              </select>
+            </div>
           )}
           <div className="flex justify-end gap-2 sm:col-span-2">
             <button type="button" onClick={() => setEditando(false)} className="boton-secundario">Cancelar</button>

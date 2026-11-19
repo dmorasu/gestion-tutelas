@@ -1,8 +1,9 @@
 import { Router } from 'express'
 import { body, param } from 'express-validator'
-import { Op } from 'sequelize'
+import { Op, literal, type Order } from 'sequelize'
 import multer from 'multer'
 import { Correo, Archivo, Caso, Juzgado, RadicadoOtroOperador, Actuacion, SincronizacionBuzon, SolicitudInsumo, Escrito, MotivoDevolucion, EnlaceCorreo, Usuario } from '../models'
+import { responsablesDelRegistro } from '../services/permisosActuacion'
 import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
 import { descargarEnlace, subirEnlace, descartarEnlace } from '../services/buzon/enlaces'
 import { confirmarDatosFaltantes } from '../services/flujoEscritos'
@@ -37,8 +38,20 @@ const nombresDe = async (ids: (number | null)[]) => {
   return new Map((await Usuario.findAll({ where: { id: unicos }, attributes: ['id', 'nombre'] })).map(u => [u.id, u.nombre]))
 }
 
-// Bandeja de correos (por defecto, los que faltan por registrar), del más antiguo al más nuevo:
-// el que lleva más tiempo esperando es el que más consume del ANS.
+// Prioridad de lo pendiente (reunión 18-nov: priorizar por el tiempo de respuesta): primero lo crítico o
+// lo que vence dentro de las horas del semáforo rojo, luego por vencimiento y al final por antigüedad.
+// El parámetro se lee en cada consulta y se pasa como número: no hay texto del usuario en el SQL
+const ordenPrioridad = (): Order => {
+  const horas = Number(parametro<number>('SEMAFORO_HORAS_ROJO')) || 8
+  return [
+    [literal(`CASE WHEN "Correo"."criticidadDetectada" = 'CRITICO' OR "Correo"."vencimientoDetectado" <= now() + interval '${horas} hours' THEN 0 ELSE 1 END`), 'ASC'],
+    ['vencimientoDetectado', 'ASC NULLS LAST'],
+    ['fechaCorreo', 'ASC']
+  ]
+}
+
+// Bandeja de correos (por defecto, los que faltan por registrar). Lo pendiente va por prioridad
+// (ordenPrioridad); a igual urgencia, el que lleva más tiempo esperando, que es el que más consume del ANS.
 // estado=POR_REVISAR: respuestas ya asociadas que alguien debe atender (insumos, acuse o devolución)
 router.get('/', async (req, res) => {
   try {
@@ -62,7 +75,7 @@ router.get('/', async (req, res) => {
         { model: EnlaceCorreo, as: 'enlacesPendientes', attributes: ['id', 'estado'], required: false },
         { model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'etapaActual'] }
       ],
-      order: [['fechaCorreo', pendiente ? 'ASC' : 'DESC']],
+      order: pendiente ? ordenPrioridad() : [['fechaCorreo', 'DESC']],
       limit: 50,
       offset: (pagina - 1) * 50,
       distinct: true
@@ -194,7 +207,7 @@ router.post('/:id/registrar',
   manejarErroresEntrada,
   async (req, res) => {
     try {
-      const resultado = await registrarAsignacion({ ...req.body, correoId: Number(req.params.id) }, req.usuario!.id)
+      const resultado = await registrarAsignacion(responsablesDelRegistro(req, { ...req.body, correoId: Number(req.params.id) }), req.usuario!.id)
       res.status(201).json(resultado)
     } catch (error) {
       responderError(res, error)

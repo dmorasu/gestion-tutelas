@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
-import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, ChartColumn, UserCheck, CalendarCheck, type LucideIcon } from "lucide-react"
+import { ArrowUpRight, Inbox, LayoutList, SlidersHorizontal, Users, UsersRound, Mail, Gauge, Target, Bell, FileSpreadsheet, ListChecks, ChartColumn, UserCheck, CalendarCheck, BookMarked, type LucideIcon } from "lucide-react"
 import { fetchApi } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { NOMBRES_ROLES, modulosPermitidos, soloConsulta, tieneRol, type CodigoRol } from "@/src/auth/permisos"
@@ -19,6 +19,7 @@ const ASPECTO: Record<string, { Icono: LucideIcon, fondo: string, sombra: string
   "/informes": { Icono: FileSpreadsheet, fondo: "from-sky-400 to-blue-600", sombra: "shadow-sky-500/30", borde: "hover:border-sky-300", halo: "bg-sky-400" },
   "/archivo-maestro": { Icono: ListChecks, fondo: "from-amber-400 to-orange-500", sombra: "shadow-amber-500/30", borde: "hover:border-amber-300", halo: "bg-amber-400" },
   "/equipos": { Icono: UsersRound, fondo: "from-violet-400 to-indigo-600", sombra: "shadow-violet-500/30", borde: "hover:border-violet-300", halo: "bg-violet-400" },
+  "/catalogos": { Icono: BookMarked, fondo: "from-stone-400 to-stone-600", sombra: "shadow-stone-500/30", borde: "hover:border-stone-300", halo: "bg-stone-400" },
   "/plantillas": { Icono: Mail, fondo: "from-teal-400 to-emerald-600", sombra: "shadow-teal-500/30", borde: "hover:border-teal-300", halo: "bg-teal-400" },
   "/parametros": { Icono: SlidersHorizontal, fondo: "from-slate-500 to-slate-700", sombra: "shadow-slate-500/30", borde: "hover:border-slate-400", halo: "bg-slate-400" },
   "/usuarios": { Icono: Users, fondo: "from-rose-400 to-pink-600", sombra: "shadow-rose-500/30", borde: "hover:border-rose-300", halo: "bg-rose-400" }

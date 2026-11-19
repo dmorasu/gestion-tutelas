@@ -56,7 +56,7 @@ const VISTAS: Record<string, string> = {
         WHEN a.estado IN ('ENTREGADO', 'APROBADO', 'RADICADO') THEN 'ENTREGADO'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") IS NULL THEN 'SIN_FECHA'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") < now() THEN 'VENCIDO'
-        WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") < now() + make_interval(hours => ${param('SEMAFORO_HORAS_ROJO')}::int) THEN 'ROJO'
+        WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") <= now() + make_interval(hours => ${param('SEMAFORO_HORAS_ROJO')}::int) THEN 'ROJO'
         WHEN COALESCE(a."fechaLimiteEntrega", a."fechaVencimiento") < now() + make_interval(hours => ${param('SEMAFORO_HORAS_AMARILLO')}::int) THEN 'AMARILLO'
         ELSE 'VERDE' END AS semaforo,
       (${dia('COALESCE(a."fechaCierre", now())')} - ${dia('a."fechaAsignacion"')}) AS dias_abierta

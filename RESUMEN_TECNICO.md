@@ -1,6 +1,6 @@
 # Nodex Tutelas: resumen técnico para continuar
 
-_Actualizado: 2026-11-10 (noche) · rama `desarrollo`_
+_Actualizado: 2026-11-19 · rama `desarrollo`_
 
 App para recibir, repartir, trabajar, entregar y medir las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
 
@@ -47,7 +47,7 @@ Convenciones heredadas de Nodex:
 ## Modelo de datos (`backend/src/models`)
 
 - `usuarios.ts`: **Equipo** (va antes de Usuario: los decoradores leen su tipo al cargar), Usuario (con `equipoId` y `capacidadDiaria`), Rol, UsuarioRol.
-- `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil (con `medioDia`), Parametro, RadicadoOtroOperador (archivo maestro, judicial o PQRS), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo.
+- `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil (con `medioDia`), Parametro, RadicadoOtroOperador (archivo maestro, judicial o PQRS), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo, **ItemCatalogo** (catálogos editables: `DERECHO`, `TIPO_RESPUESTA` e `INSUMO`, la matriz de insumos por grupo y clase documento/información; `supuesto` hasta que la firma lo confirme; `codigo` para los ítems con regla, como `EMERGENCIA`). La semilla (`seeds/catalogosBase.ts`) carga cada catálogo solo si está vacío.
 - `casos.ts`: Caso (radicado judicial o de PQRS, `numeroInterno` GPA-AAAA-NNNNN, `porDerechoPeticion` y `casoRelacionadoId` de la PQRS ligada), Parte, Actuacion (etapa, estado, criticidad, vencimiento informado o calculado, fecha límite ANS, auxiliar, revisor, equipo, datos faltantes pendientes, tipo de petición), SolicitudInsumo (con `fechaLimite` del cliente), Escrito (versiones V1, V2…, estado, enlace, `limiteAns` al entregar), Devolucion (tipo, plazo de corrección, extemporánea), RadicacionJuzgado, Decision (sentido, favorable, término de impugnación, cumplimiento pendiente o ligado, sanción atribuible).
 - `correos.ts`: Correo (buzón, lo leído del asunto, enlaces, `porRevisar`, `responsableId`, aviso sin atender), **EnlaceCorreo** (enlaces de SharePoint como pendientes), Archivo (SharePoint o local: `ruta`, `itemId`, `webUrl`, `adjuntoGraphId`), HistorialCaso (bitácora automática por hooks), **NotaCaso** (notas de las personas: autor, etapa opcional, texto; no se editan ni se borran).
 - `seguimiento.ts`: Alerta (tipo, detección, plazo y emisión), Informe (semanal o mensual, con su Excel y resumen), AnsPeriodo (foto mensual del ANS con nivel y descuento) y Asistencia (por persona y día).
@@ -101,7 +101,7 @@ Al asociar un correo por radicado, primero se busca el del asunto y después los
 - `authRouter`: login, me (con `equipoId`), cambiar contraseña, salir.
 - `correosRouter`: bandeja (`POR_ATENDER`, `MIOS`, `ASOCIADO`, `DESCARTADO`), detalle con sugerencias y contexto, registrar, asociar con propósito, tomar, trasladar, soltar, enlaces (descargar, subir, descartar), datos faltantes recibidos, atendido, descartar, estado de los buzones, sincronizar.
 - `casosRouter`: listado con filtros, resumen del inicio, registro manual, búsqueda por radicado, detalle (con relacionados), historial, fallos (`POST /actuaciones/:id/decision`, `PATCH /decisiones/:id`, `POST /decisiones/:id/cumplimiento`), PQRS ligada (`POST /:id/pqrs-ligada`), PATCH de actuación, asumir, borrador y envío de correo libre, y los pasos del flujo (`POST /actuaciones/:id/{datos-faltantes|insumos|insumos/recibidos|revision|devolver-auxiliar|entregar|respuesta|radicacion|cerrar|correo}`).
-- `catalogosRouter`: ámbito de PQRS, parámetros, días no hábiles, juzgados, motivos, usuarios, equipos e integrantes, plantillas (con vista previa y prueba).
+- `catalogosRouter`: ámbito de PQRS, parámetros, días no hábiles, juzgados, motivos, **ítems de catálogo** (`GET /items?catalogo=&todos=1`, `POST /items`, `PUT /items/:id`; no se borran, se apagan), usuarios, equipos e integrantes, plantillas (con vista previa y prueba).
 - `archivosRouter`: ver o descargar; subir al expediente (multer en memoria, 60 MB por archivo).
 - `carguesRouter`: analizar Excel, cargar los radicados de un correo, registrar por tandas, acuse del paquete.
 - `seguimientoRouter`: tablero diario, ANS, alertas (detectar, emitir, descartar), informes, archivo maestro, asistencia.
@@ -119,13 +119,19 @@ Al asociar un correo por radicado, primero se busca el del asunto y después los
 - **Login propio** con correo y contraseña (bcrypt). Sin registro público: el administrador crea al usuario y la app muestra la contraseña temporal una sola vez; se cambia al primer ingreso.
 - Bloqueo de 15 minutos tras 5 fallos por cuenta (30 por IP). JWT de 10 horas con `versionSesion`.
 - Perfiles: ADMIN, COORDINADOR, ASISTENTE (administrativo), AUXILIAR (jurídico), REVISOR y CONSULTA (PST y la entidad: solo el tablero, sin descuentos; el backend le niega todo lo demás). El auxiliar ve lo suyo; el revisor, su equipo y lo que revisa; asistencia, coordinación y administrador, todo.
-- Solo el coordinador reasigna responsables de un caso, elimina actuaciones registradas por error (con motivo y solo si no se ha entregado nada a la entidad), entrega junto con el revisor, emite alertas y genera informes. El asistente toma y traslada correos.
+- El reparto es automático (`REPARTO_AUTOMATICO`). Solo el coordinador escoge a mano auxiliar o revisor al registrar (`responsablesDelRegistro`: a otros perfiles se les ignora) y reasigna cualquier responsable; el revisor reasigna entre los auxiliares de su equipo, sin cambiar equipo ni revisor (`exigirQuienReasigna`). Todo queda en la bitácora.
+- Datos faltantes y pedido del expediente: asistente y coordinador. Insumos: el auxiliar de la actuación y su revisor.
+- Eliminar una actuación registrada por error (con motivo, solo si no se entregó nada): el coordinador; el asistente, solo mientras está por asumir. Lo que no es caso se descarta desde el correo.
+- El coordinador entrega junto con el revisor, emite alertas y genera informes. El asistente toma y traslada correos.
 
 ## Frontend (`frontend/`)
 
 - Diseño de Nodex Gastos (login partido, encabezado con menús agrupados, inicio con tarjetas) y del detalle de trámites de Nodex (pestañas, `components/ui/Seccion` y `Dato`, historial en línea de tiempo).
 - **Color grafito (slate).** Ámbar solo para advertencias ("Supuesto", pendientes, "Sin asignar", semáforo próximo).
-- Menú: Inicio · Correos · Casos · **Seguimiento** (Tablero diario, Indicadores ANS, Alertas, Informes) · **Configuración** (Equipos, Plantillas de correo, Archivo maestro, Parámetros, Usuarios).
+- Menú: Inicio · Correos · Casos · **Seguimiento** (Tablero, Tablero diario, Cierre del día, Indicadores ANS, Alertas, Informes, Asistencia) · **Configuración** (Equipos, Catálogos, Plantillas de correo, Archivo maestro, Parámetros, Usuarios).
+- Semáforo: rojo con `SEMAFORO_HORAS_ROJO` horas **o menos** (8, reunión 18-nov), igual en `plazos.semaforo`, el filtro del listado y la vista del tablero.
+- Prioridad: casos por fecha límite; la bandeja de correos pendientes pone primero lo crítico o lo que vence dentro del rojo, luego por vencimiento y antigüedad.
+- Búsqueda de casos: radicado, número interno, nombre del accionante con las palabras en cualquier orden y documento parcial o con puntos.
 
 Pantallas:
 
@@ -140,6 +146,7 @@ Pantallas:
 | `cierre-dia` | Cierre del día (`GET /seguimiento/cierre-dia?dia=`): por persona y por caso, con selector de día |
 | `tablero` | Tablero de la operación (mismas vistas que Power BI); descuentos internos |
 | `seguimiento`, `indicadores`, `alertas`, `informes`, `asistencia` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel, asistencia del equipo |
+| `catalogos` | Derechos, tipos de respuesta y matriz de insumos: agregar, renombrar, confirmar el supuesto y apagar |
 | `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración. Usuarios y equipos con el diseño de Nodex: perfiles en columnas, avatar de iniciales, interruptores, menú "⋯" y modales para crear |
 
 ## Estado (2026-11-10)
@@ -181,6 +188,8 @@ Pantallas:
 **Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo), devolver la secuencia del número interno al mayor que exista, y no cargar el archivo maestro en la base real (reemplaza la tabla). Los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon. **No editar el backend mientras el usuario usa la app:** cada cambio reinicia nodemon (cerca de un minuto contra la base remota) y dos reinicios seguidos pueden chocar al recrear las vistas del tablero ("Falló la conexión a la base de datos"). El usuario levanta los servidores a mano.
 
 ## Pendientes
+
+**Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fase 1 hecha (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad). Siguen: 2 radicado repetido, antecedentes y asociación de casos, facturación en el mes del primer registro del radicado · 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
 
 **Para mañana (con el usuario):**
 - Crear los usuarios reales con perfiles y equipos. Por eso aún no se puede asignar: no hay auxiliares ni revisores.

@@ -66,7 +66,7 @@ export const PARAMETROS_BASE = {
     descripcion: 'Descuentos por indicador sobre la factura del mes (antes de IVA): leve hasta leveHasta puntos bajo la meta, moderado hasta moderadoHasta, grave más (o ANS-12/13); tope mensual y reincidencia (grave en ANS-01, 02 o 03 tres meses seguidos). Los valores están entre corchetes en el contrato'
   },
   VALOR_FACTURA_MENSUAL: { valor: 0, duda: 'D29', descripcion: 'Valor de la factura del mes antes de IVA (pesos), para mostrar el descuento en dinero. 0 = solo en porcentaje' },
-  SEMAFORO_HORAS_ROJO: { valor: 4, descripcion: 'Semáforo rojo: menos de estas horas para la fecha límite (o vencido)' },
+  SEMAFORO_HORAS_ROJO: { valor: 8, fuente: 'Reunión 18-nov', descripcion: 'Semáforo rojo: estas horas o menos para la fecha límite' },
   SEMAFORO_HORAS_AMARILLO: { valor: 24, descripcion: 'Semáforo amarillo: menos de estas horas para la fecha límite' }
 } satisfies Record<string, Definicion>
 
