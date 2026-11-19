@@ -40,6 +40,8 @@ export const PARAMETROS_BASE = {
   ETAPAS_CRITICAS: { valor: ['CUMPLIMIENTO', 'REQUERIMIENTO_PREVIO', 'DESACATO'], fuente: 'Manual §13', descripcion: 'Etapas que siempre son de nivel crítico' },
   HORAS_CRITICO: { valor: 24, fuente: 'Manual §13', descripcion: 'Crítico: término vencido o que vence en menos de estas horas al asignarse' },
   HORAS_ALTO: { valor: 48, fuente: 'Manual §13', descripcion: 'Alto: vence en menos de estas horas (y más que el crítico)' },
+  // Reunión 18-nov: los modelos de la firma nombran a la entidad; el nombre no va en el código (CLAUDE.md)
+  ENTIDAD_NOMBRE: { valor: '', descripcion: 'Nombre de la entidad como va en los correos al cliente (por ejemplo, en la solicitud de insumos). Vacío = "la entidad"' },
   PREFIJO_ASUNTO: { valor: process.env.PREFIJO_ASUNTO || 'GPA', fuente: 'Correo del cliente §4', descripcion: 'Primer bloque del asunto de los correos de salida, entre corchetes' },
   // Destinatarios que define el cliente en la fase inicial (manual §9 y §10.2): se llenan en Parámetros
   CORREOS_INSUMOS: { valor: [] as string[], descripcion: 'A quién se piden los insumos (enlace operativo del cliente)' },

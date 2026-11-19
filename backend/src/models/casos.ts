@@ -62,6 +62,16 @@ export class Caso extends Model {
   @Column(DataType.TEXT)
   declare observaciones: string | null
 
+  // Reunión 18-nov: el auxiliar resume los hechos de la tutela y marca los derechos (catálogo DERECHO).
+  // Van en la ficha técnica y en el correo de insumos
+  @Column(DataType.TEXT)
+  declare resumenHechos: string | null
+
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.ARRAY(DataType.INTEGER))
+  declare derechosIds: number[]
+
   // D24: tutela por un derecho de petición sin responder. Se crea la PQRS ligada, se responde y en la
   // contestación se pide al juez hecho superado
   @Default(false)
@@ -238,6 +248,18 @@ export class Actuacion extends Model {
   @Column(DataType.DATE)
   declare fechaDatosCompletos: Date | null
 
+  // Lo que se pidió como datos faltantes (matriz de insumos, grupo general, u "otros") y si llegó.
+  // La confirmación de recibido lista lo que llegó
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.JSONB)
+  declare datosSolicitados: { nombre: string, recibido: boolean }[]
+
+  // Tipo de respuesta del escrito (catálogo TIPO_RESPUESTA): agrupa los tiempos y activa reglas como
+  // la del escrito de emergencia
+  @Column(DataType.INTEGER)
+  declare tipoRespuestaId: number | null
+
   @Column(DataType.DATE)
   declare fechaAsumida: Date | null
 
@@ -303,6 +325,13 @@ export class SolicitudInsumo extends Model {
   @Default(true)
   @Column(DataType.BOOLEAN)
   declare minimo: boolean
+
+  // Ítem de la matriz de insumos del que sale (null = escrito a mano) y si es documento o información
+  @Column(DataType.INTEGER)
+  declare itemCatalogoId: number | null
+
+  @Column(DataType.STRING(12))
+  declare clase: 'DOCUMENTO' | 'INFORMACION' | null
 
   // Hora de envío del correo de solicitud (automática)
   @Column(DataType.DATE)
@@ -388,6 +417,17 @@ export class Escrito extends Model {
   // Correo con el que salió la entrega: su hilo empareja el acuse o la devolución
   @Column(DataType.INTEGER)
   declare correoEntregaId: number | null
+
+  // Lo que se entregó (modelo de entrega de la firma): tipos de documento y anexos de la matriz
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.JSONB)
+  declare documentosEntregados: string[]
+
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.JSONB)
+  declare anexosEntregados: string[]
 
   // Se adjunta respuesta a un derecho de petición (se relaciona con PQRS)
   @Default(false)

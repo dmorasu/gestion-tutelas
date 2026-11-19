@@ -1,9 +1,9 @@
-import { Actuacion, Caso, Correo, PlantillaCorreo, Usuario } from '../../models'
+import { Actuacion, Caso, Correo, PlantillaCorreo, Usuario, Parte, Juzgado, ItemCatalogo } from '../../models'
 import { entraConfigurado } from '../../config/entra'
 import { enviarCorreo, direccionBuzon } from './graph'
 import { armarCorreoHtml, logoDataUri, logoIncrustado, CID_LOGO } from './disenoCorreo'
 import { parametro } from '../parametros'
-import { ETAPA_EN_ASUNTO, NOMBRES_CRITICIDAD, NOMBRES_ETAPAS, PLANTILLAS, type Buzon, type CodigoPlantilla } from '../constantes'
+import { NOMBRES_CRITICIDAD, NOMBRES_ETAPAS, PLANTILLAS, type Buzon, type CodigoPlantilla } from '../constantes'
 import { textoFechaHora } from '../../utils/fechaColombia'
 import { formatoRadicado } from '../../utils/radicado'
 import { ErrorNegocio } from '../../utils/errores'
@@ -18,64 +18,67 @@ import { ErrorNegocio } from '../../utils/errores'
 // se registra igual (sirve para probar el flujo) pero no sale.
 // =====================================
 
-// Borradores de la firma mientras llegan las plantillas del cliente ("PENDIENTE ENVÍO DE PLANTILLAS")
-const ASUNTO_BASE = '[{{prefijo}}] [{{criticidad}}] [{{radicado}}]'
-const FIRMA = 'Cordialmente,\nEquipo de apoyo jurídico'
+// =====================================
+// TEXTOS DE LOS MODELOS DE LA FIRMA (Docs/insumos, reunión 18-nov)
+// Asunto: CRITICIDAD - RAD. radicado - ACTUACIÓN - vence - TIPO DE CORREO. Si el parámetro
+// PREFIJO_ASUNTO tiene valor (el cliente pidió uno), va adelante. {{ficha}} marca dónde va el bloque de
+// datos del caso (estado, radicado, número interno, accionante, despacho, actuación y vencimiento)
+// =====================================
+const ASUNTO_BASE = '{{prefijoAsunto}}{{criticidad}} - RAD. {{radicado}} - {{actuacion}} - {{vence}}'
+const FIRMA = 'Atentamente,\nEquipo GPA LEGAL.'
 export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: string }> = {
   ACUSE_ASIGNACION: {
-    asunto: `${ASUNTO_BASE} [{{actuacion}}] [Vence: {{vence}}] RECIBIDO - Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nConfirmamos el recibido de la asignación, que quedó registrada con el número interno de caso {{numeroInterno}}. Le agradecemos citar este número o el radicado en las comunicaciones del caso.\n\nFecha y hora de recibido: {{fechaAsignacion}}.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - CONFIRMACIÓN ASIGNACIÓN`,
+    cuerpo: `Cordial saludo,\n\nPor medio del presente correo, GPA LEGAL confirma la recepción de la asignación de la actuación {{actuacion}} de la acción {{tipoAccion}} correspondiente al siguiente proceso:\n\n{{ficha}}\n\nEn caso de requerirse información o documentación adicional para estructurar el respectivo escrito, se efectuará oportunamente la solicitud.\n\n${FIRMA}`
   },
   ACUSE_PAQUETE: {
-    asunto: '[{{prefijo}}] [ASIGNACIÓN EN PAQUETE] RECIBIDO - {{cantidad}} casos',
-    cuerpo: `Buen día.\n\nConfirmamos el recibido de {{cantidad}} asignaciones. Cada radicado quedó con su número interno de caso:\n\n{{detalle}}\n\n${FIRMA}`
+    asunto: '{{prefijoAsunto}}{{cantidad}} ASIGNACIONES - CONFIRMACIÓN ASIGNACIÓN',
+    cuerpo: `Cordial saludo,\n\nPor medio del presente correo, GPA LEGAL confirma la recepción de {{cantidad}} asignaciones. Cada radicado quedó con su radicado interno:\n\n{{detalle}}\n\nEn caso de requerirse información o documentación adicional para estructurar los respectivos escritos, se efectuará oportunamente la solicitud.\n\n${FIRMA}`
   },
   SOLICITUD_DATOS_FALTANTES: {
-    asunto: `${ASUNTO_BASE} [DATOS FALTANTES] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nPara gestionar este caso solicitamos la siguiente información:\n\n{{detalle}}\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - SOLICITUD DATOS FALTANTES`,
+    cuerpo: `Cordial saludo.\n\nUna vez revisada la documentación remitida respecto de la acción constitucional de la referencia, evidenciamos que no se cuenta con la totalidad de los documentos o la información necesarios para efectuar la revisión y elaborar el escrito correspondiente.\n\n{{ficha}}\n\nEn consecuencia, agradecemos remitir, según corresponda, los siguientes documentos faltantes:\n\n{{detalle}}\n\nAgradecemos remitir lo solicitado lo antes posible, con el fin de contar con los elementos necesarios para efectuar el análisis del caso y preparar oportunamente el escrito correspondiente.\n\n${FIRMA}`
   },
   ACUSE_DATOS_FALTANTES: {
-    asunto: `${ASUNTO_BASE} [RECIBIDO DATOS FALTANTES] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nConfirmamos el recibido de la información faltante de este caso.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - CONFIRMACIÓN RECIBIDO INFORMACIÓN FALTANTE`,
+    cuerpo: `Cordial saludo,\n\nPor medio del presente correo, GPA LEGAL confirma la recepción de la información y/o documentación remitida para complementar el expediente de la acción constitucional de la referencia, conforme a los siguientes datos:\n\n{{ficha}}\n\nInformación y/o documentos recibidos:\n\n{{detalle}}\n\nLa documentación recibida será incorporada al expediente interno y tenida en cuenta para continuar con el análisis y la elaboración del escrito correspondiente.\n\n${FIRMA}`
   },
   SOLICITUD_INSUMOS: {
-    asunto: `${ASUNTO_BASE} [SOLICITUD DE INSUMOS] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nPara proyectar el escrito de este caso solicitamos los siguientes insumos, a más tardar el {{vence}}:\n\n{{detalle}}\n\nPor favor responda en este mismo correo o indique el número de caso {{numeroInterno}} para que los insumos queden en el expediente.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - SOLICITUD DE INSUMOS`,
+    cuerpo: `Cordial saludo.\n\nCon el fin de proyectar el escrito que corresponde a la acción constitucional citada en el asunto, se requiere que en el menor tiempo posible se remitan por este medio los insumos necesarios.\n\n{{ficha}}\n\nEn este caso, la parte actora interpuso acción constitucional en contra de {{entidad}}, por la presunta vulneración del derecho fundamental de {{derechos}}, considerando que {{hechos}}\n\nEn ese sentido, agradecemos enviarnos a más tardar el {{venceInsumos}} la información y los documentos que seguidamente se solicitan:\n\n{{detalle}}\n\nEn caso de no contar con la información o los insumos solicitados, por favor indicarnos el motivo y los argumentos necesarios para gestionar en debida forma el escrito requerido para el envío por su parte al Juzgado.\n\n${FIRMA}`
   },
   ACUSE_INSUMOS: {
-    asunto: `${ASUNTO_BASE} [RECIBIDO INSUMOS] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nConfirmamos el recibido de los insumos de este caso.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - CONFIRMACIÓN RECIBIDO DE INSUMOS`,
+    cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL confirma la recepción de los insumos remitidos por {{entidad}} para la atención de la acción constitucional citada en el asunto, conforme a la siguiente información:\n\n{{ficha}}\n\nInsumos recibidos:\n\n{{detalle}}\n\nLos insumos recibidos serán incorporados al expediente interno y revisados para continuar con la elaboración del escrito correspondiente dentro del término señalado. En caso de haber faltantes, le solicitamos remitirlos en el menor tiempo posible.\n\n${FIRMA}`
   },
   ENTREGA_V1: {
-    asunto: `${ASUNTO_BASE} [ENTREGA V1] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nEntregamos el proyecto de escrito de este caso con sus anexos. Están en la carpeta del enlace.\n\nElaboró: {{auxiliar}}. Revisó: {{revisor}}.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - ENTREGA V1`,
+    cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL hace entrega del escrito elaborado para atender la actuación constitucional de la referencia, conforme a la siguiente información extraída de la ficha técnica:\n\n{{ficha}}\n\nDocumentos entregados:\n\n{{documentos}}\n\nAnexos:\n\n{{anexos}}\n\nEn la carpeta del enlace se encuentra el escrito correspondiente junto con la ficha técnica, los anexos y soportes que resultan aplicables, para su validación y posterior radicación ante el Despacho judicial.\n\n${FIRMA}`
   },
   ALERTA: {
-    asunto: `${ASUNTO_BASE} [ALERTA: {{tipoAlerta}}] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nInformamos la siguiente alerta sobre este caso:\n\n{{detalle}}\n\nQuedamos atentos.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - ALERTA: {{tipoAlerta}}`,
+    cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL informa la siguiente alerta sobre la actuación constitucional de la referencia:\n\n{{ficha}}\n\n{{detalle}}\n\nQuedamos atentos.\n\n${FIRMA}`
   },
   ENTREGA_V2: {
-    asunto: `${ASUNTO_BASE} [ENTREGA V{{version}}] [Vence: {{vence}}] Caso {{numeroInterno}}`,
-    cuerpo: `Buen día.\n\nEntregamos el escrito de este caso ajustado según la devolución, con sus anexos. Están en la carpeta del enlace.\n\nElaboró: {{auxiliar}}. Revisó: {{revisor}}.\n\n${FIRMA}`
+    asunto: `${ASUNTO_BASE} - ENTREGA V{{version}}`,
+    cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL hace entrega del escrito ajustado, de acuerdo con su devolución, para atender la actuación constitucional de la referencia, conforme a la siguiente información extraída de la ficha técnica:\n\n{{ficha}}\n\nDocumentos entregados:\n\n{{documentos}}\n\nAnexos:\n\n{{anexos}}\n\nEn la carpeta del enlace se encuentra el escrito correspondiente junto con la ficha técnica, los anexos y soportes que resultan aplicables, para su validación y posterior radicación ante el Despacho judicial.\n\nAgradecemos confirmar la recepción de la presente documentación.\n\n${FIRMA}`
   }
 }
 
-// Borradores anteriores (sin el número de caso en el asunto): si una plantilla sigue siendo uno de
-// ellos y nadie la editó, se actualiza sola al borrador nuevo
-const ASUNTOS_ANTERIORES = [/\[Vence: \{\{vence\}\}\]$/, /RECIBIDO - Caso \{\{numeroInterno\}\}$/, /^\[\{\{prefijo\}\}\] \[ASIGNACIÓN EN PAQUETE\]/]
+export const MARCADORES = [
+  'prefijo', 'prefijoAsunto', 'criticidad', 'estado', 'radicado', 'radicadoFormato', 'numeroInterno', 'accionante', 'despacho', 'actuacion', 'etapa', 'tipoAccion',
+  'vence', 'tiempoRestante', 'venceInsumos', 'fechaAsignacion', 'entidad', 'derechos', 'hechos', 'auxiliar', 'revisor', 'enlace', 'detalle', 'documentos', 'anexos',
+  'version', 'fechaEntrega', 'cantidad', 'tipoAlerta', 'ficha'
+] as const
 
-export const MARCADORES = ['prefijo', 'criticidad', 'radicado', 'radicadoFormato', 'numeroInterno', 'actuacion', 'etapa', 'vence', 'fechaAsignacion', 'auxiliar', 'revisor', 'enlace', 'detalle', 'version', 'cantidad', 'tipoAlerta'] as const
-
-// Inserta las que falten y actualiza las que siguen siendo el borrador de la firma sin tocar
+// Inserta las que falten y pasa al texto vigente las que siguen siendo el borrador de la firma: las que
+// nadie guardó desde la pantalla (editada) ni confirmó. Así llegan los modelos nuevos sin pisar lo ajustado.
+// Antes se comparaban las fechas de creación y modificación, pero la fecha no se podía devolver (un
+// update "silent" no escribe updatedAt) y ningún borrador se volvía a actualizar
 export const sembrarPlantillas = async () => {
   for (const [codigo, base] of Object.entries(PLANTILLAS_BASE)) {
     const [fila, creada] = await PlantillaCorreo.findOrCreate({ where: { codigo }, defaults: { codigo, ...base } })
-    const sinEditar = fila.updatedAt.getTime() === fila.createdAt.getTime() && !fila.confirmada
-    if (!creada && sinEditar && fila.cuerpo !== base.cuerpo && ASUNTOS_ANTERIORES.some(re => re.test(fila.asunto))) {
-      await fila.update({ ...base })
-      // Sigue contando como no editada (updatedAt = createdAt)
-      await PlantillaCorreo.update({ updatedAt: fila.createdAt }, { where: { id: fila.id }, silent: true })
-    }
+    if (!creada && !fila.editada && !fila.confirmada && (fila.cuerpo !== base.cuerpo || fila.asunto !== base.asunto)) await fila.update({ ...base })
   }
 }
 
@@ -96,7 +99,7 @@ const reemplazar = (texto: string, valores: Record<string, string>, html: boolea
 
 // Texto de la plantilla → párrafos HTML. Un bloque de líneas "1. …" o "- …" queda como lista
 const aHtml = (texto: string) =>
-  texto.split(/\n{2,}/).map(p => {
+  texto.split(/\n{2,}/).filter(p => p.trim()).map(p => {
     const lineas = p.split('\n')
     const item = /^\s*(\d+[.)]|[-•])\s+/
     if (lineas.length > 1 && lineas.every(l => item.test(l))) {
@@ -109,23 +112,39 @@ const NOMBRE_BUZON: Record<Buzon, string> = { ASIGNACIONES: 'asignaciones', INSU
 
 export type BasePlantilla = { asunto: string, cuerpo: string, titulo?: string | null }
 
-// Asunto, texto plano (se guarda en el caso) y HTML corporativo de una plantilla con sus valores
+// Bloque de datos del caso del modelo de la firma; las entregas suman quién elaboró y revisó y la entrega
+const fichaDe = (codigo: CodigoPlantilla, v: Record<string, string>) => {
+  const filas = [
+    { etiqueta: 'Estado', valor: v.estado || v.criticidad },
+    { etiqueta: 'Radicado', valor: v.radicadoFormato },
+    { etiqueta: 'Radicado interno', valor: v.numeroInterno },
+    { etiqueta: 'Accionante', valor: v.accionante },
+    { etiqueta: 'Despacho', valor: v.despacho },
+    { etiqueta: 'Actuación', valor: v.etapa },
+    { etiqueta: 'Fecha de vencimiento', valor: codigo.startsWith('ENTREGA') && v.tiempoRestante ? `${v.vence} (${v.tiempoRestante})` : v.vence }
+  ]
+  if (codigo.startsWith('ENTREGA')) {
+    filas.push(
+      { etiqueta: 'Elaboró', valor: v.auxiliar }, { etiqueta: 'Revisó', valor: v.revisor },
+      { etiqueta: 'Entrega', valor: v.version ? `V${v.version}` : '' }, { etiqueta: 'Fecha y hora de entrega', valor: v.fechaEntrega }
+    )
+  }
+  return filas.filter(f => f.valor)
+}
+
+// Asunto, texto plano (se guarda en el caso) y HTML corporativo de una plantilla con sus valores.
+// El bloque de datos va donde la plantilla dice {{ficha}}; si no lo dice, antes del texto
 export const renderizar = (codigo: CodigoPlantilla, base: BasePlantilla, valores: Record<string, string>, conFicha: boolean, logoSrc: string) => {
+  const ficha = conFicha ? fichaDe(codigo, valores) : null
   const asunto = reemplazar(base.asunto, valores, false).replace(/\s+/g, ' ').trim()
-  const texto = reemplazar(base.cuerpo, valores, false)
-  const ficha = conFicha
-    ? [
-        { etiqueta: 'Caso', valor: valores.numeroInterno },
-        { etiqueta: 'Radicado', valor: valores.radicadoFormato },
-        { etiqueta: 'Actuación', valor: valores.etapa },
-        { etiqueta: 'Criticidad', valor: valores.criticidad },
-        { etiqueta: 'Vence', valor: valores.vence }
-      ].filter(f => f.valor)
-    : null
+  const textoFicha = (ficha ?? []).map(f => `${f.etiqueta}: ${f.valor}`).join('\n')
+  const texto = reemplazar(base.cuerpo, { ...valores, ficha: textoFicha }, false)
+  const [antes, despues] = base.cuerpo.includes('{{ficha}}') ? base.cuerpo.split('{{ficha}}', 2) : ['', base.cuerpo]
   const enlace = valores.enlace ?? ''
   const html = armarCorreoHtml({
     titulo: reemplazar(base.titulo || PLANTILLAS[codigo].titulo, valores, false),
-    cuerpoHtml: aHtml(reemplazar(base.cuerpo, valores, true)),
+    introHtml: antes.trim() ? aHtml(reemplazar(antes, valores, true)) : null,
+    cuerpoHtml: aHtml(reemplazar(despues, valores, true)),
     ficha,
     criticidad: conFicha ? valores.criticidad : null,
     boton: /^https?:\/\//.test(enlace) ? { texto: 'Abrir el escrito y sus anexos', url: enlace } : null,
@@ -135,48 +154,95 @@ export const renderizar = (codigo: CodigoPlantilla, base: BasePlantilla, valores
   return { asunto, texto, html }
 }
 
+const prefijoAsunto = () => {
+  const prefijo = (parametro<string>('PREFIJO_ASUNTO') ?? '').trim()
+  return prefijo ? `${prefijo} - ` : ''
+}
+const nombreEntidad = () => (parametro<string>('ENTIDAD_NOMBRE') ?? '').trim() || 'la entidad'
+
+// Lista de ítems para el cuerpo ("- …", que el HTML vuelve viñetas)
+export const listaCorreo = (items: string[], vacio = 'Ninguno.') => (items.length ? items.map(x => `- ${x}`).join('\n') : vacio)
+
 // Valores de muestra para la vista previa y la prueba de la administración
 const ejemplo = (codigo: CodigoPlantilla): Record<string, string> => ({
-  prefijo: parametro<string>('PREFIJO_ASUNTO'),
-  criticidad: 'ALTO', radicado: '76001310300120260012300', radicadoFormato: '76001-31-03-001-2026-00123-00', numeroInterno: 'GPA-2026-00123',
-  actuacion: 'TUTELA', etapa: 'Contestación', vence: '20/11/2026 17:00', fechaAsignacion: '17/11/2026 09:12', auxiliar: 'Laura Gómez',
-  revisor: 'Andrés Rojas', version: '2', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER',
+  prefijo: parametro<string>('PREFIJO_ASUNTO'), prefijoAsunto: prefijoAsunto(),
+  criticidad: 'ALTO', estado: 'ALTO', radicado: '76001310300120260012300', radicadoFormato: '76001-31-03-001-2026-00123-00', numeroInterno: 'GPA-2026-00123',
+  accionante: 'Nombre del accionante', despacho: 'Juzgado 1 Civil del Circuito', actuacion: 'CONTESTACIÓN', etapa: 'Contestación', tipoAccion: 'DE TUTELA',
+  vence: '20/11/2026 17:00', tiempoRestante: '2 días', venceInsumos: '19/11/2026 15:00', fechaAsignacion: '17/11/2026 09:12', entidad: nombreEntidad(),
+  derechos: 'petición', hechos: 'al parecer fue radicada una petición el 24 de septiembre de 2026, de la que el accionante manifiesta no haber recibido respuesta.',
+  auxiliar: 'Laura Gómez', revisor: 'Andrés Rojas', version: codigo === 'ENTREGA_V2' ? '2' : '1', fechaEntrega: '19/11/2026 11:40', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER',
+  documentos: listaCorreo(['Ficha técnica del caso', 'Contestación de acción de tutela']), anexos: listaCorreo(['Comparendo', 'Constancia de notificación por aviso']),
   // Solo las entregas llevan enlace (y con él, el botón)
   enlace: codigo.startsWith('ENTREGA') ? 'https://ejemplo.sharepoint.com/sites/Tutelas/Casos/GPA-2026-00123' : '',
   detalle: codigo === 'ALERTA'
     ? 'El término de la contestación vence el 20/11/2026 17:00 y el escrito aún no se ha entregado.'
     : codigo === 'ACUSE_PAQUETE'
     ? '- 76001-31-03-001-2026-00123-00 → GPA-2026-00123\n- 76001-31-03-001-2026-00124-00 → GPA-2026-00124\n- 76001-31-03-001-2026-00125-00 → GPA-2026-00125'
-    : '1. Historial de comparendos del accionante\n2. Guía de notificación del comparendo\n3. Estado de cuenta actualizado'
+    : codigo === 'SOLICITUD_INSUMOS' || codigo === 'ACUSE_INSUMOS'
+    ? listaCorreo(['Respuesta a Derecho de Petición y constancia de envío.', 'Validar la trazabilidad del derecho de petición en cuestión e informar las actuaciones realizadas y estado actual de su trámite.'])
+    : listaCorreo(['Auto admisorio de la acción de tutela.', 'Escrito de tutela completo.'])
 })
 
 export const vistaPrevia = (codigo: CodigoPlantilla, base: BasePlantilla) =>
   renderizar(codigo, base, ejemplo(codigo), codigo !== 'ACUSE_PAQUETE', logoDataUri())
 
+// Tiempo que falta para el vencimiento, como lo pide el modelo de entrega ("1 día y 3 horas")
+const tiempoRestante = (vence: Date | null) => {
+  if (!vence) return ''
+  const horas = Math.round((vence.getTime() - Date.now()) / 3_600_000)
+  if (horas <= 0) return 'vencido'
+  const dias = Math.floor(horas / 24)
+  const resto = horas % 24
+  return [dias && `${dias} día${dias === 1 ? '' : 's'}`, resto && `${resto} hora${resto === 1 ? '' : 's'}`].filter(Boolean).join(' y ')
+}
+
 export const valoresDeActuacion = async (actuacionId: number, extra: Record<string, string> = {}) => {
   const a = await Actuacion.findByPk(actuacionId, {
     include: [
-      { model: Caso, attributes: ['id', 'radicado', 'numeroInterno'] },
+      {
+        model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'tipoSolicitud', 'deOtroOperador', 'resumenHechos', 'derechosIds', 'derechosInvolucrados', 'juzgadoId'],
+        include: [{ model: Parte, attributes: ['rol', 'nombre'], required: false }, { model: Juzgado, attributes: ['nombre', 'correos'] }]
+      },
       { model: Usuario, as: 'auxiliar', attributes: ['nombre'] },
       { model: Usuario, as: 'revisor', attributes: ['nombre'] }
     ]
   })
   if (!a || !a.caso) throw new ErrorNegocio('La actuación no existe', 404)
+  const derechos = a.caso.derechosIds.length
+    ? (await ItemCatalogo.findAll({ where: { id: a.caso.derechosIds }, attributes: ['nombre'], order: [['orden', 'ASC']] })).map(d => d.nombre.toLowerCase())
+    : []
+  const criticidad = NOMBRES_CRITICIDAD[a.criticidad] ?? a.criticidad
+  // El estado del modelo: la criticidad o, si aplica, suspendido por insumos o devuelto por duplicidad
+  const estado = a.caso.deOtroOperador ? 'DEVUELTO POR DUPLICIDAD' : a.estado === 'EN_INSUMOS' ? 'SUSPENDIDO POR INSUMOS' : criticidad
+  const juzgado = a.caso.juzgado
   const valores: Record<string, string> = {
     prefijo: parametro<string>('PREFIJO_ASUNTO'),
-    criticidad: NOMBRES_CRITICIDAD[a.criticidad] ?? a.criticidad,
+    prefijoAsunto: prefijoAsunto(),
+    criticidad,
+    estado,
     radicado: a.caso.radicado,
     radicadoFormato: formatoRadicado(a.caso.radicado),
     numeroInterno: a.caso.numeroInterno ?? '',
-    actuacion: ETAPA_EN_ASUNTO[a.etapa],
+    accionante: (a.caso.partes ?? []).filter(p => p.rol === 'ACCIONANTE').map(p => p.nombre).join(', '),
+    despacho: juzgado ? [juzgado.nombre, juzgado.correos?.[0]].filter(Boolean).join(' · ') : '',
+    actuacion: NOMBRES_ETAPAS[a.etapa].toUpperCase(),
     etapa: NOMBRES_ETAPAS[a.etapa],
+    tipoAccion: a.caso.tipoSolicitud === 'ACCION_CUMPLIMIENTO' ? 'DE CUMPLIMIENTO' : a.caso.tipoSolicitud === 'PQRS' ? 'PQRS' : 'DE TUTELA',
     vence: a.fechaVencimiento ? textoFechaHora(a.fechaVencimiento) : 'sin fecha',
+    tiempoRestante: tiempoRestante(a.fechaVencimiento),
+    venceInsumos: '',
     fechaAsignacion: textoFechaHora(a.fechaAsignacion),
+    entidad: nombreEntidad(),
+    derechos: derechos.length ? derechos.join(', ') : a.caso.derechosInvolucrados ?? '',
+    hechos: a.caso.resumenHechos ?? '',
     auxiliar: a.auxiliar?.nombre ?? '',
     revisor: a.revisor?.nombre ?? '',
     enlace: '',
     detalle: '',
+    documentos: '',
+    anexos: '',
     version: '1',
+    fechaEntrega: '',
     ...extra
   }
   return { actuacion: a, valores }
@@ -206,7 +272,7 @@ export const enviarPlantilla = async (d: DatosEnvio) => {
   const base = await plantillaVigente(d.codigo)
   const { actuacion, valores } = d.actuacionId
     ? await valoresDeActuacion(d.actuacionId, d.extra)
-    : { actuacion: null, valores: { prefijo: parametro<string>('PREFIJO_ASUNTO'), ...d.extra } as Record<string, string> }
+    : { actuacion: null, valores: { prefijo: parametro<string>('PREFIJO_ASUNTO'), prefijoAsunto: prefijoAsunto(), ...d.extra } as Record<string, string> }
   const { asunto, texto, html } = renderizar(d.codigo, base, valores, !!actuacion, `cid:${CID_LOGO}`)
   const original = d.responderACorreoId ? await Correo.findByPk(d.responderACorreoId, { attributes: ['graphId', 'conversationId', 'buzon'] }) : null
 
@@ -261,7 +327,7 @@ export const borradorLibre = async (actuacionId: number) => {
   const { valores } = await valoresDeActuacion(actuacionId)
   const asignacion = await Correo.findOne({ where: { actuacionId, proposito: 'ASIGNACION' }, attributes: ['remitente'] })
   return {
-    asunto: `[${valores.prefijo}] [${valores.criticidad}] [${valores.radicado}] [${valores.actuacion}] Caso ${valores.numeroInterno}`,
+    asunto: `${valores.prefijoAsunto}${valores.criticidad} - RAD. ${valores.radicado} - ${valores.actuacion} - ${valores.vence}`,
     destinatarios: {
       ASIGNACIONES: asignacion?.remitente ? [asignacion.remitente] : [],
       INSUMOS: parametro<string[]>('CORREOS_INSUMOS'),

@@ -161,8 +161,11 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     }).catch(() => null)
     const deOtroOperador = radicado ? !!(await RadicadoOtroOperador.findOne({ where: { radicado: correo.radicados } })) : false
     // Respuesta por revisar: lo que hace falta para atenderla desde aquí
+    const actuacionCorreo = correo.actuacionId ? await Actuacion.findByPk(correo.actuacionId, { attributes: ['id', 'etapa', 'estado', 'datosSolicitados'] }) : null
     const contexto = correo.actuacionId ? {
-      actuacion: await Actuacion.findByPk(correo.actuacionId, { attributes: ['id', 'etapa', 'estado'] }),
+      actuacion: actuacionCorreo ? { id: actuacionCorreo.id, etapa: actuacionCorreo.etapa, estado: actuacionCorreo.estado } : null,
+      // Lo pedido como datos faltantes que aún no llega: se marca lo que vino en este correo
+      datosPendientes: (actuacionCorreo?.datosSolicitados ?? []).filter(x => !x.recibido).map(x => x.nombre),
       insumosPendientes: await SolicitudInsumo.findAll({ where: { actuacionId: correo.actuacionId, fechaRecepcion: null }, attributes: ['id', 'descripcion', 'minimo', 'fechaSolicitud'] }),
       escrito: await Escrito.findOne({ where: { actuacionId: correo.actuacionId }, order: [['version', 'DESC']], attributes: ['id', 'version', 'estado', 'fechaEntregaEntidad'] }),
       motivos: await MotivoDevolucion.findAll({ where: { activo: true }, attributes: ['id', 'nombre', 'tipo'], order: [['nombre', 'ASC']] })
@@ -236,8 +239,9 @@ router.post('/:id/asociar', registran, param('id').isInt(), body('actuacionId').
 // Datos faltantes que mandó el cliente: se confirma el recibido (plantilla) y sale de "por revisar"
 router.post('/:id/datos-faltantes-recibidos', param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {
-    await confirmarDatosFaltantes({ correoId: Number(req.params.id), enviarAcuse: req.body.enviarAcuse !== false, usuarioId: req.usuario!.id })
-    res.json({ ok: true })
+    // recibidos: lo que llegó de lo pedido (la confirmación lo lista); sin la lista, se entiende que llegó todo
+    const recibidos = Array.isArray(req.body.recibidos) ? req.body.recibidos.map(String) : undefined
+    res.json({ ok: true, ...(await confirmarDatosFaltantes({ correoId: Number(req.params.id), recibidos, enviarAcuse: req.body.enviarAcuse !== false, usuarioId: req.usuario!.id })) })
   } catch (error) {
     responderError(res, error)
   }

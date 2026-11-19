@@ -9,6 +9,7 @@ import BotonAtendido from "./BotonAtendido"
 export type Contexto = {
   actuacion: { id: number, etapa: string, estado: string } | null
   insumosPendientes: { id: number, descripcion: string, minimo: boolean }[]
+  datosPendientes?: string[]
   escrito: { id: number, version: number, estado: string } | null
   motivos: { id: number, nombre: string }[]
 }
@@ -20,6 +21,7 @@ export default function AtenderRespuesta({ correoId, casoId, proposito, contexto
   const [pendiente, iniciar] = useTransition()
   const [marcados, setMarcados] = useState(contexto.insumosPendientes.map(i => i.id))
   const [acuse, setAcuse] = useState(true)
+  const [datosMarcados, setDatosMarcados] = useState(contexto.datosPendientes ?? [])
   const actuacionId = contexto.actuacion?.id
 
   const ejecutar = (ruta: string, cuerpo: Record<string, unknown>, mensaje: string) => iniciar(async () => {
@@ -66,10 +68,22 @@ export default function AtenderRespuesta({ correoId, casoId, proposito, contexto
   if (proposito === "RESPUESTA_DATOS_FALTANTES") {
     return (
       <div className={caja}>
-        <p className="text-sm font-medium">Datos faltantes recibidos</p>
+        <p className="text-sm font-medium">{contexto.datosPendientes?.length ? "¿Qué datos llegaron en este correo?" : "Datos faltantes recibidos"}</p>
+        {(contexto.datosPendientes ?? []).length > 0 && (
+          <ul className="space-y-1 text-sm">
+            {contexto.datosPendientes!.map(nombre => (
+              <li key={nombre}>
+                <label className="flex items-center gap-2">
+                  <input type="checkbox" checked={datosMarcados.includes(nombre)} onChange={e => setDatosMarcados(m => (e.target.checked ? [...m, nombre] : m.filter(x => x !== nombre)))} />
+                  {nombre}
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={acuse} onChange={e => setAcuse(e.target.checked)} /> Confirmar el recibido al cliente</label>
         <button disabled={pendiente} className="boton-primario py-1.5"
-          onClick={() => ejecutar(`/correos/${correoId}/datos-faltantes-recibidos`, { enviarAcuse: acuse }, "Recibido confirmado")}>
+          onClick={() => ejecutar(`/correos/${correoId}/datos-faltantes-recibidos`, { enviarAcuse: acuse, ...(contexto.datosPendientes?.length && { recibidos: datosMarcados }) }, "Recibido confirmado")}>
           Registrar
         </button>
       </div>

@@ -141,8 +141,11 @@ export const lineaTiempo = async (casoId: number): Promise<EventoCaso[]> => {
     const e = etapa(h.actuacionId)
     eventos.push({
       clave: `bitacora-${h.id}`, fecha: iso(h.get('createdAt') as Date), ...describir(h, e),
-      // Al crear, lo que vale la pena leer es el insumo pedido o la observación de la devolución
-      detalle: h.accion === 'CREADO' ? cambio(h.cambios, 'Insumo')?.despues ?? cambio(h.cambios, 'Observación')?.despues ?? null : null,
+      // Al crear, lo que vale la pena leer es el insumo pedido o la observación de la devolución; cuando el
+      // revisor devuelve el escrito, su observación (reunión 18-nov: debe verse en la bitácora)
+      detalle: h.accion === 'CREADO'
+        ? cambio(h.cambios, 'Insumo')?.despues ?? cambio(h.cambios, 'Observación')?.despues ?? null
+        : cambio(h.cambios, 'Observación del revisor')?.despues ?? null,
       // La creación repite todos los campos: en el historial solo se muestran los cambios
       cambios: h.accion === 'CREADO' ? [] : traducir(h.cambios),
       usuario: h.nombreUsuario, origen: h.origen, etapa: e

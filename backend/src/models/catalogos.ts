@@ -167,6 +167,12 @@ export class PlantillaCorreo extends Model {
   @Default(false)
   @Column(DataType.BOOLEAN)
   declare confirmada: boolean
+
+  // Alguien la guardó desde la pantalla de plantillas: la semilla ya no la reemplaza con el borrador nuevo
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare editada: boolean
 }
 
 // =====================================

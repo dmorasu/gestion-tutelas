@@ -139,3 +139,25 @@ export const SENTIDOS_DECISION = [
   'CONFIRMA', 'REVOCA', 'MODIFICA', // segunda instancia
   'SANCIONA', 'NO_SANCIONA' // desacato
 ] as const
+
+// Documentos que se entregan con el escrito (modelo de entrega de la firma, Docs/insumos). La ficha
+// técnica va siempre; el escrito de la actuación se marca solo y lo demás lo elige quien entrega
+export const DOCUMENTOS_ENTREGA = {
+  FICHA: 'Ficha técnica del caso',
+  CONTESTACION: 'Contestación de acción de tutela',
+  IMPUGNACION: 'Impugnación de fallo',
+  CUMPLIMIENTO_FALLO: 'Cumplimiento de fallo',
+  REQUERIMIENTO: 'Respuesta a requerimiento previo',
+  MEMORIAL_CUMPLIMIENTO: 'Memorial cumplimiento',
+  APERTURA_DESACATO: 'Respuesta a apertura de incidente de desacato',
+  DESACATO: 'Respuesta a incidente de desacato',
+  AUTO_PRUEBAS: 'Respuesta auto de pruebas',
+  NULIDAD: 'Solicitud de nulidad',
+  ALCANCE: 'Memorial / alcance a respuesta'
+} as const
+export type DocumentoEntrega = keyof typeof DOCUMENTOS_ENTREGA
+
+export const DOCUMENTO_DE_ESCRITO: Partial<Record<TipoEscrito, DocumentoEntrega>> = {
+  ACCION: 'CONTESTACION', IMPUGNACION: 'IMPUGNACION', CUMPLIMIENTO: 'MEMORIAL_CUMPLIMIENTO',
+  REQUERIMIENTO_PREVIO: 'REQUERIMIENTO', DESACATO: 'DESACATO'
+}

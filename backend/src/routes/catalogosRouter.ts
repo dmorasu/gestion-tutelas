@@ -288,7 +288,7 @@ router.put('/plantillas/:codigo', administran, param('codigo').isIn(Object.keys(
     try {
       const codigo = String(req.params.codigo)
       const [fila] = await PlantillaCorreo.findOrCreate({ where: { codigo }, defaults: { codigo, asunto: req.body.asunto, cuerpo: req.body.cuerpo } })
-      await fila.update({ asunto: req.body.asunto, cuerpo: req.body.cuerpo, titulo: String(req.body.titulo ?? '').trim() || null, confirmada: !!req.body.confirmada })
+      await fila.update({ asunto: req.body.asunto, cuerpo: req.body.cuerpo, titulo: String(req.body.titulo ?? '').trim() || null, confirmada: !!req.body.confirmada, editada: true })
       res.json(fila)
     } catch (error) {
       responderError(res, error)

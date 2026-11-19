@@ -127,3 +127,11 @@ export async function unirCaso(casoId: number, otroCasoId: number, motivo: strin
   revalidatePath("/casos")
   return { ok: true, datos: await r.json() }
 }
+
+// Resumen de los hechos y derechos del caso (reunión 18-nov): van en la ficha y en el correo de insumos
+export async function guardarFicha(casoId: number, datos: { resumenHechos: string | null, derechosIds: number[] }): Promise<Resultado> {
+  const r = await fetchApi(`/casos/${casoId}/ficha`, { method: "PATCH", body: JSON.stringify(datos) })
+  if (!r.ok) return { ok: false, errores: await leerErrores(r) }
+  revalidatePath(`/casos/${casoId}`)
+  return { ok: true }
+}

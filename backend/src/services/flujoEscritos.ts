@@ -1,6 +1,6 @@
 import { Op } from 'sequelize'
-import { Actuacion, Archivo, Caso, Correo, Devolucion, Escrito, RadicacionJuzgado, SolicitudInsumo } from '../models'
-import { enviarPlantilla } from './buzon/correosSalida'
+import { Actuacion, Archivo, Caso, Correo, Devolucion, Escrito, ItemCatalogo, RadicacionJuzgado, SolicitudInsumo } from '../models'
+import { enviarPlantilla, listaCorreo } from './buzon/correosSalida'
 import { compartirCarpeta } from './almacenamiento'
 import { carpetaActuacion } from './expediente'
 import { asignacionEfectiva, finDeDiasHabilesSiguientes } from './plazos'
@@ -8,7 +8,7 @@ import { parametro } from './parametros'
 import { recalcularPlazos } from './registroCasos'
 import { revisorDeEquipo } from './reparto'
 import { textoFechaHora } from '../utils/fechaColombia'
-import { tipoEscrito } from './constantes'
+import { tipoEscrito, DOCUMENTOS_ENTREGA, type DocumentoEntrega } from './constantes'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -35,34 +35,52 @@ const exigirEnviado = (correo: Correo) => {
   if (correo.estado === 'ERROR') throw new ErrorNegocio(`No se pudo enviar el correo: ${correo.error ?? 'error de Graph'}`)
 }
 
-const lista = (items: string[]) => items.map((x, i) => `${i + 1}. ${x}`).join('\n')
+// Ítems marcados más lo escrito en "otros" (una línea por ítem), sin repetidos
+const unirItems = (items: string[] = [], otros?: string | null) =>
+  [...new Set([...items, ...(otros ?? '').split('\n')].map(x => x.trim()).filter(Boolean))]
 
 // ── Datos faltantes de la asignación (buzón de asignaciones, en el hilo de la asignación) ──
-export const solicitarDatosFaltantes = async (d: { actuacionId: number, detalle: string, para?: string[], usuarioId: number }) => {
+// Reunión 18-nov: los pide la asistencia, marcando la lista general de la matriz de insumos
+export const solicitarDatosFaltantes = async (d: { actuacionId: number, items?: string[], otros?: string | null, para?: string[], usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
+  const pedidos = unirItems(d.items, d.otros)
+  if (!pedidos.length) throw new ErrorNegocio('Marque o escriba qué datos faltan')
   const asignacion = await Correo.findOne({ where: { actuacionId: a.id, proposito: 'ASIGNACION' }, attributes: ['id', 'remitente'] })
   const para = d.para?.length ? d.para : asignacion?.remitente ? [asignacion.remitente] : []
   if (!para.length) throw new ErrorNegocio('La asignación no llegó por correo: indique a quién pedir los datos')
   const correo = await enviarPlantilla({
-    codigo: 'SOLICITUD_DATOS_FALTANTES', actuacionId: a.id, para, responderACorreoId: asignacion?.id ?? null, extra: { detalle: d.detalle.trim() }, usuarioId: d.usuarioId
+    codigo: 'SOLICITUD_DATOS_FALTANTES', actuacionId: a.id, para, responderACorreoId: asignacion?.id ?? null, extra: { detalle: listaCorreo(pedidos) }, usuarioId: d.usuarioId
   })
   exigirEnviado(correo)
   // D6: sin los insumos mínimos de la asignación el ANS no corre hasta que lleguen
-  await a.update({ datosFaltantesPendientes: true })
+  const yaPedidos = new Set(a.datosSolicitados.map(x => x.nombre))
+  await a.update({ datosFaltantesPendientes: true, datosSolicitados: [...a.datosSolicitados, ...pedidos.filter(x => !yaPedidos.has(x)).map(nombre => ({ nombre, recibido: false }))] })
   await recalcularPlazos(a.id)
   return correo
 }
 
-export const confirmarDatosFaltantes = async (d: { correoId: number, enviarAcuse: boolean, usuarioId: number }) => {
+// Llegaron datos faltantes: se marcan los que vinieron (la confirmación los lista) y, si ya no falta
+// nada de lo pedido, el ANS corre desde la llegada de este correo
+export const confirmarDatosFaltantes = async (d: { correoId: number, recibidos?: string[], enviarAcuse: boolean, usuarioId: number }) => {
   const correo = await Correo.findByPk(d.correoId)
   if (!correo?.actuacionId) throw new ErrorNegocio('El correo no está asociado a una actuación')
+  const a = await Actuacion.findByPk(correo.actuacionId)
+  if (!a) throw new ErrorNegocio('La actuación no existe', 404)
+  // Sin lista (pedido anterior a las casillas): se entiende que llegó todo
+  const recibidos = new Set(d.recibidos ?? a.datosSolicitados.filter(x => !x.recibido).map(x => x.nombre))
+  const datosSolicitados = a.datosSolicitados.map(x => (recibidos.has(x.nombre) ? { ...x, recibido: true } : x))
   if (d.enviarAcuse && correo.remitente) {
-    exigirEnviado(await enviarPlantilla({ codigo: 'ACUSE_DATOS_FALTANTES', actuacionId: correo.actuacionId, para: [correo.remitente], responderACorreoId: correo.id, usuarioId: d.usuarioId }))
+    exigirEnviado(await enviarPlantilla({
+      codigo: 'ACUSE_DATOS_FALTANTES', actuacionId: a.id, para: [correo.remitente], responderACorreoId: correo.id,
+      extra: { detalle: listaCorreo([...recibidos], 'La información y los documentos solicitados.') }, usuarioId: d.usuarioId
+    }))
   }
   await correo.update({ porRevisar: false, proposito: 'RESPUESTA_DATOS_FALTANTES', usuarioId: d.usuarioId })
+  const completos = datosSolicitados.every(x => x.recibido)
   // El ANS cuenta desde la llegada del correo con los datos, no desde que se confirma
-  await Actuacion.update({ datosFaltantesPendientes: false, fechaDatosCompletos: correo.fechaCorreo }, { where: { id: correo.actuacionId } })
-  await recalcularPlazos(correo.actuacionId)
+  await a.update({ datosSolicitados, ...(completos && { datosFaltantesPendientes: false, fechaDatosCompletos: correo.fechaCorreo }) })
+  await recalcularPlazos(a.id)
+  return { completos, faltan: datosSolicitados.filter(x => !x.recibido).map(x => x.nombre) }
 }
 
 // ── Insumos (buzón de insumos) ──
@@ -73,21 +91,31 @@ const limiteInsumos = (a: Actuacion, desde: Date) => {
   return menor(limite, a.fechaVencimiento)
 }
 
-export const solicitarInsumos = async (d: { actuacionId: number, insumos: { descripcion: string, minimo?: boolean }[], usuarioId: number }) => {
+type InsumoPedido = { descripcion: string, minimo?: boolean, itemCatalogoId?: number | null, clase?: 'DOCUMENTO' | 'INFORMACION' | null }
+
+export const solicitarInsumos = async (d: { actuacionId: number, insumos: InsumoPedido[], usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
-  const items = d.insumos.map(i => ({ descripcion: i.descripcion.trim(), minimo: i.minimo !== false })).filter(i => i.descripcion)
+  const items = d.insumos
+    .map(i => ({ descripcion: String(i.descripcion ?? '').trim(), minimo: i.minimo !== false, itemCatalogoId: i.itemCatalogoId ? Number(i.itemCatalogoId) : null, clase: i.clase ?? null }))
+    .filter(i => i.descripcion)
   if (!items.length) throw new ErrorNegocio('Indique al menos un insumo')
+  // El modelo de la firma explica en el correo los derechos y los hechos: sin ellos saldría incompleto
+  const caso = await Caso.findByPk(a.casoId, { attributes: ['resumenHechos', 'derechosIds', 'derechosInvolucrados'] })
+  if (!caso?.resumenHechos?.trim() || !(caso.derechosIds.length || caso.derechosInvolucrados?.trim())) {
+    throw new ErrorNegocio('Registre en el caso el resumen de los hechos y los derechos antes de pedir insumos: van en el correo')
+  }
   const para = correosDe('CORREOS_INSUMOS')
   if (!para.length) throw new ErrorNegocio('Falta a quién pedir los insumos: configure CORREOS_INSUMOS en Parámetros')
   const ahora = new Date()
   const limite = limiteInsumos(a, ahora)
   const correo = await enviarPlantilla({
     codigo: 'SOLICITUD_INSUMOS', actuacionId: a.id, para,
-    extra: { detalle: lista(items.map(i => i.descripcion)), vence: textoFechaHora(limite) }, usuarioId: d.usuarioId
+    extra: { detalle: listaCorreo(items.map(i => i.descripcion)), venceInsumos: textoFechaHora(limite) }, usuarioId: d.usuarioId
   })
   exigirEnviado(correo)
   await SolicitudInsumo.bulkCreate(items.map(i => ({
-    actuacionId: a.id, descripcion: i.descripcion, minimo: i.minimo, fechaSolicitud: correo.fechaCorreo, fechaLimite: limite, conversationId: correo.conversationId
+    actuacionId: a.id, descripcion: i.descripcion, minimo: i.minimo, itemCatalogoId: i.itemCatalogoId, clase: i.clase,
+    fechaSolicitud: correo.fechaCorreo, fechaLimite: limite, conversationId: correo.conversationId
   })))
   const proyectando = ['POR_ASUMIR', 'EN_ANALISIS', 'EN_PROYECCION'].includes(a.estado)
   await a.update({ requiereInsumos: true, ...(proyectando && { estado: 'EN_INSUMOS' }) })
@@ -106,7 +134,12 @@ export const confirmarInsumos = async (d: { actuacionId: number, insumoIds: numb
   }
   if (correo) {
     if (d.enviarAcuse && correo.remitente) {
-      exigirEnviado(await enviarPlantilla({ codigo: 'ACUSE_INSUMOS', actuacionId: a.id, para: [correo.remitente], responderACorreoId: correo.id, usuarioId: d.usuarioId }))
+      // La confirmación lista lo que llegó en este correo (lo valida el auxiliar que lo recibe)
+      const llegaron = d.insumoIds.length ? await SolicitudInsumo.findAll({ where: { id: d.insumoIds, actuacionId: a.id }, attributes: ['descripcion'] }) : []
+      exigirEnviado(await enviarPlantilla({
+        codigo: 'ACUSE_INSUMOS', actuacionId: a.id, para: [correo.remitente], responderACorreoId: correo.id,
+        extra: { detalle: listaCorreo(llegaron.map(x => x.descripcion), 'Los insumos remitidos en su correo.') }, usuarioId: d.usuarioId
+      }))
     }
     await correo.update({ porRevisar: false, proposito: 'RESPUESTA_INSUMOS', usuarioId: d.usuarioId })
   }
@@ -119,9 +152,19 @@ export const confirmarInsumos = async (d: { actuacionId: number, insumoIds: numb
 // ── Escrito ──
 const ABIERTOS = ['BORRADOR', 'EN_REVISION', 'AJUSTE_INTERNO']
 
+// Reunión 18-nov: el escrito de emergencia exige haber pedido insumos antes (no se arma ni avanza sin eso)
+const exigirInsumosSiEmergencia = async (a: Actuacion) => {
+  if (!a.tipoRespuestaId) return
+  const tipo = await ItemCatalogo.findByPk(a.tipoRespuestaId, { attributes: ['codigo', 'nombre'] })
+  if (tipo?.codigo === 'EMERGENCIA' && !(await SolicitudInsumo.count({ where: { actuacionId: a.id } }))) {
+    throw new ErrorNegocio(`Para el ${tipo.nombre.toLowerCase()} primero hay que pedir los insumos`)
+  }
+}
+
 // El escrito que se está armando; si no hay o el último fue devuelto, empieza la versión siguiente
 export const escritoEnElaboracion = async (actuacionId: number) => {
   const a = await cargarActuacion(actuacionId)
+  await exigirInsumosSiEmergencia(a)
   const ultimo = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']] })
   if (ultimo && ABIERTOS.includes(ultimo.estado)) return ultimo
   if (ultimo && ultimo.estado !== 'DEVUELTO') throw new ErrorNegocio(`La V${ultimo.version} ya se entregó: espere la respuesta de la entidad`)
@@ -140,6 +183,7 @@ export const enviarARevision = async (d: { actuacionId: number, usuarioId: numbe
   const a = await cargarActuacion(d.actuacionId)
   const escrito = await escritoActual(a.id, ['BORRADOR', 'AJUSTE_INTERNO'], 'No hay un escrito en elaboración: suba primero el escrito')
   if (!(await Archivo.count({ where: { escritoId: escrito.id, tipo: 'ESCRITO' } }))) throw new ErrorNegocio('Suba el escrito (Word) antes de enviarlo a revisión')
+  await exigirInsumosSiEmergencia(a)
   const ahora = new Date()
   await escrito.update({ estado: 'EN_REVISION', fechaEnvioRevision: ahora, elaboradoPorId: escrito.elaboradoPorId ?? d.usuarioId })
   const revisorId = a.revisorId ?? await revisorDeEquipo(a.equipoId)
@@ -156,9 +200,15 @@ export const devolverAlAuxiliar = async (d: { actuacionId: number, observacion: 
   return escrito
 }
 
-// Entrega a la entidad por el buzón de entregas, con enlace a la carpeta del escrito en SharePoint
-export const entregar = async (d: { actuacionId: number, usuarioId: number }) => {
+// Entrega a la entidad por el buzón de entregas, con enlace a la carpeta del escrito en SharePoint.
+// Modelo de la firma: el correo lista los documentos entregados (la ficha técnica siempre) y los anexos
+export const entregar = async (d: { actuacionId: number, documentos?: string[], otroDocumento?: string | null, anexos?: string[], otrosAnexos?: string | null, usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
+  const documentos = unirItems([
+    DOCUMENTOS_ENTREGA.FICHA,
+    ...(d.documentos ?? []).map(k => DOCUMENTOS_ENTREGA[k as DocumentoEntrega]).filter(Boolean)
+  ], d.otroDocumento)
+  const anexos = unirItems(d.anexos, d.otrosAnexos)
   const escrito = await escritoActual(a.id, ['EN_REVISION'], 'El escrito debe estar revisado (en revisión) para entregarlo')
   if (!(await Archivo.count({ where: { escritoId: escrito.id, tipo: 'ESCRITO' } }))) throw new ErrorNegocio('El paquete no tiene el escrito')
   const para = correosDe('CORREOS_ENTREGA')
@@ -169,10 +219,15 @@ export const entregar = async (d: { actuacionId: number, usuarioId: number }) =>
   const { enlace } = await compartirCarpeta(carpeta, [...para, ...cc], parametro<number>('DIAS_VIGENCIA_ENLACE'))
   const correo = await enviarPlantilla({
     codigo: escrito.version > 1 ? 'ENTREGA_V2' : 'ENTREGA_V1', actuacionId: a.id, para, cc,
-    extra: { enlace, version: String(escrito.version) }, usuarioId: d.usuarioId
+    extra: {
+      enlace, version: String(escrito.version), fechaEntrega: textoFechaHora(new Date()),
+      documentos: listaCorreo(documentos), anexos: listaCorreo(anexos, 'Sin anexos.')
+    },
+    usuarioId: d.usuarioId
   })
   exigirEnviado(correo)
   await escrito.update({
+    documentosEntregados: documentos, anexosEntregados: anexos,
     estado: 'ENTREGADO', enlace, fechaEntregaEntidad: correo.fechaCorreo, correoEntregaId: correo.id, limiteAns: a.fechaLimiteEntrega,
     revisadoPorId: d.usuarioId, fechaRevision: escrito.fechaRevision ?? correo.fechaCorreo
   })

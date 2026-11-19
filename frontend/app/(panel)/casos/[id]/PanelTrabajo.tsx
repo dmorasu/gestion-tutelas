@@ -5,6 +5,7 @@ import { toast } from "react-toastify"
 import { pasoActuacion } from "../acciones"
 import Documento, { type DocumentoFila } from "@/components/ui/Documento"
 import SubirArchivos from "./SubirArchivos"
+import { FormDatosFaltantes, FormEntrega, FormInsumosMatriz, GRUPO_GENERAL, type ItemMatriz } from "./componentes/Matriz"
 import { TIPOS_DEVOLUCION, fechaHora, isoDesdeLocal } from "@/src/lib/formato"
 
 export type Insumo = { id: number, descripcion: string, minimo: boolean, fechaSolicitud: string | null, fechaLimite: string | null, fechaRecepcion: string | null }
@@ -20,7 +21,11 @@ export type ArchivoCaso = DocumentoFila & { tipo: string, escritoId: number | nu
 
 type Props = {
   casoId: number
-  actuacion: { id: number, estado: string, insumos: Insumo[], escritos: EscritoFila[] }
+  actuacion: { id: number, estado: string, insumos: Insumo[], escritos: EscritoFila[], datosSolicitados?: { nombre: string, recibido: boolean }[] }
+  // Matriz de insumos (catálogo) y documentos de la entrega (modelos de la firma)
+  matriz: ItemMatriz[]
+  documentosEntrega: Record<string, string>
+  documentoSugerido: string | null
   archivos: ArchivoCaso[]
   puedeTrabajar: boolean
   puedeRevisar: boolean
@@ -43,9 +48,9 @@ const ESTADOS_ESCRITO: Record<string, string> = {
   ENTREGADO: "Entregado", DEVUELTO: "Devuelto por la entidad", APROBADO: "Aprobado"
 }
 
-export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedePedirDatos, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
+export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosEntrega, documentoSugerido, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedePedirDatos, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
   const [pendiente, iniciar] = useTransition()
-  const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "devolverAux" | "respuesta" | "radicacion" | "cierre">("")
+  const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "devolverAux" | "entregar" | "respuesta" | "radicacion" | "cierre">("")
   // Texto con el que abre la solicitud de datos faltantes (el del expediente viene ya escrito)
   const [textoDatos, setTextoDatos] = useState("")
   const pedirDatos = (texto: string) => { setTextoDatos(texto); setAbierto(abierto === "datos" && textoDatos === texto ? "" : "datos") }
@@ -84,8 +89,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
             {puedeRevisar && actual?.estado === "EN_REVISION" && (
               <>
                 <button disabled={pendiente} className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "devolverAux" ? "" : "devolverAux")}>Devolver al auxiliar</button>
-                <button disabled={pendiente} className="boton-primario py-1.5 text-xs"
-                  onClick={() => ejecutar("entregar", {}, `V${actual.version} entregada a la entidad`, `¿Entregar la V${actual.version} a la entidad? Se comparte la carpeta del escrito y sale el correo de entrega.`)}>
+                <button disabled={pendiente} className="boton-primario py-1.5 text-xs" onClick={() => setAbierto(abierto === "entregar" ? "" : "entregar")}>
                   Entregar V{actual.version}
                 </button>
               </>
@@ -101,6 +105,11 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
             <input name="observacion" required placeholder="Qué debe ajustar" className="campo" />
             <button disabled={pendiente} className="boton-primario">Devolver</button>
           </form>
+        )}
+        {abierto === "entregar" && actual && (
+          <FormEntrega version={actual.version} documentos={documentosEntrega} sugerido={documentoSugerido} pendiente={pendiente}
+            anexos={matriz.filter(i => i.clase === "DOCUMENTO" && i.grupo !== GRUPO_GENERAL)}
+            enviar={d => ejecutar("entregar", d, `V${actual.version} entregada a la entidad`, `¿Entregar la V${actual.version} a la entidad? Se comparte la carpeta del escrito y sale el correo de entrega.`)} />
         )}
         {abierto === "respuesta" && <FormRespuesta pendiente={pendiente} enviar={c => ejecutar("respuesta", c, "Respuesta registrada")} />}
 
@@ -151,12 +160,23 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
           )}
         </div>
         {abierto === "datos" && puedePedirDatos && (
-          <form action={d => ejecutar("datos-faltantes", { detalle: d.get("detalle") }, "Solicitud de datos faltantes enviada")} className="space-y-2">
-            <textarea key={textoDatos} name="detalle" required rows={4} defaultValue={textoDatos} placeholder="Qué información falta (sale en el hilo de la asignación)" className="campo" />
-            <button disabled={pendiente} className="boton-primario">Enviar solicitud</button>
-          </form>
+          <FormDatosFaltantes key={textoDatos} generales={matriz.filter(i => i.grupo === GRUPO_GENERAL && i.clase === "DOCUMENTO")} textoInicial={textoDatos} pendiente={pendiente}
+            enviar={(items, otros) => ejecutar("datos-faltantes", { items, otros }, "Solicitud de datos faltantes enviada")} />
         )}
-        {abierto === "insumos" && puedePedirInsumos && <FormInsumos pendiente={pendiente} enviar={insumos => ejecutar("insumos", { insumos }, "Solicitud de insumos enviada")} />}
+        {abierto === "insumos" && puedePedirInsumos && <FormInsumosMatriz matriz={matriz} pendiente={pendiente} enviar={insumos => ejecutar("insumos", { insumos }, "Solicitud de insumos enviada")} />}
+        {(a.datosSolicitados ?? []).length > 0 && (
+          <div>
+            <p className="etiqueta">Datos faltantes pedidos</p>
+            <ul className="divide-y divide-slate-100">
+              {a.datosSolicitados!.map(x => (
+                <li key={x.nombre} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                  <span>{x.nombre}</span>
+                  <span className={x.recibido ? "text-xs text-emerald-700" : "text-xs text-amber-700"}>{x.recibido ? "Recibido" : "Pendiente"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {a.insumos.length === 0 && <p className="text-slate-500">Sin insumos pedidos.</p>}
         {a.insumos.length > 0 && (
           <ul className="divide-y divide-slate-100">
@@ -216,25 +236,6 @@ export default function PanelTrabajo({ casoId, actuacion: a, archivos, puedeTrab
           <button disabled={pendiente} className="boton-peligro">Cerrar</button>
         </form>
       )}
-    </div>
-  )
-}
-
-function FormInsumos({ pendiente, enviar }: { pendiente: boolean, enviar: (insumos: { descripcion: string, minimo: boolean }[]) => void }) {
-  const [filas, setFilas] = useState([{ descripcion: "", minimo: true }])
-  const cambiar = (i: number, cambio: Partial<{ descripcion: string, minimo: boolean }>) => setFilas(f => f.map((x, j) => (j === i ? { ...x, ...cambio } : x)))
-  return (
-    <div className="space-y-2">
-      {filas.map((f, i) => (
-        <div key={i} className="flex gap-2 items-center">
-          {/* D6: los insumos mínimos son los de la asignación (datos faltantes); estos son para preparar el escrito */}
-          <input value={f.descripcion} onChange={e => cambiar(i, { descripcion: e.target.value })} placeholder={`Insumo ${i + 1}`} className="campo" />
-        </div>
-      ))}
-      <div className="flex gap-2">
-        <button type="button" className="text-xs enlace" onClick={() => setFilas(f => [...f, { descripcion: "", minimo: true }])}>+ Otro insumo</button>
-        <button disabled={pendiente || !filas.some(f => f.descripcion.trim())} className="boton-primario ml-auto" onClick={() => enviar(filas.filter(f => f.descripcion.trim()))}>Enviar solicitud</button>
-      </div>
     </div>
   )
 }

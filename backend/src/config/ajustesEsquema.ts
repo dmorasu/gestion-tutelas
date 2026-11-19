@@ -30,7 +30,17 @@ const AJUSTES: string[] = [
   // 2026-11-19 · Reunión 18-nov: facturación por radicado y casos unidos
   `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "fechaFacturacion" TIMESTAMPTZ`,
   `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "radicadosAlternos" VARCHAR(40)[] NOT NULL DEFAULT '{}'`,
-  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "numerosInternosAlternos" VARCHAR(20)[] NOT NULL DEFAULT '{}'`
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "numerosInternosAlternos" VARCHAR(20)[] NOT NULL DEFAULT '{}'`,
+  // Correos con los modelos de la firma: hechos, derechos, tipo de respuesta, matriz y entregas
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "resumenHechos" TEXT`,
+  `ALTER TABLE casos ADD COLUMN IF NOT EXISTS "derechosIds" INTEGER[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "datosSolicitados" JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "tipoRespuestaId" INTEGER`,
+  `ALTER TABLE solicitudes_insumos ADD COLUMN IF NOT EXISTS "itemCatalogoId" INTEGER`,
+  `ALTER TABLE solicitudes_insumos ADD COLUMN IF NOT EXISTS clase VARCHAR(12)`,
+  `ALTER TABLE escritos ADD COLUMN IF NOT EXISTS "documentosEntregados" JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE escritos ADD COLUMN IF NOT EXISTS "anexosEntregados" JSONB NOT NULL DEFAULT '[]'`,
+  `ALTER TABLE plantillas_correo ADD COLUMN IF NOT EXISTS editada BOOLEAN NOT NULL DEFAULT false`
 ]
 
 // Una tabla que aún no existe se salta: sync() la acaba de crear completa con el modelo

@@ -1,5 +1,5 @@
 import type { Model, Transaction } from 'sequelize'
-import { Caso, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision, HistorialCaso, Usuario, Juzgado } from '../models'
+import { Caso, Actuacion, SolicitudInsumo, Escrito, Devolucion, RadicacionJuzgado, Decision, HistorialCaso, Usuario, Juzgado, ItemCatalogo } from '../models'
 import type { CambioCampo } from '../models/correos'
 import { contextoActual, type ContextoPeticion } from '../utils/contextoPeticion'
 import { textoFechaHora } from '../utils/fechaColombia'
@@ -11,10 +11,17 @@ import { textoFechaHora } from '../utils/fechaColombia'
 // =====================================
 
 type Formato = 'texto' | 'fecha' | 'fechaHora' | 'siNo'
-type Campo = { etiqueta: string, formato?: Formato, referencia?: (id: number) => Promise<string | null> }
+// referencia recibe un id o, en los campos de lista (derechos), varios
+type Campo = { etiqueta: string, formato?: Formato, referencia?: (valor: number | number[]) => Promise<string | null> }
 
-const nombreUsuario = async (id: number) => (await Usuario.findByPk(id, { attributes: ['nombre'] }))?.nombre ?? null
-const nombreJuzgado = async (id: number) => (await Juzgado.findByPk(id, { attributes: ['nombre'] }))?.nombre ?? null
+const nombreUsuario = async (id: number | number[]) => (await Usuario.findByPk(Number(id), { attributes: ['nombre'] }))?.nombre ?? null
+// Ítems de catálogo (derechos, tipo de respuesta): uno o varios ids → sus nombres
+const nombresItems = async (valor: number | number[]) => {
+  const ids = (Array.isArray(valor) ? valor : [valor]).map(Number).filter(Boolean)
+  if (!ids.length) return null
+  return (await ItemCatalogo.findAll({ where: { id: ids }, attributes: ['nombre'], order: [['orden', 'ASC']] })).map(i => i.nombre).join(', ')
+}
+const nombreJuzgado = async (id: number | number[]) => (await Juzgado.findByPk(Number(id), { attributes: ['nombre'] }))?.nombre ?? null
 
 const CAMPOS: Record<string, Record<string, Campo>> = {
   CASO: {
@@ -24,7 +31,9 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
     etapaActual: { etiqueta: 'Etapa actual' },
     estado: { etiqueta: 'Estado' },
     derechosInvolucrados: { etiqueta: 'Derechos involucrados' },
-    observaciones: { etiqueta: 'Observaciones' }
+    observaciones: { etiqueta: 'Observaciones' },
+    resumenHechos: { etiqueta: 'Resumen de los hechos' },
+    derechosIds: { etiqueta: 'Derechos', referencia: nombresItems }
   },
   ACTUACION: {
     estado: { etiqueta: 'Estado' },
@@ -38,7 +47,8 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
     auxiliarId: { etiqueta: 'Auxiliar', referencia: nombreUsuario },
     revisorId: { etiqueta: 'Revisor', referencia: nombreUsuario },
     requiereInsumos: { etiqueta: 'Requiere insumos', formato: 'siNo' },
-    loQueSePide: { etiqueta: 'Lo que se pide al juez' }
+    loQueSePide: { etiqueta: 'Lo que se pide al juez' },
+    tipoRespuestaId: { etiqueta: 'Tipo de respuesta', referencia: nombresItems }
   },
   INSUMO: {
     descripcion: { etiqueta: 'Insumo' },
@@ -64,7 +74,7 @@ const CAMPOS: Record<string, Record<string, Campo>> = {
   DECISION: { instancia: { etiqueta: 'Instancia' }, sentido: { etiqueta: 'Sentido' }, favorable: { etiqueta: 'Favorable', formato: 'siNo' } }
 }
 
-const vacio = (v: unknown) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '')
+const vacio = (v: unknown) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && !v.length)
 
 const clave = (valor: unknown, campo: Campo) => {
   if (vacio(valor)) return ''
@@ -75,7 +85,7 @@ const clave = (valor: unknown, campo: Campo) => {
 
 const formatear = async (valor: unknown, campo: Campo): Promise<string | null> => {
   if (vacio(valor)) return null
-  if (campo.referencia) return (await campo.referencia(Number(valor))) ?? `#${valor}`
+  if (campo.referencia) return (await campo.referencia(Array.isArray(valor) ? valor.map(Number) : Number(valor))) ?? `#${valor}`
   if (campo.formato === 'fechaHora' || campo.formato === 'fecha') return textoFechaHora(valor as Date)
   if (campo.formato === 'siNo') return valor === true || valor === 'true' ? 'Sí' : 'No'
   return String(valor).trim()

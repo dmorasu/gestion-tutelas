@@ -37,6 +37,8 @@ const COLOR_CRITICIDAD: Record<string, { fondo: string, texto: string }> = {
 
 export type DatosDiseno = {
   titulo: string
+  // Texto que va antes del bloque de datos (el saludo y la primera frase del modelo)
+  introHtml?: string | null
   cuerpoHtml: string
   // Ficha del caso (solo si el correo es de una actuación)
   ficha?: { etiqueta: string, valor: string }[] | null
@@ -57,8 +59,8 @@ export const armarCorreoHtml = (d: DatosDiseno) => {
     ? `<tr><td style="padding:0 32px 8px 32px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${C.fichaFondo};border:1px solid ${C.linea};border-radius:4px;">
           ${d.ficha.map((f, i) => `<tr>
-            <td style="padding:8px 14px;font-family:${FUENTE};font-size:12px;color:${C.suave};width:120px;${i ? `border-top:1px solid ${C.linea};` : ''}">${escapar(f.etiqueta)}</td>
-            <td style="padding:8px 14px;font-family:${FUENTE};font-size:13px;color:${C.grafito};font-weight:600;${i ? `border-top:1px solid ${C.linea};` : ''}">${f.etiqueta === 'Criticidad' && chip ? chip : escapar(f.valor)}</td>
+            <td style="padding:8px 14px;font-family:${FUENTE};font-size:12px;color:${C.suave};width:150px;${i ? `border-top:1px solid ${C.linea};` : ''}">${escapar(f.etiqueta)}</td>
+            <td style="padding:8px 14px;font-family:${FUENTE};font-size:13px;color:${C.grafito};font-weight:600;${i ? `border-top:1px solid ${C.linea};` : ''}">${(f.etiqueta === 'Criticidad' || (f.etiqueta === 'Estado' && f.valor === d.criticidad)) && chip ? chip : escapar(f.valor)}</td>
           </tr>`).join('')}
         </table>
       </td></tr>`
@@ -86,6 +88,7 @@ export const armarCorreoHtml = (d: DatosDiseno) => {
         </tr></table>
       </td></tr>
       <tr><td style="padding:26px 32px 14px 32px;font-family:${FUENTE};font-size:20px;font-weight:600;color:${C.grafito};">${escapar(d.titulo)}</td></tr>
+      ${d.introHtml ? `<tr><td style="padding:4px 32px 4px 32px;font-family:${FUENTE};font-size:14px;line-height:1.6;color:${C.texto};">${d.introHtml}</td></tr>` : ''}
       ${ficha}
       <tr><td style="padding:10px 32px 6px 32px;font-family:${FUENTE};font-size:14px;line-height:1.6;color:${C.texto};">${d.cuerpoHtml}</td></tr>
       ${boton}

@@ -8,6 +8,7 @@ import Criticidad from "@/components/ui/Criticidad"
 import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
 import RutaActuacion from "./componentes/RutaActuacion"
+import type { ItemMatriz } from "./componentes/Matriz"
 import { CRITICIDADES, ESTADOS_ACTUACION, ETAPAS, TIPOS_PETICION, UNIDADES_TERMINO, fechaHora, isoDesdeLocal, tiempoRestante, tipoEscrito, valorFechaHoraLocal, yaEntregada } from "@/src/lib/formato"
 
 export type Responsable = { id: number, nombre: string }
@@ -20,17 +21,20 @@ export type ActuacionDetalle = {
   auxiliar: Responsable | null, revisor: Responsable | null, equipo: { id: number, nombre: string } | null
   insumos: Insumo[], escritos: EscritoFila[]
   fechaAsumida?: string | null, fechaCierre?: string | null, radicaciones?: { fechaRadicacion: string }[]
+  tipoRespuestaId?: number | null, datosSolicitados?: { nombre: string, recibido: boolean }[]
 }
 
 type Props = {
   casoId: number, actuacion: ActuacionDetalle, gestiona: boolean, coordina: boolean, usuarioId: number, reasigna: "TODO" | "EQUIPO" | null,
   auxiliares: Responsable[], revisores: Responsable[], archivos: ArchivoCaso[]
   puedeTrabajar: boolean, puedeRevisar: boolean, puedePedirInsumos: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
+  // Catálogos (reunión 18-nov): tipos de respuesta, matriz de insumos y documentos de la entrega
+  tiposRespuesta: { id: number, nombre: string, activo?: boolean }[], matriz: ItemMatriz[], documentosEntrega: Record<string, string>, documentoDeEscrito: Record<string, string>
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, reasigna, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, reasigna, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion, tiposRespuesta, matriz, documentosEntrega, documentoDeEscrito }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
@@ -52,6 +56,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
       fechaVencimientoInformada: isoDesdeLocal(String(datos.get("fechaVencimientoInformada") ?? "")),
       requiereInsumos: datos.get("requiereInsumos") === "on",
       loQueSePide: datos.get("loQueSePide") || null,
+      tipoRespuestaId: Number(datos.get("tipoRespuestaId")) || null,
       estado: datos.get("estado")
     }
     // Solo se envía si cambió: enviarla la deja "puesta a mano" y el recálculo ya no la toca
@@ -99,6 +104,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
           <Dato nombre="Criticidad" valor={`${CRITICIDADES[a.criticidad] ?? a.criticidad}${a.criticidadFuente ? ` (${FUENTE_CRITICIDAD[a.criticidadFuente]})` : ""}`} />
           <Dato nombre="Insumos" valor={a.requiereInsumos ? "Requiere" : "No requiere"} />
           <Dato nombre="Escrito" valor={tipoEscrito(a)} />
+          <Dato nombre="Tipo de respuesta" valor={tiposRespuesta.find(t => t.id === a.tipoRespuestaId)?.nombre ?? "Sin definir"} />
           {a.tipoPeticion && <Dato nombre="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
           {porDerechoPeticion && a.etapa === "ACCION" && (
             <p className="sm:col-span-3 text-xs text-slate-600">Tutela por derecho de petición: la contestación pide al juez hecho superado con la respuesta de la PQRS ligada (pestaña Información).</p>
@@ -163,6 +169,13 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
               </select>
             </div>
           )}
+          <div>
+            <label className="etiqueta">Tipo de respuesta</label>
+            <select name="tipoRespuestaId" defaultValue={a.tipoRespuestaId ?? ""} className="campo">
+              <option value="">— Sin definir —</option>
+              {tiposRespuesta.filter(t => t.activo !== false || t.id === a.tipoRespuestaId).map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+            </select>
+          </div>
           <div className="flex flex-col justify-end gap-1">
             <label className="flex items-center gap-2"><input type="checkbox" name="requiereInsumos" defaultChecked={a.requiereInsumos} /> Requiere insumos</label>
           </div>
@@ -185,6 +198,9 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         puedeRevisar={puedeRevisar}
         puedePedirInsumos={puedePedirInsumos}
         puedePedirDatos={gestiona}
+        matriz={matriz}
+        documentosEntrega={documentosEntrega}
+        documentoSugerido={documentoDeEscrito[a.etapa === "IMPUGNACION" && a.origenImpugnacion === "ACCIONANTE" ? "DESCORRE" : a.etapa] ?? null}
         puedeCerrar={puedeCerrar}
         motivosCierre={motivosCierre}
         tipoEscrito={tipoEscrito(a)}

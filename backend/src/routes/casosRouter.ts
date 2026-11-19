@@ -1,14 +1,14 @@
 import { Router, type Request, type Response } from 'express'
 import { body, param } from 'express-validator'
 import { Op, fn, col, where as condicionSql, type WhereOptions } from 'sequelize'
-import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso, Rol, CasoRelacion } from '../models'
+import { Caso, Parte, Actuacion, Juzgado, Usuario, Equipo, SolicitudInsumo, Escrito, Devolucion, Decision, RadicacionJuzgado, Correo, Archivo, HistorialCaso, NotaCaso, Rol, CasoRelacion, ItemCatalogo } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol, tieneRol } from '../middleware/auth'
 import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos'
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
+import { DOCUMENTOS_ENTREGA, DOCUMENTO_DE_ESCRITO, ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
 import { normalizarRadicado, normalizarRadicadoPqrs, raizProceso } from '../utils/radicado'
 import { dondeRadicado, sugerirRelaciones, relacionesDe, decidirRelacion, relacionarManual, unirCasos, NOMBRES_RELACION } from '../services/relacionesCasos'
 import { TIPOS_RELACION } from '../models/casos'
@@ -250,7 +250,7 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     // al abrir el caso: así aparecen los de antes de la regla y los que llegaron después de este
     await sugerirRelaciones(caso.id).catch(error => console.error('❌ Relaciones del caso', error))
     const vinculos = await relacionesDe(caso.id)
-    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, documentosEntrega: DOCUMENTOS_ENTREGA, documentoDeEscrito: DOCUMENTO_DE_ESCRITO, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
@@ -268,6 +268,30 @@ router.post('/:id/notas', param('id').isInt(), body('texto').isString().trim().i
       if (!visibles) throw new ErrorNegocio('Este caso no está a su cargo', 403)
       if (actuacionId && !(await Actuacion.count({ where: { id: actuacionId, casoId } }))) throw new ErrorNegocio('La etapa no es de este caso')
       res.status(201).json(await NotaCaso.create({ casoId, actuacionId, usuarioId: req.usuario!.id, nombreUsuario: req.usuario!.nombre, texto: String(req.body.texto).trim() }))
+    } catch (error) {
+      responderError(res, error)
+    }
+  })
+
+// Resumen de los hechos y derechos (reunión 18-nov): los registra quien trabaja el caso (sobre todo el
+// auxiliar, que lee la tutela). Van en la ficha técnica y en el correo de insumos
+router.patch('/:id/ficha', param('id').isInt(), body('resumenHechos').optional({ values: 'null' }).isString().isLength({ max: 4000 }).withMessage('El resumen va hasta 4.000 caracteres'),
+  body('derechosIds').optional().isArray(), manejarErroresEntrada,
+  async (req, res) => {
+    try {
+      const casoId = Number(req.params.id)
+      if (!tieneRol(req, ROLES.ASISTENTE, ROLES.COORDINADOR) && !(await Actuacion.count({ where: { casoId, ...alcance(req) } }))) throw new ErrorNegocio('Este caso no está a su cargo', 403)
+      const caso = await Caso.findByPk(casoId)
+      if (!caso) throw new ErrorNegocio('El caso no existe', 404)
+      const cambios: Record<string, unknown> = {}
+      if ('resumenHechos' in req.body) cambios.resumenHechos = String(req.body.resumenHechos ?? '').trim() || null
+      if (req.body.derechosIds) {
+        const ids = [...new Set((req.body.derechosIds as unknown[]).map(Number).filter(Boolean))]
+        if ((await ItemCatalogo.count({ where: { id: ids, catalogo: 'DERECHO' } })) !== ids.length) throw new ErrorNegocio('Algún derecho no está en el catálogo')
+        cambios.derechosIds = ids
+      }
+      await caso.update(cambios)
+      res.json({ ok: true })
     } catch (error) {
       responderError(res, error)
     }
@@ -330,7 +354,7 @@ router.get('/:id/historial', param('id').isInt(), manejarErroresEntrada, async (
 // =====================================
 const CAMPOS_EDITABLES = [
   'fechaNotificacion', 'terminoValor', 'terminoUnidad', 'fechaVencimientoInformada', 'criticidad',
-  'auxiliarId', 'revisorId', 'equipoId', 'requiereInsumos', 'loQueSePide', 'estado', 'responsableCumplimiento', 'origenImpugnacion'
+  'auxiliarId', 'revisorId', 'equipoId', 'requiereInsumos', 'loQueSePide', 'estado', 'responsableCumplimiento', 'origenImpugnacion', 'tipoRespuestaId'
 ] as const
 const CAMBIAN_PLAZOS = new Set(['fechaNotificacion', 'terminoValor', 'terminoUnidad', 'fechaVencimientoInformada', 'criticidad', 'requiereInsumos'])
 const CAMBIAN_RESPONSABLE = ['auxiliarId', 'revisorId', 'equipoId']
@@ -365,6 +389,8 @@ router.patch('/actuaciones/:id',
         cambios.equipoId = auxiliar.equipoId
         if (!('revisorId' in cambios)) cambios.revisorId = await revisorDeEquipo(auxiliar.equipoId)
       }
+      // El tipo de respuesta sale del catálogo (reunión 18-nov)
+      if (cambios.tipoRespuestaId && !(await ItemCatalogo.count({ where: { id: Number(cambios.tipoRespuestaId), catalogo: 'TIPO_RESPUESTA' } }))) throw new ErrorNegocio('Tipo de respuesta no válido')
       // La criticidad puesta a mano no la cambia el recálculo
       if ('criticidad' in cambios) cambios.criticidadFuente = 'MANUAL'
       if (cambios.estado === 'CERRADA') cambios.fechaCierre = new Date()
@@ -486,8 +512,12 @@ router.post('/actuaciones/:id/correo', param('id').isInt(), body('buzon').isIn(B
   }))
 
 // Datos faltantes y expediente (reunión 18-nov): los pide la asistencia administrativa, no el auxiliar
-router.post('/actuaciones/:id/datos-faltantes', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(), body('detalle').isString().trim().notEmpty().withMessage('Indique qué datos faltan'), manejarErroresEntrada,
-  paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({ actuacionId: a.id, detalle: req.body.detalle, para: req.body.para, usuarioId: req.usuario!.id })))
+// items: los marcados de la lista general de la matriz; otros: lo que no está en la lista, una línea por ítem
+router.post('/actuaciones/:id/datos-faltantes', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(),
+  body('items').optional().isArray(), body('otros').optional({ values: 'null' }).isString().isLength({ max: 4000 }), manejarErroresEntrada,
+  paso('RESPONSABLE', (req, a) => flujo.solicitarDatosFaltantes({
+    actuacionId: a.id, items: (req.body.items ?? []).map(String), otros: req.body.otros ?? req.body.detalle ?? null, para: req.body.para, usuarioId: req.usuario!.id
+  })))
 
 router.post('/actuaciones/:id/insumos', param('id').isInt(), body('insumos').isArray({ min: 1 }).withMessage('Indique al menos un insumo'), manejarErroresEntrada,
   paso('INSUMOS', (req, a) => flujo.solicitarInsumos({ actuacionId: a.id, insumos: req.body.insumos, usuarioId: req.usuario!.id })))
@@ -504,8 +534,14 @@ router.post('/actuaciones/:id/revision', param('id').isInt(), manejarErroresEntr
 router.post('/actuaciones/:id/devolver-auxiliar', param('id').isInt(), body('observacion').isString(), manejarErroresEntrada,
   paso('REVISOR', (req, a) => flujo.devolverAlAuxiliar({ actuacionId: a.id, observacion: req.body.observacion, usuarioId: req.usuario!.id })))
 
-router.post('/actuaciones/:id/entregar', param('id').isInt(), manejarErroresEntrada,
-  paso('REVISOR', async (req, a) => { await flujo.entregar({ actuacionId: a.id, usuarioId: req.usuario!.id }) }))
+router.post('/actuaciones/:id/entregar', param('id').isInt(), body('documentos').optional().isArray(), body('anexos').optional().isArray(),
+  body('otroDocumento').optional({ values: 'null' }).isString().isLength({ max: 500 }), body('otrosAnexos').optional({ values: 'null' }).isString().isLength({ max: 4000 }), manejarErroresEntrada,
+  paso('REVISOR', async (req, a) => {
+    await flujo.entregar({
+      actuacionId: a.id, documentos: (req.body.documentos ?? []).map(String), otroDocumento: req.body.otroDocumento ?? null,
+      anexos: (req.body.anexos ?? []).map(String), otrosAnexos: req.body.otrosAnexos ?? null, usuarioId: req.usuario!.id
+    })
+  }))
 
 router.post('/actuaciones/:id/respuesta', param('id').isInt(),
   body('tipo').isIn(['ACUSE', 'APROBACION', 'DEVOLUCION']),

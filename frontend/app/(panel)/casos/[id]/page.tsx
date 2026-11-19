@@ -16,12 +16,15 @@ import DocumentosCaso, { type DocumentoCaso } from "./componentes/DocumentosCaso
 import CorreosCaso, { type CorreoCaso } from "./componentes/CorreosCaso"
 import PqrsLigada, { type CasoRelacionado } from "./componentes/PqrsLigada"
 import CasosRelacionados, { type Vinculo } from "./componentes/CasosRelacionados"
+import HechosDerechos from "./componentes/HechosDerechos"
+import type { ItemMatriz } from "./componentes/Matriz"
 
 type Detalle = {
   caso: {
     id: number, radicado: string, numeroInterno: string | null, tipoSolicitud: string, calidadEntidad: string, etapaInicial: string, etapaActual: string, estado: string,
     derechosInvolucrados: string | null, observaciones: string | null, deOtroOperador: boolean, createdAt: string, motivoCierre: string | null,
     porDerechoPeticion: boolean, casoRelacionadoId: number | null, radicadosAlternos: string[], numerosInternosAlternos: string[], fechaFacturacion: string | null,
+    resumenHechos: string | null, derechosIds: number[],
     juzgado: { nombre: string } | null, registradoPor: { nombre: string } | null,
     partes: { id: number, rol: string, tipoDocumento: string | null, numeroDocumento: string | null, nombre: string }[]
     actuaciones: ActuacionDetalle[]
@@ -32,6 +35,8 @@ type Detalle = {
   sentidos: Record<string, string[]>
   relacionados: CasoRelacionado[]
   vinculos: Vinculo[]
+  documentosEntrega: Record<string, string>
+  documentoDeEscrito: Record<string, string>
   tiposRelacion: Record<string, string>
   notas: number
   tiposPeticion: Record<string, string>
@@ -49,10 +54,14 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, vinculos, tiposRelacion, notas, tiposPeticion, envio, almacen }, historial, usuarios] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, vinculos, tiposRelacion, notas, tiposPeticion, envio, almacen, documentosEntrega, documentoDeEscrito }, historial, usuarios, derechos, tiposRespuesta, matriz] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
-    obtener<Usuario[]>("/catalogos/usuarios")
+    obtener<Usuario[]>("/catalogos/usuarios"),
+    // Catálogos (reunión 18-nov), con los apagados para mostrar lo que ya estaba elegido
+    obtener<{ id: number, nombre: string, activo: boolean }[]>("/catalogos/items?catalogo=DERECHO&todos=1"),
+    obtener<{ id: number, nombre: string, activo: boolean }[]>("/catalogos/items?catalogo=TIPO_RESPUESTA&todos=1"),
+    obtener<ItemMatriz[]>("/catalogos/items?catalogo=INSUMO")
   ])
   const esRevisor = tieneRol(sesion.roles, ["REVISOR"])
   // Mismas reglas que el backend (services/permisosActuacion): el botón solo aparece si el paso se puede
@@ -167,6 +176,12 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
             ))}
           </nav>
 
+          {tab === "actuacion" && actual && puedeRelacionar && caso.estado !== "CERRADO" && (!caso.resumenHechos || !caso.derechosIds.length) && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">
+              Falta registrar {!caso.resumenHechos && !caso.derechosIds.length ? "el resumen de los hechos y los derechos" : !caso.resumenHechos ? "el resumen de los hechos" : "los derechos"}: van en la ficha técnica y en el correo de insumos.{" "}
+              <Link href={enlace({ tab: "informacion" })} className="font-semibold underline">Registrarlos</Link>
+            </p>
+          )}
           {tab === "actuacion" && actual && (
             <PanelActuacion
               key={actual.id}
@@ -182,6 +197,10 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
               puedeTrabajar={trabaja(actual)}
               puedeRevisar={revisa(actual)}
               puedePedirInsumos={pideInsumos(actual)}
+              tiposRespuesta={tiposRespuesta}
+              matriz={matriz}
+              documentosEntrega={documentosEntrega}
+              documentoDeEscrito={documentoDeEscrito}
               puedeCerrar={gestiona || revisa(actual)}
               motivosCierre={motivosCierre}
               sentidos={sentidos}
@@ -207,6 +226,9 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
                   {caso.observaciones && <Dato etiqueta="Observaciones" valor={<span className="whitespace-pre-line">{caso.observaciones}</span>} className="sm:col-span-3" />}
                   {caso.motivoCierre && <Dato etiqueta="Causal de cierre" valor={caso.motivoCierre} className="sm:col-span-3" />}
                 </dl>
+              </Seccion>
+              <Seccion titulo="Hechos y derechos">
+                <HechosDerechos casoId={caso.id} resumen={caso.resumenHechos} derechosIds={caso.derechosIds} derechos={derechos} puedeEditar={puedeRelacionar && caso.estado !== "CERRADO"} />
               </Seccion>
               <Seccion titulo="Casos relacionados">
                 <CasosRelacionados casoId={caso.id} vinculos={vinculos} tipos={tiposRelacion} puedeDecidir={puedeRelacionar} coordina={coordina} />
