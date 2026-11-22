@@ -1,6 +1,7 @@
 import { Op, type WhereOptions } from 'sequelize'
 import { Actuacion, Caso, HistorialCaso, Usuario } from '../models'
 import { enBogota, instanteBogota, sumarDias } from '../utils/fechaColombia'
+import { productividadDelDia } from './tiempos'
 
 // =====================================
 // CIERRE DEL DÍA: CAPACIDAD DE RESPUESTA
@@ -58,8 +59,10 @@ export const cierreDelDia = async (alcance: WhereOptions, dia = enBogota(new Dat
     }
   })
 
+  // Productividad (fase 7): escritos elaborados y corregidos con su tiempo, revisiones y registros
+  const productividad = await productividadDelDia(dia, { alcance })
   // Pendientes al cierre de cada auxiliar (sin entregar), para ver con qué queda para mañana
-  const ids = [...new Set([...movimientos.map(m => m.usuarioId), ...actuaciones.map(a => a.auxiliarId).filter((x): x is number => !!x)])]
+  const ids = [...new Set([...movimientos.map(m => m.usuarioId), ...actuaciones.map(a => a.auxiliarId).filter((x): x is number => !!x), ...productividad.keys()])]
   const [usuarios, pendientes] = await Promise.all([
     Usuario.findAll({ where: { id: ids }, attributes: ['id', 'nombre', 'capacidadDiaria'] }),
     Actuacion.findAll({ where: { [Op.and]: [alcance, { auxiliarId: ids, estado: SIN_ENTREGAR }] }, attributes: ['auxiliarId', 'fechaLimiteEntrega'] })
@@ -81,9 +84,10 @@ export const cierreDelDia = async (alcance: WhereOptions, dia = enBogota(new Dat
       // Lo respondido frente a lo que la persona puede sacar en un día
       usoCapacidad: u.capacidadDiaria ? Math.round((enviadas / u.capacidadDiaria) * 100) : null,
       pendientes: suyas.length,
-      vencidas: suyas.filter(p => p.fechaLimiteEntrega && p.fechaLimiteEntrega < new Date()).length
+      vencidas: suyas.filter(p => p.fechaLimiteEntrega && p.fechaLimiteEntrega < new Date()).length,
+      productividad: productividad.get(u.id) ?? null
     }
-  }).filter(p => p.recibidas || p.tomadas || p.insumos || p.enviadasRevision || p.devueltasAuxiliar || p.entregadas || p.pendientes)
+  }).filter(p => p.recibidas || p.tomadas || p.insumos || p.enviadasRevision || p.devueltasAuxiliar || p.entregadas || p.pendientes || p.productividad)
     .sort((a, b) => (b.enviadasRevision + b.entregadas) - (a.enviadasRevision + a.entregadas) || a.nombre.localeCompare(b.nombre))
 
   const respuestas = movimientos.filter(m => m.horasDesdeAsignacion !== null)

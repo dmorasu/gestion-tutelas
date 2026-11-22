@@ -6,11 +6,12 @@ import { conexionRedis } from './config/redis'
 import { colaBuzon, NOMBRE_COLA_BUZON } from './queues/buzonQueue'
 import { sincronizarBuzon } from './services/buzon/sincronizarBuzon'
 import { limpiarAdjuntos } from './services/buzon/limpiezaBuzon'
-import { detectarAlertas } from './services/alertas'
+import { detectarAlertas, revisarCortes } from './services/alertas'
 import { avisarSinAtender } from './services/buzon/atencion'
 import { cargarParametros } from './services/parametros'
 import { cargarCalendario } from './services/calendario'
 import { activarHistorialCasos } from './services/historialCasos'
+import { activarTramos } from './services/tiempos'
 import { buzonesConfigurados } from './services/buzon/graph'
 
 // =====================================
@@ -25,6 +26,7 @@ const iniciar = async () => {
   }
   await db.authenticate()
   activarHistorialCasos()
+  activarTramos()
 
   const segundos = Math.max(60, Number(process.env.BUZON_INTERVALO_SEGUNDOS) || 120)
   // Una sola programación repetida (si ya existe, se actualiza)
@@ -32,6 +34,9 @@ const iniciar = async () => {
   // Una vez al día, de madrugada (2:00 de Bogotá), se quitan del buzón los adjuntos ya guardados en SharePoint
   // Alertas: términos próximos o vencidos, desacatos, insumos vencidos y duplicidad
   await colaBuzon().upsertJobScheduler('alertas', { every: 30 * 60 * 1000 }, { name: 'alertas', opts: { removeOnComplete: true, removeOnFail: 20 } })
+  // Cortes de alertas al cliente (HORAS_CORTE_ALERTAS): cada minuto se mira si ya pasó la hora de uno de
+  // hoy sin enviar. Así un cambio del parámetro aplica sin reiniciar y un reinicio no pierde el corte
+  await colaBuzon().upsertJobScheduler('cortes-alertas', { every: 60 * 1000 }, { name: 'cortes', opts: { removeOnComplete: true, removeOnFail: 20 } })
   await colaBuzon().upsertJobScheduler('limpieza-adjuntos', { pattern: '0 2 * * *', tz: 'America/Bogota' }, { name: 'limpiar', opts: { removeOnComplete: true, removeOnFail: 20 } })
 
   // concurrency 1: dos lecturas a la vez repetirían el mismo delta
@@ -40,6 +45,11 @@ const iniciar = async () => {
     if (trabajo.name === 'alertas') {
       const nuevas = await detectarAlertas()
       if (nuevas) console.log(colors.yellow(`🔔 ${nuevas} alertas nuevas`))
+      return
+    }
+    if (trabajo.name === 'cortes') {
+      const corte = await revisarCortes()
+      if (corte) console.log(colors.yellow(`📨 Corte de alertas de las ${corte.hora}: ${corte.cantidad} alertas (${corte.estado})`))
       return
     }
     if (trabajo.name === 'limpiar') {

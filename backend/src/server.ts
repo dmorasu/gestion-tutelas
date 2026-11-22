@@ -7,6 +7,7 @@ import { db } from './config/db'
 import { aplicarAjustesEsquema } from './config/ajustesEsquema'
 import { autenticacion } from './middleware/auth'
 import { activarHistorialCasos } from './services/historialCasos'
+import { activarTramos } from './services/tiempos'
 import { cargarParametros } from './services/parametros'
 import { cargarCalendario } from './services/calendario'
 import { sembrarBase } from './seeds/semillaBase'
@@ -22,6 +23,7 @@ import { borrarVistasTablero, crearVistasTablero, refrescarAns } from './service
 
 // Bitácora de cambios de los casos (hooks de los modelos): antes de atender peticiones
 activarHistorialCasos()
+activarTramos()
 
 export async function conectarBase() {
   try {

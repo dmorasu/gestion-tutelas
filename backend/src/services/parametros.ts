@@ -14,6 +14,7 @@ type Definicion = { valor: unknown, descripcion: string, duda?: string, fuente?:
 export const PARAMETROS_BASE = {
   HORA_CORTE_ASIGNACION: { valor: '15:00', duda: 'D1', fuente: 'Manual §3 y Dudas TI D1', descripcion: 'Las asignaciones y los insumos recibidos después de esta hora cuentan desde el día hábil siguiente' },
   HORA_INICIO_JORNADA: { valor: '08:00', duda: 'D1', descripcion: 'Hora en que se entiende asignado lo que llegó después del corte o en día no hábil' },
+  HORA_FIN_JORNADA: { valor: '17:00', descripcion: 'Fin de la jornada de trabajo de la firma: los tiempos de cada paso (Tiempos y productividad) solo cuentan las horas entre el inicio y el fin de la jornada de los días hábiles' },
   HORA_FIN_DIA_ANS: { valor: '15:00', duda: 'D2', fuente: 'Dudas TI D2', descripcion: 'Hasta qué hora del día hábil se cumple un ANS (nuestra actividad)' },
   HORA_VENCIMIENTO_TERMINO: { valor: '17:00', duda: 'D2', fuente: 'Dudas TI D2', descripcion: 'Hora en que vence un término judicial en días (horario hábil de los juzgados), o el "Vence" del asunto que trae fecha sin hora' },
   HORA_CORTE_MEDIO_DIA: { valor: '12:00', duda: 'D3', descripcion: 'Hasta qué hora se trabaja los medios días (24 y 31 de diciembre): corte de asignación y fin del día para los ANS' },
@@ -61,6 +62,10 @@ export const PARAMETROS_BASE = {
   ALERTA_BUZON_PORCENTAJE: { valor: 80, descripcion: 'Avisar cuando un buzón pase de este porcentaje de su capacidad' },
   HORAS_ALERTA_TERMINO: { valor: 24, fuente: 'Manual §22', descripcion: 'Alerta de término próximo cuando falten menos de estas horas para el vencimiento sin haber entregado' },
   CORREOS_ALERTAS: { valor: [] as string[], descripcion: 'A quién se emiten las alertas (responsable de la entidad y supervisor)' },
+  // Reunión 18-nov: dos cortes al día. Las horas son supuesto; el segundo va antes del fin del día del ANS
+  // (15:00) para que lo detectado en la mañana se emita el mismo día hábil (ANS-08)
+  HORAS_CORTE_ALERTAS: { valor: ['10:00', '14:30'], descripcion: 'Horas (HH:MM) de los cortes del día hábil en que sale al cliente un solo correo con las alertas pendientes' },
+  ENVIO_AUTOMATICO_ALERTAS: { valor: true, fuente: 'Reunión 18-nov', descripcion: 'Enviar solas las alertas en cada corte. Apagado, solo salen cuando un asistente o el coordinador las envía' },
   FECHA_INICIO_PLAN: { valor: '', descripcion: 'Fecha del acta de inicio (AAAA-MM-DD): desde ahí cuenta el avance del plan de choque (ANS-04)' },
   META_DIARIA_PLAN: { valor: 168, fuente: 'Manual §13', descripcion: 'ANS-04: primeros escritos por día hábil que comprometió el plan de choque' },
   MINUTOS_ALERTA_SIN_ATENDER: { valor: 30, descripcion: 'Una asignación sin atender después de estos minutos se avisa al coordinador (en horario hábil)' },

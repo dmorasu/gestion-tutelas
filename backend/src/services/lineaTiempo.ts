@@ -39,7 +39,7 @@ const TIPOS_DEVOLUCION: Record<string, string> = { FONDO: 'de fondo', SOPORTE: '
 const PROPOSITOS: Record<string, string> = {
   ACUSE_ASIGNACION: 'la confirmación de recibido', ACUSE_PAQUETE: 'la confirmación del paquete', SOLICITUD_DATOS_FALTANTES: 'la solicitud de datos faltantes',
   ACUSE_DATOS_FALTANTES: 'la confirmación de datos recibidos', SOLICITUD_INSUMOS: 'la solicitud de insumos', ACUSE_INSUMOS: 'la confirmación de insumos recibidos',
-  ENTREGA_V1: 'la entrega V1', ENTREGA_V2: 'la entrega corregida', ALERTA: 'una alerta', LIBRE: 'un correo'
+  ENTREGA_V1: 'la entrega V1', ENTREGA_V2: 'la entrega corregida', ALERTA: 'una alerta', ALERTAS_CORTE: 'el corte de alertas', LIBRE: 'un correo'
 }
 const ENTRANTES: Record<string, string> = {
   ASIGNACION: 'Llegó la asignación', SEGUIMIENTO: 'Llegó un correo del caso', RESPUESTA_INSUMOS: 'Llegaron insumos',

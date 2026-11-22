@@ -6,6 +6,8 @@ const formatoFecha = new Intl.DateTimeFormat("es-CO", { timeZone: "America/Bogot
 
 export const fechaHora = (valor?: string | null) => (valor ? formatoFechaHora.format(new Date(valor)) : "—")
 export const fecha = (valor?: string | null) => (valor ? formatoFecha.format(new Date(valor)) : "—")
+// Un día sin hora (AAAA-MM-DD) tal cual: con new Date() se leería como medianoche UTC y saldría el día anterior
+export const dia = (valor?: string | null) => (valor ? valor.slice(0, 10).split("-").reverse().join("/") : "—")
 
 // Para <input type="datetime-local">: "2026-11-17T08:00" en hora de Bogotá
 export const valorFechaHoraLocal = (valor?: string | null) => {
@@ -84,6 +86,7 @@ export const PROPOSITOS: Record<string, string> = {
   DEVOLUCION_ENTIDAD: "Devolución de la entidad",
   ACUSE_PAQUETE: "Confirmación del paquete",
   ALERTA: "Alerta al cliente",
+  ALERTAS_CORTE: "Alertas del corte",
   LIBRE: "Correo escrito desde el caso",
   ASIGNACION_PAQUETE: "Asignación en paquete (Excel)"
 }

@@ -1,3 +1,4 @@
+import { reconstruirTramos } from '../services/tiempos'
 import { db } from '../config/db'
 import { Op } from 'sequelize'
 import { Rol, Equipo, Caso, DiaNoHabil } from '../models'
@@ -53,4 +54,7 @@ export const sembrarBase = async () => {
   await sembrarMediosDias()
   await sembrarPlantillas()
   await sembrarCatalogos()
+  // Fase 7: la primera vez, los tramos de lo que ya existía salen de la bitácora
+  const tramos = await reconstruirTramos()
+  if (tramos) console.log(`⏱️  ${tramos} tramos reconstruidos desde la bitácora`)
 }

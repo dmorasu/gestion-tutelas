@@ -43,13 +43,19 @@ const AJUSTES: string[] = [
   `ALTER TABLE plantillas_correo ADD COLUMN IF NOT EXISTS editada BOOLEAN NOT NULL DEFAULT false`,
   // Nulidades
   `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "origenNulidad" BOOLEAN NOT NULL DEFAULT false`,
-  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "fechaClasificacion" TIMESTAMPTZ`
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "fechaClasificacion" TIMESTAMPTZ`,
+  // 2026-11-22 · Alertas al cliente en dos cortes al día (la tabla cortes_alertas la crea sync)
+  `ALTER TABLE alertas ADD COLUMN IF NOT EXISTS "corteId" INTEGER REFERENCES cortes_alertas(id) ON DELETE SET NULL`,
+  `ALTER TABLE alertas ADD COLUMN IF NOT EXISTS "vecesEnviada" INTEGER NOT NULL DEFAULT 0`,
+  `ALTER TABLE alertas ADD COLUMN IF NOT EXISTS "ultimoEnvio" TIMESTAMPTZ`,
+  // Las emitidas antes de los cortes ya salieron una vez
+  `UPDATE alertas SET "vecesEnviada" = 1, "ultimoEnvio" = "fechaEmision" WHERE estado = 'EMITIDA' AND "vecesEnviada" = 0`
 ]
 
 // Una tabla que aún no existe se salta: sync() la acaba de crear completa con el modelo
 export const aplicarAjustesEsquema = async () => {
   for (const sql of AJUSTES) {
-    const tabla = /ALTER TABLE (\w+)/.exec(sql)?.[1]
+    const tabla = /(?:ALTER TABLE|UPDATE) (\w+)/.exec(sql)?.[1]
     const [[existe]] = await db.query(`SELECT to_regclass('public.${tabla}') IS NOT NULL AS existe`) as [{ existe: boolean }[], unknown]
     if (existe?.existe) await db.query(sql)
   }

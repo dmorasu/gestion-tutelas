@@ -4,6 +4,7 @@ import { obtener } from "@/src/lib/api"
 import { obtenerSesion } from "@/src/auth/dal"
 import { tieneRol } from "@/src/auth/permisos"
 import { ESTADOS_ACTUACION, ETAPAS } from "@/src/lib/formato"
+import { TarjetasProductividad, type Productividad } from "@/components/ui/Productividad"
 
 type Carga = { abiertas: number, criticas: number, vencidas: number, entregadasSemana: number }
 type Tablero = {
@@ -24,7 +25,16 @@ const ESTADOS = Object.keys(ESTADOS_ACTUACION).filter(e => e !== "CERRADA")
 
 export default async function SeguimientoPage() {
   const sesion = await obtenerSesion()
-  const t = await obtener<Tablero>("/seguimiento/tablero")
+  const [t, { productividad }] = await Promise.all([
+    obtener<Tablero>("/seguimiento/tablero"),
+    obtener<{ productividad: Productividad | null }>("/seguimiento/productividad")
+  ])
+  // Cada uno ve su productividad según sus perfiles (el administrador no produce escritos)
+  const perfiles = {
+    auxiliar: sesion.roles.includes("AUXILIAR"),
+    revisor: sesion.roles.includes("REVISOR"),
+    asistente: sesion.roles.includes("ASISTENTE") || sesion.roles.includes("COORDINADOR")
+  }
   const veTodo = tieneRol(sesion.roles, ["COORDINADOR", "ASISTENTE"])
   const esRevisor = tieneRol(sesion.roles, ["REVISOR"])
   const alcance = veTodo ? "Toda la operación" : esRevisor ? "Su equipo y lo que revisa" : "Sus casos"
@@ -68,6 +78,8 @@ export default async function SeguimientoPage() {
           </Link>
         ))}
       </section>
+
+      <TarjetasProductividad p={productividad} perfiles={perfiles} />
 
       {/* ETAPA × ESTADO */}
       <section className="tarjeta p-5">

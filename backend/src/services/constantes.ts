@@ -110,7 +110,8 @@ export const PLANTILLAS = {
   ACUSE_INSUMOS: { buzon: 'INSUMOS', nombre: 'Confirmación de recibido de insumos', titulo: 'Insumos recibidos' },
   ENTREGA_V1: { buzon: 'ENTREGAS', nombre: 'Entrega V1 del escrito y anexos', titulo: 'Entrega del proyecto de escrito' },
   ENTREGA_V2: { buzon: 'ENTREGAS', nombre: 'Entrega V2 después de una devolución', titulo: 'Entrega del escrito ajustado' },
-  ALERTA: { buzon: 'ASIGNACIONES', nombre: 'Alerta al cliente', titulo: '{{tipoAlerta}}' }
+  ALERTA: { buzon: 'ASIGNACIONES', nombre: 'Alerta al cliente', titulo: '{{tipoAlerta}}' },
+  ALERTAS_CORTE: { buzon: 'ASIGNACIONES', nombre: 'Alertas del corte (dos veces al día)', titulo: 'Alertas del corte' }
 } as const satisfies Record<string, { buzon: Buzon, nombre: string, titulo: string }>
 export type CodigoPlantilla = keyof typeof PLANTILLAS
 

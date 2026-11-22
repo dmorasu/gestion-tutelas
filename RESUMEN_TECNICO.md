@@ -1,10 +1,10 @@
 # Nodex Tutelas: resumen técnico para continuar
 
-_Actualizado: 2026-11-19 · rama `desarrollo`_
+_Actualizado: 2026-11-22 · rama `desarrollo`_
 
 App para recibir, repartir, trabajar, entregar y medir las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
 
-La app está completa en funciones (bloques 1 a 3, bandeja de trabajo, respuestas D1–D30: fallos, tablero para Power BI, descuentos, asistencia y PQRS) y probada con envío de correo **simulado** y almacenamiento **local**. Falta conectarla a Microsoft 365 y montar el servidor de producción (guía lista).
+La app está completa en funciones (bloques 1 a 3, bandeja de trabajo, respuestas D1–D30: fallos, tablero para Power BI, descuentos, asistencia y PQRS) y conectada a Microsoft 365 (lectura de buzones y SharePoint probadas; el envío sigue **simulado**). Falta activar el envío real y la lectura automática, y montar el servidor de producción (guía lista).
 
 Documentos:
 - `Docs/PLAN.md`: qué cambió con la información del cliente, flujo por buzón, bloques, respuestas a D1–D30 y lo que sigue abierto (§5), decisiones (SharePoint, no SendGrid) y el límite de 50 GB de los buzones.
@@ -25,8 +25,8 @@ Independiente de Nodex (repositorio, backend, base y servidor propios), con el m
 | Frontend | `frontend/` | 3100 | Next 16.4 (Turbopack) + React 19 + Tailwind 3 + headlessui + lucide |
 | Base | Postgres de Nodex (10.0.4.4), base **`gpa_legal`** | 5432 | Usuario de desarrollo de Nodex por ahora |
 | Redis | el de cada equipo, `REDIS_DB=5` (Nodex usa 0) | 6379 | Solo el worker y el botón "Leer buzón ahora" |
-| Correo | Microsoft Graph sobre **tres buzones**: asignaciones, insumos y entregas | — | **Sin configurar**: los correos de salida quedan "simulados" |
-| Documentos | **SharePoint** (sitio de los expedientes, Graph con `Sites.Selected`) | — | **Sin configurar**: en desarrollo van a `backend/almacen-local` (en `.gitignore`) |
+| Correo | Microsoft Graph sobre **tres buzones**: asignaciones, insumos y entregas | — | **Configurado** (app de Entra y los tres buzones en el `.env`; lectura probada el 2026-11-18). Salida aún **simulada** (`CORREO_ENVIO_ACTIVO=false`) y lectura automática apagada (`BUZON_ACTIVO=false`) |
+| Documentos | **SharePoint** (sitio `tutelasdmc`, Graph con `Sites.Selected`) | — | **Configurado** y probado (subida de archivos desde el 2026-11-18). `backend/almacen-local` (en `.gitignore`) queda solo para equipos sin 365 |
 
 Los puertos no chocan con Nodex (4000, 3000-3002).
 
@@ -50,7 +50,7 @@ Convenciones heredadas de Nodex:
 - `catalogos.ts`: Juzgado, MotivoDevolucion, DiaNoHabil (con `medioDia`), Parametro, RadicadoOtroOperador (archivo maestro, judicial o PQRS), SincronizacionBuzon (delta y tamaño de cada buzón), PlantillaCorreo, **ItemCatalogo** (catálogos editables: `DERECHO`, `TIPO_RESPUESTA` e `INSUMO`, la matriz de insumos por grupo y clase documento/información; `supuesto` hasta que la firma lo confirme; `codigo` para los ítems con regla, como `EMERGENCIA`). La semilla (`seeds/catalogosBase.ts`) carga cada catálogo solo si está vacío.
 - `casos.ts`: Caso (radicado judicial o de PQRS, `numeroInterno` GPA-AAAA-NNNNN, `porDerechoPeticion` y `casoRelacionadoId` de la PQRS ligada, `fechaFacturacion` = primera asignación del radicado, `radicadosAlternos` y `numerosInternosAlternos` de los casos que se le unieron), **CasoRelacion** (pareja de casos: `MISMO_PROCESO`, `TEMERIDAD` o `ANTECEDENTE`; sugerida, confirmada o descartada), Parte, Actuacion (etapa, estado, criticidad, vencimiento informado o calculado, fecha límite ANS, auxiliar, revisor, equipo, datos faltantes pendientes, tipo de petición), SolicitudInsumo (con `fechaLimite` del cliente), Escrito (versiones V1, V2…, estado, enlace, `limiteAns` al entregar), Devolucion (tipo, plazo de corrección, extemporánea), RadicacionJuzgado, Decision (sentido, favorable, término de impugnación, cumplimiento pendiente o ligado, sanción atribuible).
 - `correos.ts`: Correo (buzón, lo leído del asunto, enlaces, `porRevisar`, `responsableId`, aviso sin atender), **EnlaceCorreo** (enlaces de SharePoint como pendientes), Archivo (SharePoint o local: `ruta`, `itemId`, `webUrl`, `adjuntoGraphId`), HistorialCaso (bitácora automática por hooks), **NotaCaso** (notas de las personas: autor, etapa opcional, texto; no se editan ni se borran).
-- `seguimiento.ts`: Alerta (tipo, detección, plazo y emisión), Informe (semanal o mensual, con su Excel y resumen), AnsPeriodo (foto mensual del ANS con nivel y descuento) y Asistencia (por persona y día).
+- `seguimiento.ts`: CorteAlertas (va antes de Alerta), Alerta (tipo, detección, plazo, emisión, corte y reenvíos), TramoActuacion (fase, perfil, responsable, inicio, fin, horas y horas hábiles), Informe (semanal o mensual, con su Excel y resumen), AnsPeriodo (foto mensual del ANS con nivel y descuento) y Asistencia (por persona y día).
 
 ## Backend (`backend/src`)
 
@@ -71,7 +71,7 @@ Convenciones heredadas de Nodex:
 | `permisosActuacion.ts` | Quién puede cada paso y `alcanceActuaciones` (qué ve cada perfil) |
 | `historialCasos.ts`, `lineaTiempo.ts` | Bitácora por hooks y la línea de tiempo del caso (bitácora, correos, documentos y alertas) |
 | `indicadores.ts` | ANS por periodo con reglas y exclusiones del manual, y tablero diario |
-| `alertas.ts` | Detección (términos, desacato, insumos vencidos, duplicidad) y emisión al cliente |
+| `alertas.ts` | Detección (términos, desacato, insumos vencidos, duplicidad); **cortes** (`HORAS_CORTE_ALERTAS`, supuesto 10:00 y 14:30 de días hábiles; en medio día se adelantan a media hora antes del cierre): un solo correo `ALERTAS_CORTE` con todas las pendientes agrupadas por tipo, registrado en `CorteAlertas` (uno automático por día y hora; con error, las alertas siguen pendientes); envío suelto, reenvío de una alerta o de un corte (`vecesEnviada`, `ultimoEnvio`; `fechaEmision` es la primera y es la que mide ANS-08) |
 | `informes.ts` | Excel semanal y mensual (con relación para la factura) |
 | `archivoMaestro.ts` | Radicados judiciales o PQRS de otro operador o equipo (D26), marca de casos y ANS-13 |
 | `fallos.ts` | Fallo: favorable según D13, término de impugnación (D5), cumplimiento pendiente (D12) y abrirlo a mano |
@@ -82,7 +82,8 @@ Convenciones heredadas de Nodex:
 | `relacionesCasos.ts` | Casos que pueden ser el mismo: sugerencias (raíz de 21 dígitos del radicado, mismo documento del accionante, radicado casi igual con el mismo despacho, mismo nombre sin documento), confirmar o descartar con bitácora en los dos casos, relacionar a mano, **unir casos** (coordinador) y `dondeRadicado`/`dondeNumeroInterno`, que buscan también los alternos |
 | `facturacion.ts` | Relación para la factura: cada radicado una vez, en el mes de su `fechaFacturacion`; el mismo proceso confirmado se factura con el que llegó primero; temeridad y antecedentes se facturan cada uno |
 | `documentosWord.ts` | Word con el formato de la firma: llena las plantillas de `backend/recursos/plantillas` (marcadores `{clave}`). **Ficha técnica** (casillas, filas nuevas de tipo de respuesta y resumen de los hechos), que se genera sola al entregar y a pedido (`POST /casos/actuaciones/:id/ficha`); **solicitud del expediente al despacho** (modelo 1.1), que va adjunta a la solicitud de datos faltantes y queda en Soportes. Las plantillas salen de los Word de `Docs/insumos` con `Docs/herramientas/plantillas-word.ts` (volver a correrlo si la firma cambia un modelo) |
-| `cierreDia.ts` | Cierre del día: lo que movió cada persona (desde los cambios de estado de la bitácora), respondidas frente a su capacidad diaria y tiempo de respuesta por caso |
+| `cierreDia.ts` | Cierre del día: lo que movió cada persona (desde los cambios de estado de la bitácora), respondidas frente a su capacidad diaria, tiempo de respuesta por caso y productividad |
+| `tiempos.ts` | **Tramos** (`TramoActuacion`): hooks de la actuación que cierran el tramo en curso y abren el siguiente en cada cambio de estado, de etapa o de responsable, más el tramo de registro del asistente (de la llegada al registro). Horas corridas y **hábiles** (jornada `HORA_INICIO_JORNADA`–`HORA_FIN_JORNADA` de días hábiles). Ciclos de producción (suma del trabajo del auxiliar hasta cada envío a revisión: el primero es elaboración, los demás corrección). `productividadDelDia` (elaborados, corregidos, revisados, devueltos, registrados y sus promedios) y `tiemposDelPeriodo` (por paso, por etapa y tipo de respuesta, y por persona). `reconstruirTramos` arma desde la bitácora los de lo que ya existía, solo con la tabla vacía (responsables de hoy: aproximación) |
 
 **Correo y buzones** (`services/buzon/`):
 
@@ -113,6 +114,7 @@ Al asociar un correo por radicado, primero se busca el del asunto y después los
 **Tareas programadas** (worker, una sola cola, concurrencia 1):
 - Cada `BUZON_INTERVALO_SEGUNDOS` (120): leer los buzones y, después, avisar las asignaciones sin atender.
 - Cada 30 minutos: detectar alertas.
+- Cada minuto: si ya pasó la hora de un corte de hoy sin enviar, enviarlo (`revisarCortes`; solo el último vencido, así un reinicio no lo pierde ni lo repite). Apagado con `ENVIO_AUTOMATICO_ALERTAS`.
 - 2:00 a. m. (Bogotá): limpiar adjuntos de los buzones.
 
 **Scripts** (`npm run …`): `crear-admin -- correo "Nombre"`, `correo-prueba [-- ETAPA RADICADO HORAS]`, `leer-buzon`, `limpiar-buzon`.
@@ -131,7 +133,7 @@ Al asociar un correo por radicado, primero se busca el del asunto y después los
 
 - Diseño de Nodex Gastos (login partido, encabezado con menús agrupados, inicio con tarjetas) y del detalle de trámites de Nodex (pestañas, `components/ui/Seccion` y `Dato`, historial en línea de tiempo).
 - **Color grafito (slate).** Ámbar solo para advertencias ("Supuesto", pendientes, "Sin asignar", semáforo próximo).
-- Menú: Inicio · Correos · Casos · **Seguimiento** (Tablero, Tablero diario, Cierre del día, Indicadores ANS, Alertas, Informes, Asistencia) · **Configuración** (Equipos, Catálogos, Plantillas de correo, Archivo maestro, Parámetros, Usuarios).
+- Menú: Inicio · Correos · Casos · **Seguimiento** (Tablero, Tablero diario, Cierre del día, Tiempos, Indicadores ANS, Alertas, Informes, Asistencia) · **Configuración** (Equipos, Catálogos, Plantillas de correo, Archivo maestro, Parámetros, Usuarios).
 - Semáforo: rojo con `SEMAFORO_HORAS_ROJO` horas **o menos** (8, reunión 18-nov), igual en `plazos.semaforo`, el filtro del listado y la vista del tablero.
 - Prioridad: casos por fecha límite; la bandeja de correos pendientes pone primero lo crítico o lo que vence dentro del rojo, luego por vencimiento y antigüedad.
 - Búsqueda de casos: radicado, número interno, nombre del accionante con las palabras en cualquier orden y documento parcial o con puntos.
@@ -146,9 +148,11 @@ Pantallas:
 | `casos` | Listado compacto (semáforo, caso y accionante, etapa y estado, criticidad, límite, responsables) con acciones rápidas por fila: ver, editar (modal) y eliminar |
 | `casos/nuevo` | Un caso a mano (formulario por pasos con resumen), varios casos (Excel o radicados de un correo) o una PQRS (con el ámbito activo) |
 | `casos/[id]` | Pestañas Actuación (`PanelTrabajo`, con la ruta de pasos `componentes/RutaActuacion`: hecho, en curso, pendiente ahora con responsable y plazo, y el último envío con sus documentos), Información (con la PQRS ligada), Documentos, Correos, **Bitácora** (notas de las personas y movimientos en una línea de tiempo; la URL sigue siendo `?tab=historial`) y columna de plazos y responsables |
-| `cierre-dia` | Cierre del día (`GET /seguimiento/cierre-dia?dia=`): por persona y por caso, con selector de día |
+| `cierre-dia` | Cierre del día (`GET /seguimiento/cierre-dia?dia=`): por persona, productividad por persona y por caso, con selector de día |
+| `tiempos` | Tiempos (`GET /seguimiento/tiempos?desde=&hasta=`): promedio y mediana en horas hábiles por paso, por etapa y tipo de respuesta, y por persona |
+| `alertas` | Por emitir, emitidas (con su corte y reenvíos), descartadas y **Cortes** (enviados, simulados o con error; reenviar). Próximo corte, "Enviar corte ahora" y aviso si falta `CORREOS_ALERTAS`. Envían y reenvían el coordinador y los asistentes |
 | `tablero` | Tablero de la operación (mismas vistas que Power BI); descuentos internos |
-| `seguimiento`, `indicadores`, `alertas`, `informes`, `asistencia` | Tablero diario por perfil, ANS por periodo, alertas por emitir, informes en Excel, asistencia del equipo |
+| `seguimiento`, `indicadores`, `informes`, `asistencia` | Tablero diario por perfil (con "Mi productividad de hoy", `GET /seguimiento/productividad`), ANS por periodo, informes en Excel, asistencia del equipo |
 | `catalogos` | Derechos, tipos de respuesta y matriz de insumos: agregar, renombrar, confirmar el supuesto y apagar |
 | `equipos`, `plantillas`, `archivo-maestro`, `parametros`, `usuarios` | Configuración. Usuarios y equipos con el diseño de Nodex: perfiles en columnas, avatar de iniciales, interruptores, menú "⋯" y modales para crear |
 
@@ -177,7 +181,9 @@ Pantallas:
 
 **Probado** con datos temporales (borrados después): flujo completo del escrito de V1 a cierre, cargue de 30 casos en Excel, 3 radicados de un correo, respuestas identificadas por hilo, número interno o radicado, alertas, ANS, informes, archivo maestro, bandeja (tomar, trasladar, enlaces, aviso). Pantallas revisadas con capturas de Chrome sin ventana y permisos por perfil.
 
-**Sin probar** (necesitan 365): lectura y envío reales por Graph, SharePoint (subir, mover, compartir, descargar enlaces del cliente), medición y limpieza de los buzones, y el worker con Redis.
+**Probado con 365** (2026-11-18): lectura delta de los tres buzones (2 correos reales en asignaciones), medición del tamaño de los buzones y subida de archivos a SharePoint.
+
+**Sin probar con 365:** envío real (todos los correos de salida quedaron "Simulados"), respuestas leídas de los buzones de insumos y entregas, compartir la entrega por enlace con vencimiento, descarga de enlaces del cliente, limpieza de adjuntos a los 30 días y el worker con Redis.
 
 **En la base `gpa_legal`:**
 - Usuarios: el administrador (Diego Mora) y Stefany Charria, que todavía no tiene perfiles.
@@ -192,7 +198,7 @@ Pantallas:
 
 ## Pendientes
 
-**Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fases 1 a 5 hechas, y el detalle del caso rediseñado (Actuación con encabezado de indicadores y tarjetas; Información con hechos y derechos primero). **Pendientes:** fase 6 (alertas al cliente en dos cortes al día; en pausa por decisión del usuario el 2026-11-19), fase 7 (tiempos por tramo y productividad diaria) y las plantillas de emergencia y falta de legitimación. Fase 5: etapa excepcional `NULIDAD` (registro manual, Excel o asunto `[NULIDAD]`); ningún equipo la atiende, así que el reparto la da a cualquier auxiliar con cupo; ese auxiliar la clasifica (`POST /casos/actuaciones/:id/clasificar-nulidad`) en una de las cinco etapas (`ETAPAS_PROCESO`), la actuación pasa a esa etapa con `origenNulidad`, se reparte al equipo de la etapa, se recalculan plazos, sus documentos van a la carpeta de la etapa y queda en la bitácora con la nota. No se puede clasificar en una etapa que ya está abierta en el caso ni empezar el escrito antes de clasificar. Fase 4: Fase 4: ficha técnica y solicitud del expediente en Word (`documentosWord.ts`); datos de la entidad y del apoderado en parámetros (`ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `APODERADO_*`), que hay que llenar. Faltan los modelos de emergencia y falta de legitimación. Fase 3: Fase 3: correos con los modelos; datos faltantes con casillas de la lista general de la matriz (`Actuacion.datosSolicitados`, el ANS corre cuando llega todo lo pedido); insumos de la matriz por grupo (`SolicitudInsumo.itemCatalogoId` y `clase`), que exigen el resumen de los hechos y los derechos del caso (`Caso.resumenHechos`, `Caso.derechosIds`, `PATCH /casos/:id/ficha`); confirmaciones que listan lo que llegó; entrega con documentos entregados y anexos (`Escrito.documentosEntregados` y `anexosEntregados`); tipo de respuesta por actuación (`Actuacion.tipoRespuestaId`); el escrito de emergencia no se empieza ni va a revisión sin insumos pedidos; la observación del revisor se lee en la bitácora; `ENTIDAD_NOMBRE` en parámetros. Antes, fases 1 y 2 (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad; radicado de otra instancia al registrar, casos relacionados con aviso al auxiliar, unir casos, facturación por radicado). La temeridad la propone hoy la app como antecedente: cuando los derechos sean catálogo (fase 4) se sugerirá sola si coinciden. Siguen: 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
+**Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fases 1 a 7 hechas, y el detalle del caso rediseñado (Actuación con encabezado de indicadores y tarjetas; Información con hechos y derechos primero). **Pendientes:** las plantillas de emergencia y falta de legitimación (los modelos los manda la firma), llenar `CORREOS_ALERTAS` y confirmar con la firma las horas de corte (`HORAS_CORTE_ALERTAS`) y el fin de la jornada (`HORA_FIN_JORNADA`, supuesto 17:00). Fase 6 (2026-11-22): alertas al cliente en dos cortes al día; ver `alertas.ts`. Fase 7 (2026-11-22): tramos, tiempos por paso y productividad diaria; ver `tiempos.ts`. Al arrancar se reconstruyeron 94 tramos desde la bitácora. Fase 5: etapa excepcional `NULIDAD` (registro manual, Excel o asunto `[NULIDAD]`); ningún equipo la atiende, así que el reparto la da a cualquier auxiliar con cupo; ese auxiliar la clasifica (`POST /casos/actuaciones/:id/clasificar-nulidad`) en una de las cinco etapas (`ETAPAS_PROCESO`), la actuación pasa a esa etapa con `origenNulidad`, se reparte al equipo de la etapa, se recalculan plazos, sus documentos van a la carpeta de la etapa y queda en la bitácora con la nota. No se puede clasificar en una etapa que ya está abierta en el caso ni empezar el escrito antes de clasificar. Fase 4: Fase 4: ficha técnica y solicitud del expediente en Word (`documentosWord.ts`); datos de la entidad y del apoderado en parámetros (`ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `APODERADO_*`), que hay que llenar. Faltan los modelos de emergencia y falta de legitimación. Fase 3: Fase 3: correos con los modelos; datos faltantes con casillas de la lista general de la matriz (`Actuacion.datosSolicitados`, el ANS corre cuando llega todo lo pedido); insumos de la matriz por grupo (`SolicitudInsumo.itemCatalogoId` y `clase`), que exigen el resumen de los hechos y los derechos del caso (`Caso.resumenHechos`, `Caso.derechosIds`, `PATCH /casos/:id/ficha`); confirmaciones que listan lo que llegó; entrega con documentos entregados y anexos (`Escrito.documentosEntregados` y `anexosEntregados`); tipo de respuesta por actuación (`Actuacion.tipoRespuestaId`); el escrito de emergencia no se empieza ni va a revisión sin insumos pedidos; la observación del revisor se lee en la bitácora; `ENTIDAD_NOMBRE` en parámetros. Antes, fases 1 y 2 (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad; radicado de otra instancia al registrar, casos relacionados con aviso al auxiliar, unir casos, facturación por radicado). La temeridad la propone hoy la app como antecedente: cuando los derechos sean catálogo (fase 4) se sugerirá sola si coinciden. Siguen: 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
 
 **Para mañana (con el usuario):**
 - Crear los usuarios reales con perfiles y equipos. Por eso aún no se puede asignar: no hay auxiliares ni revisores.
@@ -203,11 +209,12 @@ Pantallas:
 
 **Lo demás:**
 
-1. **Microsoft 365** (`Docs/CONFIGURAR_BUZON_M365.md`):
-   - Tres buzones: `asignacionsdmc@`, `insumosdmc@` y `entregasdmc@`.
-   - App de Entra y política de acceso.
-   - Sitio de SharePoint.
-   - Después: `npm run leer-buzon`, una entrega de prueba y la descarga de un enlace del cliente.
+1. **Microsoft 365** (`Docs/CONFIGURAR_BUZON_M365.md`). Ya están los tres buzones, la app de Entra y el sitio `tutelasdmc`. Falta:
+   - Confirmar la política de acceso (paso 3): `Test-ApplicationAccessPolicy` debe dar *Denied* en un buzón ajeno.
+   - Aprobar las plantillas y activar el envío real (`CORREO_ENVIO_ACTIVO=true`): la confirmación debe llegar a un Gmail en el mismo hilo.
+   - Lectura automática: `BUZON_ACTIVO=true`, Redis y `npm run worker`.
+   - Probar una respuesta por insumos y otra por entregas, compartir una entrega con el cliente (uso compartido externo limitado a sus dominios) y descargar un enlace suyo.
+   - Anotar en el calendario el vencimiento del secreto de Entra.
 2. **Servidor de producción** (`Docs/PRODUCCION.md`):
    - Usuario propio de base y `tablero_lectura` para Power BI.
    - PM2, Nginx y HTTPS.

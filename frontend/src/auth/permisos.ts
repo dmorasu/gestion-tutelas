@@ -23,6 +23,7 @@ export const MODULOS: Modulo[] = [
   { href: "/seguimiento", nombre: "Tablero diario", descripcion: "Estado de los casos por etapa y por persona", roles: [] },
   { href: "/cierre-dia", nombre: "Cierre del día", descripcion: "Lo que respondió cada persona y en qué casos", roles: [] },
   { href: "/tablero", nombre: "Tablero de la operación", descripcion: "Lo mismo que ve el cliente en Power BI", roles: ["COORDINADOR", "REVISOR", "ASISTENTE", "CONSULTA"] },
+  { href: "/tiempos", nombre: "Tiempos", descripcion: "Cuánto toma cada paso por etapa, tipo de respuesta y persona", roles: ["COORDINADOR", "REVISOR", "ASISTENTE"] },
   { href: "/indicadores", nombre: "Indicadores ANS", descripcion: "Cumplimiento de los acuerdos de servicio", roles: ["COORDINADOR", "REVISOR", "ASISTENTE"] },
   { href: "/alertas", nombre: "Alertas", descripcion: "Términos, desacatos, insumos y duplicidad", roles: ["COORDINADOR", "REVISOR", "ASISTENTE"] },
   { href: "/informes", nombre: "Informes", descripcion: "Semanal y mensual en Excel", roles: ["COORDINADOR", "REVISOR", "ASISTENTE"] },

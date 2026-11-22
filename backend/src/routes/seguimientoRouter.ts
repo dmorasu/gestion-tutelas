@@ -2,13 +2,15 @@ import { Router } from 'express'
 import multer from 'multer'
 import { body, param, query } from 'express-validator'
 import { Op } from 'sequelize'
-import { Alerta, Caso, Informe, RadicadoOtroOperador, Usuario, Archivo } from '../models'
+import { Alerta, Caso, CorteAlertas, Informe, RadicadoOtroOperador, Usuario, Archivo } from '../models'
 import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { alcanceActuaciones } from '../services/permisosActuacion'
 import { tableroDiario, calcularAns } from '../services/indicadores'
 import { cierreDelDia } from '../services/cierreDia'
-import { detectarAlertas, emitirAlerta, descartarAlerta, NOMBRES_ALERTA } from '../services/alertas'
+import { productividadDelDia, tiemposDelPeriodo } from '../services/tiempos'
+import { detectarAlertas, emitirAlerta, descartarAlerta, reenviarAlerta, enviarCorte, reenviarCorte, proximoCorte, NOMBRES_ALERTA } from '../services/alertas'
+import { parametro } from '../services/parametros'
 import { generarInforme, periodoAnterior } from '../services/informes'
 import { cargarArchivoMaestro } from '../services/archivoMaestro'
 import { asistenciaDelDia, guardarAsistencia } from '../services/asistencia'
@@ -19,6 +21,8 @@ import { responderError, ErrorNegocio } from '../utils/errores'
 const router = Router()
 const coordinan = requiereRol(ROLES.COORDINADOR)
 const supervisan = requiereRol(ROLES.COORDINADOR, ROLES.REVISOR, ROLES.ASISTENTE)
+// Reunión 18-nov: los asistentes revisan los cortes y envían o reenvían las alertas que lo ameriten
+const emiten = requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE)
 const carga = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024, files: 1 } })
 
 // Tablero diario: cada perfil ve lo suyo (el auxiliar sus casos; el revisor su equipo; el resto todo)
@@ -34,6 +38,29 @@ router.get('/tablero', async (req, res) => {
 router.get('/cierre-dia', query('dia').optional().isISO8601(), manejarErroresEntrada, async (req, res) => {
   try {
     res.json(await cierreDelDia(alcanceActuaciones(req), req.query.dia ? String(req.query.dia).slice(0, 10) : undefined))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Productividad del día de quien consulta (su tablero): elaborados, corregidos, revisados, registros
+router.get('/productividad', query('dia').optional().isISO8601(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const dia = req.query.dia ? String(req.query.dia).slice(0, 10) : enBogota(new Date()).dia
+    const propia = (await productividadDelDia(dia, { usuarioIds: [req.usuario!.id] })).get(req.usuario!.id) ?? null
+    res.json({ dia, productividad: propia })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Tiempos de cada paso por etapa, tipo de respuesta y persona (por defecto, el mes en curso)
+router.get('/tiempos', supervisan, query('desde').optional().isISO8601(), query('hasta').optional().isISO8601(), manejarErroresEntrada, async (req, res) => {
+  try {
+    const hoy = enBogota(new Date()).dia
+    const desde = String(req.query.desde ?? `${hoy.slice(0, 8)}01`).slice(0, 10)
+    const hasta = String(req.query.hasta ?? hoy).slice(0, 10)
+    res.json(await tiemposDelPeriodo(desde, hasta))
   } catch (error) {
     responderError(res, error)
   }
@@ -57,7 +84,7 @@ router.get('/alertas', supervisan, async (req, res) => {
     const estado = String(req.query.estado || 'PENDIENTE')
     const alertas = await Alerta.findAll({
       where: estado === 'TODAS' ? {} : { estado },
-      include: [{ model: Caso, attributes: ['id', 'numeroInterno', 'radicado'] }, { model: Usuario, attributes: ['nombre'] }],
+      include: [{ model: Caso, attributes: ['id', 'numeroInterno', 'radicado'] }, { model: Usuario, attributes: ['nombre'] }, { model: CorteAlertas, attributes: ['id', 'dia', 'hora', 'automatico'] }],
       order: [['fechaDeteccion', estado === 'PENDIENTE' ? 'ASC' : 'DESC']],
       limit: 300
     })
@@ -75,8 +102,7 @@ router.post('/alertas/detectar', supervisan, async (_req, res) => {
   }
 })
 
-// Comunicar las alertas al cliente es del coordinador (roles del cliente)
-router.post('/alertas/:id/emitir', coordinan, param('id').isInt(), manejarErroresEntrada, async (req, res) => {
+router.post('/alertas/:id/emitir', emiten, param('id').isInt(), manejarErroresEntrada, async (req, res) => {
   try {
     res.json(await emitirAlerta({ alertaId: Number(req.params.id), usuarioId: req.usuario!.id, nota: req.body.nota }))
   } catch (error) {
@@ -84,7 +110,48 @@ router.post('/alertas/:id/emitir', coordinan, param('id').isInt(), manejarErrore
   }
 })
 
-router.post('/alertas/:id/descartar', coordinan, param('id').isInt(), body('motivo').isString(), manejarErroresEntrada, async (req, res) => {
+router.post('/alertas/:id/reenviar', emiten, param('id').isInt(), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await reenviarAlerta({ alertaId: Number(req.params.id), usuarioId: req.usuario!.id, nota: req.body.nota }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Cortes: los últimos enviados y cuándo sale el próximo
+router.get('/alertas/cortes', supervisan, async (_req, res) => {
+  try {
+    const cortes = await CorteAlertas.findAll({ include: [{ model: Usuario, attributes: ['nombre'] }], order: [['createdAt', 'DESC']], limit: 60 })
+    res.json({
+      cortes,
+      proximo: parametro<boolean>('ENVIO_AUTOMATICO_ALERTAS') ? proximoCorte() : null,
+      destinatarios: parametro<string[]>('CORREOS_ALERTAS').filter(Boolean)
+    })
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+// Corte a mano: sale ya con todas las pendientes (por ejemplo, si el worker no está corriendo)
+router.post('/alertas/cortes', emiten, async (req, res) => {
+  try {
+    const corte = await enviarCorte({ hora: null, usuarioId: req.usuario!.id })
+    if (corte.estado === 'ERROR') throw new ErrorNegocio(`No se pudo enviar el corte: ${corte.error}`)
+    res.json(corte)
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+router.post('/alertas/cortes/:id/reenviar', emiten, param('id').isInt(), manejarErroresEntrada, async (req, res) => {
+  try {
+    res.json(await reenviarCorte({ corteId: Number(req.params.id), usuarioId: req.usuario!.id }))
+  } catch (error) {
+    responderError(res, error)
+  }
+})
+
+router.post('/alertas/:id/descartar', emiten, param('id').isInt(), body('motivo').isString(), manejarErroresEntrada, async (req, res) => {
   try {
     await descartarAlerta({ alertaId: Number(req.params.id), motivo: req.body.motivo, usuarioId: req.usuario!.id })
     res.json({ ok: true })

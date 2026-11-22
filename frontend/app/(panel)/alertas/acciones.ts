@@ -13,3 +13,6 @@ const enviar = async (ruta: string, cuerpo: Record<string, unknown> = {}): Promi
 export const detectarAlertas = async () => enviar("/seguimiento/alertas/detectar")
 export const emitirAlerta = async (id: number, nota: string) => enviar(`/seguimiento/alertas/${id}/emitir`, { nota })
 export const descartarAlerta = async (id: number, motivo: string) => enviar(`/seguimiento/alertas/${id}/descartar`, { motivo })
+export const reenviarAlerta = async (id: number, nota: string) => enviar(`/seguimiento/alertas/${id}/reenviar`, { nota })
+export const enviarCorteAhora = async () => enviar("/seguimiento/alertas/cortes")
+export const reenviarCorte = async (id: number) => enviar(`/seguimiento/alertas/cortes/${id}/reenviar`)

@@ -59,6 +59,10 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
     asunto: `${ASUNTO_BASE} - ALERTA: {{tipoAlerta}}`,
     cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL informa la siguiente alerta sobre la actuación constitucional de la referencia:\n\n{{ficha}}\n\n{{detalle}}\n\nQuedamos atentos.\n\n${FIRMA}`
   },
+  ALERTAS_CORTE: {
+    asunto: '{{prefijoAsunto}}{{cantidad}} ALERTAS - CORTE {{fechaCorte}}',
+    cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL informa las alertas generadas en el corte del {{fechaCorte}} sobre las actuaciones constitucionales a cargo:\n\n{{detalle}}\n\nQuedamos atentos.\n\n${FIRMA}`
+  },
   ENTREGA_V2: {
     asunto: `${ASUNTO_BASE} - ENTREGA V{{version}}`,
     cuerpo: `Cordial saludo.\n\nPor medio del presente correo, GPA LEGAL hace entrega del escrito ajustado, de acuerdo con su devolución, para atender la actuación constitucional de la referencia, conforme a la siguiente información extraída de la ficha técnica:\n\n{{ficha}}\n\nDocumentos entregados:\n\n{{documentos}}\n\nAnexos:\n\n{{anexos}}\n\nEn la carpeta del enlace se encuentra el escrito correspondiente junto con la ficha técnica, los anexos y soportes que resultan aplicables, para su validación y posterior radicación ante el Despacho judicial.\n\nAgradecemos confirmar la recepción de la presente documentación.\n\n${FIRMA}`
@@ -68,7 +72,7 @@ export const PLANTILLAS_BASE: Record<CodigoPlantilla, { asunto: string, cuerpo: 
 export const MARCADORES = [
   'prefijo', 'prefijoAsunto', 'criticidad', 'estado', 'radicado', 'radicadoFormato', 'numeroInterno', 'accionante', 'despacho', 'actuacion', 'etapa', 'tipoAccion',
   'vence', 'tiempoRestante', 'venceInsumos', 'fechaAsignacion', 'entidad', 'derechos', 'hechos', 'auxiliar', 'revisor', 'enlace', 'detalle', 'documentos', 'anexos',
-  'version', 'fechaEntrega', 'cantidad', 'tipoAlerta', 'notaExpediente', 'ficha'
+  'version', 'fechaEntrega', 'cantidad', 'tipoAlerta', 'fechaCorte', 'notaExpediente', 'ficha'
 ] as const
 
 // Inserta las que falten y pasa al texto vigente las que siguen siendo el borrador de la firma: las que
@@ -163,6 +167,9 @@ const nombreEntidad = () => (parametro<string>('ENTIDAD_NOMBRE') ?? '').trim() |
 // Frase del modelo de datos faltantes cuando va el borrador de solicitud del expediente (modelo 1.1)
 export const NOTA_EXPEDIENTE = 'Adjunto se remite borrador de solicitud del expediente digital para presentar ante el Despacho, con su respectivo poder, en caso de requerirlo.'
 
+// Plantillas que no son de un caso: no llevan el bloque de datos del caso
+export const SIN_FICHA = new Set<CodigoPlantilla>(['ACUSE_PAQUETE', 'ALERTAS_CORTE'])
+
 // Lista de ítems para el cuerpo ("- …", que el HTML vuelve viñetas)
 export const listaCorreo = (items: string[], vacio = 'Ninguno.') => (items.length ? items.map(x => `- ${x}`).join('\n') : vacio)
 
@@ -174,12 +181,14 @@ const ejemplo = (codigo: CodigoPlantilla): Record<string, string> => ({
   vence: '20/11/2026 17:00', tiempoRestante: '2 días', venceInsumos: '19/11/2026 15:00', fechaAsignacion: '17/11/2026 09:12', entidad: nombreEntidad(),
   derechos: 'petición', hechos: 'al parecer fue radicada una petición el 24 de septiembre de 2026, de la que el accionante manifiesta no haber recibido respuesta.',
   notaExpediente: NOTA_EXPEDIENTE,
-  auxiliar: 'Laura Gómez', revisor: 'Andrés Rojas', version: codigo === 'ENTREGA_V2' ? '2' : '1', fechaEntrega: '19/11/2026 11:40', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER',
+  auxiliar: 'Laura Gómez', revisor: 'Andrés Rojas', version: codigo === 'ENTREGA_V2' ? '2' : '1', fechaEntrega: '19/11/2026 11:40', cantidad: '3', tipoAlerta: 'TÉRMINO PRÓXIMO A VENCER', fechaCorte: '19/11/2026 14:30',
   documentos: listaCorreo(['Ficha técnica del caso', 'Contestación de acción de tutela']), anexos: listaCorreo(['Comparendo', 'Constancia de notificación por aviso']),
   // Solo las entregas llevan enlace (y con él, el botón)
   enlace: codigo.startsWith('ENTREGA') ? 'https://ejemplo.sharepoint.com/sites/Tutelas/Casos/GPA-2026-00123' : '',
   detalle: codigo === 'ALERTA'
     ? 'El término de la contestación vence el 20/11/2026 17:00 y el escrito aún no se ha entregado.'
+    : codigo === 'ALERTAS_CORTE'
+    ? 'Término vencido sin entrega (1)\n\n- RAD. 76001-31-03-001-2026-00123-00 · GPA-2026-00123 · Nombre del accionante · Contestación · vence 19/11/2026 17:00: el término venció sin que se haya entregado el escrito.\n\nFalta de insumos (2)\n\n- RAD. 76001-31-03-001-2026-00124-00 · GPA-2026-00124 · Impugnación · vence 21/11/2026 17:00: no han llegado los insumos pedidos el 18/11/2026 10:00.\n- RAD. 76001-31-03-001-2026-00125-00 · GPA-2026-00125 · Contestación · vence 22/11/2026 17:00: no han llegado los insumos pedidos el 18/11/2026 11:20.'
     : codigo === 'ACUSE_PAQUETE'
     ? '- 76001-31-03-001-2026-00123-00 → GPA-2026-00123\n- 76001-31-03-001-2026-00124-00 → GPA-2026-00124\n- 76001-31-03-001-2026-00125-00 → GPA-2026-00125'
     : codigo === 'SOLICITUD_INSUMOS' || codigo === 'ACUSE_INSUMOS'
@@ -188,7 +197,7 @@ const ejemplo = (codigo: CodigoPlantilla): Record<string, string> => ({
 })
 
 export const vistaPrevia = (codigo: CodigoPlantilla, base: BasePlantilla) =>
-  renderizar(codigo, base, ejemplo(codigo), codigo !== 'ACUSE_PAQUETE', logoDataUri())
+  renderizar(codigo, base, ejemplo(codigo), !SIN_FICHA.has(codigo), logoDataUri())
 
 // Tiempo que falta para el vencimiento, como lo pide el modelo de entrega ("1 día y 3 horas")
 export const tiempoRestante = (vence: Date | null) => {
@@ -318,7 +327,7 @@ export const enviarPlantilla = async (d: DatosEnvio) => {
 // registra en ningún caso. Solo con el envío real encendido
 export const enviarPrueba = async (codigo: CodigoPlantilla, base: BasePlantilla, para: string) => {
   if (modoEnvio() !== 'REAL') throw new ErrorNegocio('El envío real está apagado (CORREO_ENVIO_ACTIVO): use la vista previa')
-  const { asunto, html } = renderizar(codigo, base, ejemplo(codigo), codigo !== 'ACUSE_PAQUETE', `cid:${CID_LOGO}`)
+  const { asunto, html } = renderizar(codigo, base, ejemplo(codigo), !SIN_FICHA.has(codigo), `cid:${CID_LOGO}`)
   const logo = logoIncrustado()
   await enviarCorreo(PLANTILLAS[codigo].buzon, { para: [para], asunto: `[PRUEBA] ${asunto}`, html, adjuntos: logo ? [logo] : [] })
 }

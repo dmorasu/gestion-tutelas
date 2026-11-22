@@ -1,10 +1,12 @@
 import Link from "next/link"
 import { obtener } from "@/src/lib/api"
 import { ETAPAS, fechaHora, radicado } from "@/src/lib/formato"
+import { horasHabiles, type Productividad } from "@/components/ui/Productividad"
 
 type Persona = {
   id: number, nombre: string, capacidadDiaria: number | null, recibidas: number, tomadas: number, insumos: number,
-  enviadasRevision: number, devueltasAuxiliar: number, entregadas: number, usoCapacidad: number | null, pendientes: number, vencidas: number
+  enviadasRevision: number, devueltasAuxiliar: number, entregadas: number, usoCapacidad: number | null, pendientes: number, vencidas: number,
+  productividad: Productividad | null
 }
 type Movimiento = {
   hora: string, nombre: string | null, estado: string, accion: string, casoId: number, numeroInterno: string | null, radicado: string,
@@ -104,6 +106,47 @@ export default async function CierreDiaPage({ searchParams }: { searchParams: Pr
           </div>
         )}
       </section>
+
+      {/* PRODUCTIVIDAD (fase 7): tiempos en horas hábiles de la jornada */}
+      {c.personas.some(p => p.productividad) && (
+        <section className="tarjeta p-5">
+          <h2 className="mb-4 text-sm font-semibold text-slate-700">Productividad por persona</h2>
+          <div className="overflow-x-auto">
+            <table className="tabla w-full">
+              <thead>
+                <tr>
+                  <th>Persona</th>
+                  <th className="text-right">Elaborados</th>
+                  <th className="text-right">Producción promedio</th>
+                  <th className="text-right">Corregidos</th>
+                  <th className="text-right">Corrección promedio</th>
+                  <th className="text-right">Revisados</th>
+                  <th className="text-right">Devueltos</th>
+                  <th className="text-right">Revisión promedio</th>
+                  <th className="text-right">Registradas</th>
+                  <th className="text-right">Registro promedio</th>
+                </tr>
+              </thead>
+              <tbody>
+                {c.personas.filter(p => p.productividad).map(({ id, nombre, productividad: q }) => (
+                  <tr key={id}>
+                    <td className="font-medium whitespace-nowrap">{nombre}</td>
+                    <td className="text-right font-semibold">{q!.elaborados}</td>
+                    <td className="text-right text-xs">{horasHabiles(q!.horasElaboracion)}</td>
+                    <td className="text-right font-semibold">{q!.corregidos}</td>
+                    <td className="text-right text-xs">{horasHabiles(q!.horasCorreccion)}</td>
+                    <td className="text-right font-semibold">{q!.revisados}</td>
+                    <td className="text-right">{q!.devueltosAuxiliar}</td>
+                    <td className="text-right text-xs">{horasHabiles(q!.horasRevision)}</td>
+                    <td className="text-right font-semibold">{q!.registrados}</td>
+                    <td className="text-right text-xs">{horasHabiles(q!.horasRegistro)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {/* POR CASO */}
       <section className="tarjeta p-5">
