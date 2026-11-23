@@ -178,6 +178,24 @@ export const relacionarManual = async (d: { casoId: number, otro: string, tipo: 
 // Los documentos se mueven a la carpeta del principal después de confirmar (SharePoint va aparte:
 // si falla, el archivo queda donde estaba y ligado al caso correcto).
 // =====================================
+// Reunión 23-nov: unir dos radicados solo cabe si es exactamente el mismo caso: el mismo accionante y,
+// en tutelas y acciones de cumplimiento, la misma raíz del radicado (cambian solo los dos dígitos de
+// la instancia). Lo demás se relaciona (antecedente, temeridad) pero no se une
+const mismaPersona = (a: Parte, b: Parte) => {
+  const [da, db] = [sinSeparadores(a.numeroDocumento), sinSeparadores(b.numeroDocumento)]
+  return da.length >= 5 && db.length >= 5 ? da === db : nombreNormal(a.nombre) === nombreNormal(b.nombre)
+}
+
+const exigirMismoCaso = (principal: Caso, absorbido: Caso) => {
+  if (principal.tipoSolicitud !== 'PQRS' && principal.radicado !== absorbido.radicado && (!raizProceso(principal.radicado) || raizProceso(principal.radicado) !== raizProceso(absorbido.radicado))) {
+    throw new ErrorNegocio('Solo se unen radicados del mismo proceso: deben ser iguales salvo los dos últimos dígitos (la instancia). Si es otro proceso, relaciónelos')
+  }
+  const accionantes = (c: Caso) => (c.partes ?? []).filter(p => p.rol === 'ACCIONANTE')
+  const [delPrincipal, delAbsorbido] = [accionantes(principal), accionantes(absorbido)]
+  if (!delPrincipal.length || !delAbsorbido.length) throw new ErrorNegocio('Registre el accionante en los dos casos antes de unirlos')
+  if (!delAbsorbido.every(p => delPrincipal.some(q => mismaPersona(p, q)))) throw new ErrorNegocio('Los accionantes no coinciden: solo se une si es el mismo accionante')
+}
+
 export const unirCasos = async (d: { principalId: number, absorbidoId: number, motivo: string, usuario: Usuario_ }) => {
   if (!d.motivo.trim()) throw new ErrorNegocio('Indique por qué se unen los casos')
   if (d.principalId === d.absorbidoId) throw new ErrorNegocio('Es el mismo caso')
@@ -191,6 +209,7 @@ export const unirCasos = async (d: { principalId: number, absorbidoId: number, m
     })))
     if (!principal || !absorbido) throw new ErrorNegocio('El caso no existe', 404)
     if (principal.tipoSolicitud !== absorbido.tipoSolicitud) throw new ErrorNegocio('Solo se unen casos del mismo tipo (tutela con tutela, PQRS con PQRS)')
+    exigirMismoCaso(principal, absorbido)
     // Dos actuaciones abiertas de la misma etapa en un caso no se pueden atender por separado
     const abiertas = (c: Caso) => new Set((c.actuaciones ?? []).filter(a => a.estado !== 'CERRADA').map(a => a.etapa))
     const choque = [...abiertas(absorbido)].find(e => abiertas(principal).has(e))

@@ -1,13 +1,14 @@
 import fs from 'fs/promises'
+import { Op } from 'sequelize'
 import path from 'path'
 import JSZip from 'jszip'
 import { Actuacion, Caso, Escrito, ItemCatalogo, Juzgado, Parte, Usuario } from '../models'
 import { guardarEnExpediente, type Subcarpeta } from './expediente'
 import { parametro } from './parametros'
 import { tiempoRestante } from './buzon/correosSalida'
-import { NOMBRES_ETAPAS } from './constantes'
+import { NOMBRES_ETAPAS, reglaEmergencia } from './constantes'
 import { formatoRadicado } from '../utils/radicado'
-import { textoFechaHora } from '../utils/fechaColombia'
+import { enBogota, textoFechaHora } from '../utils/fechaColombia'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -27,7 +28,10 @@ const escaparXml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 // Un salto de línea en el valor es un salto de línea en Word, dentro del mismo tramo
 const valorXml = (t: string) => escaparXml(t).split(/\r?\n/).join('</w:t><w:br/><w:t xml:space="preserve">')
 
-export const llenarWord = async (plantilla: 'ficha-tecnica' | 'solicitud-expediente', valores: Record<string, string>) => {
+// Los modelos de emergencia los entrega la firma: hasta que estén, la app avisa en vez de fallar
+export const existePlantilla = (plantilla: string) => fs.access(path.join(CARPETA, `${plantilla}.docx`)).then(() => true, () => false)
+
+export const llenarWord = async (plantilla: string, valores: Record<string, string>) => {
   const zip = await JSZip.loadAsync(await fs.readFile(path.join(CARPETA, `${plantilla}.docx`)))
   const documento = zip.file('word/document.xml')
   if (!documento) throw new Error(`La plantilla ${plantilla} no es un Word válido`)
@@ -49,7 +53,7 @@ const cargar = async (actuacionId: number) => {
   const a = await Actuacion.findByPk(actuacionId, {
     include: [
       {
-        model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'tipoSolicitud', 'deOtroOperador', 'resumenHechos', 'derechosIds', 'derechosInvolucrados'],
+        model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'tipoSolicitud', 'deOtroOperador', 'resumenHechos', 'derechosIds', 'derechosInvolucrados', 'calidadEntidad'],
         include: [{ model: Parte, attributes: ['rol', 'nombre'], required: false }, { model: Juzgado, attributes: ['nombre', 'correos'] }]
       },
       { model: Usuario, as: 'auxiliar', attributes: ['nombre'] },
@@ -62,10 +66,29 @@ const cargar = async (actuacionId: number) => {
 
 const accionantesDe = (caso: Caso) => (caso.partes ?? []).filter(p => p.rol === 'ACCIONANTE').map(p => p.nombre).join(', ')
 
+// La versión dentro de su clase: la emergencia y su alcance son escritos distintos, y cada uno tiene su
+// V1 y, si la entidad lo devuelve, su V2 (el número de la tabla sigue corriendo para toda la actuación)
+export const versionDeClase = async (escrito: Escrito) =>
+  Escrito.count({ where: { actuacionId: escrito.actuacionId, clase: escrito.clase, version: { [Op.lte]: escrito.version } } })
+
+// Derechos y petición del caso en texto, como van en la ficha y en los escritos
+const derechosYPeticion = async (a: Actuacion) => {
+  const caso = a.caso!
+  const [derechos, peticiones] = await Promise.all([
+    caso.derechosIds.length ? ItemCatalogo.findAll({ where: { id: caso.derechosIds }, attributes: ['nombre'], order: [['orden', 'ASC']] }) : [],
+    a.peticionIds.length ? ItemCatalogo.findAll({ where: { id: a.peticionIds }, attributes: ['nombre'], order: [['orden', 'ASC']] }) : []
+  ])
+  return {
+    derechos: derechos.length ? derechos.map(x => x.nombre).join(', ') : caso.derechosInvolucrados ?? '',
+    peticion: [...peticiones.map(x => x.nombre), a.loQueSePide?.trim()].filter(Boolean).join('\n')
+  }
+}
+
 // =====================================
 // FICHA TÉCNICA DEL CASO
-// Se genera al entregar (va siempre con el escrito) y a pedido desde el caso. Queda en la carpeta de la
-// versión del escrito; si todavía no hay escrito, en Soportes
+// Se genera cuando el auxiliar envía el escrito a revisión (reunión del 23-nov: con los hechos, los
+// derechos y la petición que registra ahí) y otra vez al entregar, con los datos de la entrega; también
+// a pedido desde el caso. Queda en la carpeta de la versión del escrito; sin escrito, en Soportes
 // =====================================
 export const generarFicha = async (d: { actuacionId: number, escritoId?: number | null, fechaEntrega?: Date | null, entregados?: string[], usuarioId: number | null }) => {
   const a = await cargar(d.actuacionId)
@@ -73,15 +96,16 @@ export const generarFicha = async (d: { actuacionId: number, escritoId?: number 
   const escrito = d.escritoId
     ? await Escrito.findByPk(d.escritoId)
     : await Escrito.findOne({ where: { actuacionId: a.id }, order: [['version', 'DESC']] })
-  const [derechos, tipoRespuesta] = await Promise.all([
-    caso.derechosIds.length ? ItemCatalogo.findAll({ where: { id: caso.derechosIds }, attributes: ['nombre'], order: [['orden', 'ASC']] }) : [],
+  const [{ derechos, peticion }, tipoRespuesta] = await Promise.all([
+    derechosYPeticion(a),
     a.tipoRespuestaId ? ItemCatalogo.findByPk(a.tipoRespuestaId, { attributes: ['nombre'] }) : null
   ])
   const ahora = fechaYHora(new Date())
   const vence = fechaYHora(a.fechaVencimiento)
   const entregadoEl = d.fechaEntrega ?? escrito?.fechaEntregaEntidad ?? null
   const entrega = fechaYHora(entregadoEl)
-  const version = escrito?.version ?? 1
+  // Lo que ve la entidad es la versión del escrito dentro de su clase (emergencia, alcance o el de la etapa)
+  const version = escrito ? await versionDeClase(escrito) : 1
   const entregados = d.entregados ?? (escrito ? [...escrito.documentosEntregados, ...escrito.anexosEntregados] : [])
   const valores: Record<string, string> = {
     fechaGeneracion: ahora.fecha, horaGeneracion: ahora.hora,
@@ -93,9 +117,10 @@ export const generarFicha = async (d: { actuacionId: number, escritoId?: number 
     despacho: caso.juzgado?.nombre ?? '',
     chk_CONTESTACION: casilla(a.etapa === 'ACCION'), chk_IMPUGNACION: casilla(a.etapa === 'IMPUGNACION'), chk_CUMPLIMIENTO: casilla(a.etapa === 'CUMPLIMIENTO'),
     chk_REQUERIMIENTO_PREVIO: casilla(a.etapa === 'REQUERIMIENTO_PREVIO'), chk_DESACATO: casilla(a.etapa === 'DESACATO'),
-    derechos: derechos.length ? derechos.map(x => x.nombre).join(', ') : caso.derechosInvolucrados ?? '',
-    tipoRespuesta: tipoRespuesta?.nombre ?? '',
+    derechos,
+    tipoRespuesta: escrito?.clase === 'EMERGENCIA' ? 'Escrito de emergencia' : escrito?.clase === 'ALCANCE' ? `${reglaEmergencia(caso.tipoSolicitud, a.etapa)?.alcance ?? 'Alcance'}${tipoRespuesta ? ` · ${tipoRespuesta.nombre}` : ''}` : tipoRespuesta?.nombre ?? '',
     hechos: caso.resumenHechos ?? '',
+    peticion,
     fechaVencimiento: vence.fecha, horaVencimiento: vence.hora, tiempoRestante: tiempoRestante(a.fechaVencimiento),
     chk_V1: casilla(version === 1), chk_V2: casilla(version > 1),
     fechaEntrega: entrega.fecha, horaEntrega: entrega.hora,
@@ -104,9 +129,11 @@ export const generarFicha = async (d: { actuacionId: number, escritoId?: number 
   }
   const contenido = await llenarWord('ficha-tecnica', valores)
   const sub: Subcarpeta = escrito ? `Escritos/V${escrito.version}` : 'Soportes'
+  const clase = escrito?.clase === 'EMERGENCIA' ? ' emergencia' : escrito?.clase === 'ALCANCE' ? ' alcance' : ''
+  // La de la revisión se reemplaza con la de la entrega: en el paquete queda una sola ficha
   return guardarEnExpediente({
-    actuacionId: a.id, sub, nombre: `Ficha técnica ${caso.numeroInterno ?? ''} ${NOMBRES_ETAPAS[a.etapa]} V${version}.docx`.replace(/\s+/g, ' '),
-    contenido, tipoMime: DOCX, tipo: escrito ? 'ANEXO' : 'SOPORTE', escritoId: escrito?.id ?? null, usuarioId: d.usuarioId
+    actuacionId: a.id, sub, nombre: `Ficha técnica ${caso.numeroInterno ?? ''} ${NOMBRES_ETAPAS[a.etapa]}${clase} V${version}.docx`.replace(/\s+/g, ' '),
+    contenido, tipoMime: DOCX, tipo: escrito ? 'ANEXO' : 'SOPORTE', escritoId: escrito?.id ?? null, usuarioId: d.usuarioId, reemplazar: true
   })
 }
 
@@ -134,5 +161,49 @@ export const solicitudExpediente = async (actuacionId: number) => {
     nombre: `Solicitud expediente digital ${caso.numeroInterno ?? ''}.docx`.replace(/\s+/g, ' '),
     tipoMime: DOCX,
     contenido: await llenarWord('solicitud-expediente', valores)
+  }
+}
+
+// =====================================
+// ESCRITO DE EMERGENCIA (reunión del 23-nov)
+// Se arma con el modelo de la firma para la etapa y el tipo de acción (constantes: reglaEmergencia).
+// Los marcadores disponibles son los de valoresEscrito: el Word del modelo se prepara con ellos
+// =====================================
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+const valoresEscrito = async (a: Actuacion): Promise<Record<string, string>> => {
+  const caso = a.caso!
+  const { derechos, peticion } = await derechosYPeticion(a)
+  const [anio, mes, dia] = enBogota(new Date()).dia.split('-').map(Number)
+  return {
+    fecha: `${dia} de ${MESES[mes - 1]} de ${anio}`,
+    numeroInterno: caso.numeroInterno ?? '',
+    juzgado: (caso.juzgado?.nombre ?? '').toUpperCase(),
+    correoJuzgado: caso.juzgado?.correos?.[0] ?? '',
+    radicado: formatoRadicado(caso.radicado),
+    accionante: accionantesDe(caso),
+    calidadEntidad: (caso.calidadEntidad ?? '').toLowerCase(),
+    entidadCompleta: parametro<string>('ENTIDAD_NOMBRE_LEGAL') || '[ENTIDAD]',
+    nitEntidad: parametro<string>('ENTIDAD_NIT') || '[NIT]',
+    apoderado: parametro<string>('APODERADO_NOMBRE') || '[APODERADO]',
+    ccApoderado: parametro<string>('APODERADO_CEDULA') || '[CÉDULA]',
+    tpApoderado: parametro<string>('APODERADO_TARJETA') || '[T.P.]',
+    correoApoderado: parametro<string>('APODERADO_CORREO') || '[CORREO]',
+    hechos: caso.resumenHechos ?? '',
+    derechos,
+    peticion
+  }
+}
+
+export const escritoEmergencia = async (d: { actuacionId: number, escrito: Escrito }) => {
+  const a = await cargar(d.actuacionId)
+  const regla = reglaEmergencia(a.caso!.tipoSolicitud, a.etapa)
+  if (!regla) throw new ErrorNegocio('Esta etapa no tiene escrito de emergencia')
+  if (!(await existePlantilla(regla.plantilla))) throw new ErrorNegocio(`Falta el modelo del ${regla.escrito.toLowerCase()}: cárguelo en backend/recursos/plantillas (${regla.plantilla}.docx)`)
+  const version = await versionDeClase(d.escrito)
+  return {
+    nombre: `${regla.escrito} ${a.caso!.numeroInterno ?? ''} V${version}.docx`.replace(/\s+/g, ' '),
+    tipoMime: DOCX,
+    contenido: await llenarWord(regla.plantilla, await valoresEscrito(a))
   }
 }

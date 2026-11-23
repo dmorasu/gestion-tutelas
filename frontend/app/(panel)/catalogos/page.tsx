@@ -1,16 +1,18 @@
 import Link from "next/link"
 import clsx from "clsx"
-import { Scale, MessageSquareText, ClipboardList, type LucideIcon } from "lucide-react"
+import { Scale, MessageSquareText, ClipboardList, Gavel, type LucideIcon } from "lucide-react"
 import { obtener } from "@/src/lib/api"
 import { requiereRol } from "@/src/auth/dal"
 import ListaCatalogo, { type ItemCatalogo } from "./ListaCatalogo"
 
-type Catalogo = "DERECHO" | "TIPO_RESPUESTA" | "INSUMO"
+type Catalogo = "DERECHO" | "TIPO_RESPUESTA" | "INSUMO" | "PETICION"
 
 const PESTANAS: { clave: Catalogo, nombre: string, Icono: LucideIcon }[] = [
   { clave: "DERECHO", nombre: "Derechos", Icono: Scale },
   { clave: "TIPO_RESPUESTA", nombre: "Tipos de respuesta", Icono: MessageSquareText },
-  { clave: "INSUMO", nombre: "Matriz de insumos", Icono: ClipboardList }
+  { clave: "INSUMO", nombre: "Matriz de insumos", Icono: ClipboardList },
+  // Reunión 23-nov: lo que se pide al despacho, por etapa (va en la ficha técnica)
+  { clave: "PETICION", nombre: "Peticiones", Icono: Gavel }
 ]
 
 export default async function CatalogosPage({ searchParams }: { searchParams: Promise<{ catalogo?: string }> }) {

@@ -2,8 +2,9 @@
 // PLANTILLAS WORD A PARTIR DE LOS MODELOS DE LA FIRMA (reunión 18-nov)
 // Toma los Word de Docs/insumos y cambia sus campos entre corchetes ([RADICADO DEL PROCESO], ☐ CRÍTICO…)
 // por marcadores {radicado}, {chk_CRITICO}… que la app llena (backend/src/services/documentosWord.ts).
-// El diseño del Word no se toca: solo cambia el texto de cada tramo. A la ficha le agrega dos filas
-// en "Actuación y términos": tipo de respuesta y resumen de los hechos (decisión del 19-nov).
+// El diseño del Word no se toca: solo cambia el texto de cada tramo. A la ficha le agrega tres filas
+// en "Actuación y términos": tipo de respuesta y resumen de los hechos (decisión del 19-nov) y la
+// petición al despacho (reunión del 23-nov).
 // En la solicitud del expediente, el nombre y el NIT de la entidad pasan a marcadores (no van en el código).
 // Si la firma cambia un modelo, se reemplaza el Word en Docs/insumos y se vuelve a correr:
 //
@@ -73,7 +74,7 @@ const reglasFicha = (): Regla => {
   }
 }
 
-// Dos filas nuevas en "Actuación y términos", copiando el diseño de la fila del derecho fundamental
+// Filas nuevas en "Actuación y términos", copiando el diseño de la fila del derecho fundamental
 const agregarFilas = (xml: string) => {
   const i = xml.indexOf('Derecho fundamental')
   if (i < 0) throw new Error('La ficha no tiene la fila "Derecho fundamental"')
@@ -82,8 +83,8 @@ const agregarFilas = (xml: string) => {
   const fila = xml.slice(ini, fin)
   if (!fila.includes('{derechos}')) throw new Error('La fila del derecho fundamental no quedó con su marcador')
   const copia = (etiqueta: string, marcador: string) => fila.replace('Derecho fundamental', etiqueta).replace('{derechos}', marcador)
-  encontrados.add('tipoRespuesta'); encontrados.add('hechos')
-  return xml.slice(0, fin) + copia('Tipo de respuesta', '{tipoRespuesta}') + copia('Resumen de los hechos', '{hechos}') + xml.slice(fin)
+  encontrados.add('tipoRespuesta'); encontrados.add('hechos'); encontrados.add('peticion')
+  return xml.slice(0, fin) + copia('Tipo de respuesta', '{tipoRespuesta}') + copia('Resumen de los hechos', '{hechos}') + copia('Petición', '{peticion}') + xml.slice(fin)
 }
 
 // ── Solicitud del expediente digital al despacho (modelo 1.1) ──
@@ -132,7 +133,7 @@ const preparar = async (origen: string, destino: string, regla: Regla, esperados
   await preparar('0. FICHA TECNICA DEL CASO.docx', 'ficha-tecnica.docx', reglasFicha(), [
     'fechaGeneracion', 'horaGeneracion', 'numeroInterno', 'version', 'chk_CRITICO', 'chk_ALTO', 'chk_ORDINARIO', 'chk_SUSPENDIDO_POR_INSUMOS', 'chk_DEVUELTO_POR_DUPLICIDAD',
     'radicado', 'accionante', 'chk_ACCION_DE_TUTELA', 'chk_ACCION_DE_CUMPLIMIENTO', 'despacho', 'chk_CONTESTACION', 'chk_IMPUGNACION', 'chk_CUMPLIMIENTO',
-    'chk_REQUERIMIENTO_PREVIO', 'chk_DESACATO', 'derechos', 'tipoRespuesta', 'hechos', 'fechaVencimiento', 'horaVencimiento', 'tiempoRestante',
+    'chk_REQUERIMIENTO_PREVIO', 'chk_DESACATO', 'derechos', 'tipoRespuesta', 'hechos', 'peticion', 'fechaVencimiento', 'horaVencimiento', 'tiempoRestante',
     'chk_V1', 'chk_V2', 'fechaEntrega', 'horaEntrega', 'anexos', 'elaboro', 'reviso'
   ], agregarFilas)
   await preparar('1.1. SOLICITUD EXPEDIENTE DIGITAL A DESPACHO.docx', 'solicitud-expediente.docx', reglasExpediente(), [

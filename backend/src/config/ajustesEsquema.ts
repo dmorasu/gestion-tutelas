@@ -49,7 +49,11 @@ const AJUSTES: string[] = [
   `ALTER TABLE alertas ADD COLUMN IF NOT EXISTS "vecesEnviada" INTEGER NOT NULL DEFAULT 0`,
   `ALTER TABLE alertas ADD COLUMN IF NOT EXISTS "ultimoEnvio" TIMESTAMPTZ`,
   // Las emitidas antes de los cortes ya salieron una vez
-  `UPDATE alertas SET "vecesEnviada" = 1, "ultimoEnvio" = "fechaEmision" WHERE estado = 'EMITIDA' AND "vecesEnviada" = 0`
+  `UPDATE alertas SET "vecesEnviada" = 1, "ultimoEnvio" = "fechaEmision" WHERE estado = 'EMITIDA' AND "vecesEnviada" = 0`,
+  // 2026-11-23 · Ajustes de la firma: petición en la ficha y escrito de emergencia con su alcance
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "peticionIds" INTEGER[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE actuaciones ADD COLUMN IF NOT EXISTS "alcancePendiente" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE escritos ADD COLUMN IF NOT EXISTS clase VARCHAR(12) NOT NULL DEFAULT 'PRINCIPAL'`
 ]
 
 // Una tabla que aún no existe se salta: sync() la acaba de crear completa con el modelo

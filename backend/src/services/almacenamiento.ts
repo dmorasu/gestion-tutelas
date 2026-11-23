@@ -73,17 +73,18 @@ type ItemGraph = { id: string, name: string, webUrl: string, parentReference?: {
 
 const TROZO = 320 * 1024 * 10 // las cargas por sesión van en múltiplos de 320 KiB
 
-const subirSharepoint = async (carpeta: string, nombre: string, contenido: Buffer, tipoMime?: string | null): Promise<ItemGraph> => {
+const subirSharepoint = async (carpeta: string, nombre: string, contenido: Buffer, tipoMime?: string | null, conflicto: 'rename' | 'replace' = 'rename'): Promise<ItemGraph> => {
   const d = await driveId()
   const ruta = rutaCodificada(`${carpeta}/${nombre}`)
-  // Mismo nombre en la carpeta: SharePoint le agrega un número (no se pisa un escrito anterior)
+  // Mismo nombre en la carpeta: SharePoint le agrega un número (no se pisa un escrito anterior).
+  // Solo lo que la app genera de nuevo (la ficha técnica) reemplaza al anterior
   if (contenido.length <= 4 * 1024 * 1024) {
-    return graph<ItemGraph>(`/drives/${d}/root:/${ruta}:/content?@microsoft.graph.conflictBehavior=rename`, {
+    return graph<ItemGraph>(`/drives/${d}/root:/${ruta}:/content?@microsoft.graph.conflictBehavior=${conflicto}`, {
       metodo: 'PUT', crudo: contenido, encabezados: { 'Content-Type': tipoMime || 'application/octet-stream' }
     })
   }
   const sesion = await graph<{ uploadUrl: string }>(`/drives/${d}/root:/${ruta}:/createUploadSession`, {
-    metodo: 'POST', cuerpo: { item: { '@microsoft.graph.conflictBehavior': 'rename' } }
+    metodo: 'POST', cuerpo: { item: { '@microsoft.graph.conflictBehavior': conflicto } }
   })
   let item: ItemGraph | null = null
   for (let inicio = 0; inicio < contenido.length; inicio += TROZO) {
@@ -100,18 +101,18 @@ const subirSharepoint = async (carpeta: string, nombre: string, contenido: Buffe
 
 // ── Interfaz común ──
 
-export const guardarArchivo = async (carpeta: string, nombre: string, contenido: Buffer, tipoMime?: string | null): Promise<Ubicacion> => {
+export const guardarArchivo = async (carpeta: string, nombre: string, contenido: Buffer, tipoMime?: string | null, reemplazar = false): Promise<Ubicacion> => {
   const dir = unirRuta(carpeta)
   const limpio = limpiarNombre(nombre)
   if (sharepointConfigurado()) {
-    const item = await subirSharepoint(dir, limpio, contenido, tipoMime)
+    const item = await subirSharepoint(dir, limpio, contenido, tipoMime, reemplazar ? 'replace' : 'rename')
     return { proveedor: 'SHAREPOINT', ruta: `${dir}/${item.name}`, itemId: item.id, webUrl: item.webUrl }
   }
   const destino = path.join(carpetaLocal(), dir)
   await fs.mkdir(destino, { recursive: true })
-  // Igual que SharePoint: no pisar un archivo con el mismo nombre
+  // Igual que SharePoint: no pisar un archivo con el mismo nombre (salvo que se pida reemplazar)
   let final = limpio
-  for (let n = 1; await fs.stat(path.join(destino, final)).then(() => true, () => false); n++) {
+  for (let n = 1; !reemplazar && await fs.stat(path.join(destino, final)).then(() => true, () => false); n++) {
     const ext = path.extname(limpio)
     final = `${path.basename(limpio, ext)} ${n}${ext}`
   }

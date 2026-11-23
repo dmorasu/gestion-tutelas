@@ -105,10 +105,30 @@ const INSUMOS: Item[] = [
 
 ]
 
+// Supuesto (reunión del 23-nov): lo que se le pide al despacho en contestación y en impugnación. La
+// firma ajusta la lista en Configuración; las demás etapas se agregan allí si hacen falta
+const PETICIONES: Item[] = [
+  ...[
+    'Negar el amparo solicitado',
+    'Declarar improcedente la acción',
+    'Declarar la carencia actual de objeto por hecho superado',
+    'Desvincular a la entidad por falta de legitimación en la causa por pasiva',
+    'Declarar la temeridad de la acción',
+    'Remitir por competencia'
+  ].map(nombre => ({ grupo: 'ACCION', nombre })),
+  ...[
+    'Revocar el fallo de primera instancia y negar el amparo',
+    'Revocar el fallo de primera instancia y declarar improcedente la acción',
+    'Revocar el fallo y declarar la carencia actual de objeto',
+    'Confirmar el fallo de primera instancia (impugnación del accionante)'
+  ].map(nombre => ({ grupo: 'IMPUGNACION', nombre }))
+]
+
 const BASE: { catalogo: TipoCatalogo, items: Item[], supuesto: boolean }[] = [
   { catalogo: 'DERECHO', items: DERECHOS, supuesto: true },
   { catalogo: 'TIPO_RESPUESTA', items: TIPOS_RESPUESTA, supuesto: true },
-  { catalogo: 'INSUMO', items: INSUMOS, supuesto: false }
+  { catalogo: 'INSUMO', items: INSUMOS, supuesto: false },
+  { catalogo: 'PETICION', items: PETICIONES, supuesto: true }
 ]
 
 export const sembrarCatalogos = async () => {

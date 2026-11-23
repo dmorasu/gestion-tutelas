@@ -7,7 +7,8 @@ import Documento, { type DocumentoFila } from "@/components/ui/Documento"
 import SubirArchivos from "./SubirArchivos"
 import { FormDatosFaltantes, FormEntrega, FormInsumosMatriz, GRUPO_GENERAL, type ItemMatriz } from "./componentes/Matriz"
 import { TIPOS_DEVOLUCION, fechaHora, isoDesdeLocal } from "@/src/lib/formato"
-import { FileText, Inbox, Landmark } from "lucide-react"
+import { FileText, Inbox, Landmark, Siren } from "lucide-react"
+import FichaRevision, { type DatosFicha, type ItemFicha } from "./componentes/FichaRevision"
 
 // Cabecera de cada tarjeta del trabajo (escrito, insumos, cierre), como las secciones de Nodex
 const CABECERA = "flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5"
@@ -19,14 +20,17 @@ export type DevolucionFila = {
   fechaNuevaEntrega: string | null, extemporanea: boolean, motivo: { nombre: string } | null
 }
 export type EscritoFila = {
-  id: number, version: number, estado: string, observacionRevision: string | null, fechaEnvioRevision: string | null,
+  id: number, version: number, estado: string, clase?: "PRINCIPAL" | "EMERGENCIA" | "ALCANCE", observacionRevision: string | null, fechaEnvioRevision: string | null,
   fechaEntregaEntidad: string | null, fechaAcuse: string | null, fechaAprobacion: string | null, enlace: string | null, devoluciones: DevolucionFila[]
 }
 export type ArchivoCaso = DocumentoFila & { tipo: string, escritoId: number | null, actuacionId: number | null }
 
 type Props = {
   casoId: number
-  actuacion: { id: number, etapa?: string, estado: string, insumos: Insumo[], escritos: EscritoFila[], datosSolicitados?: { nombre: string, recibido: boolean }[] }
+  actuacion: {
+    id: number, etapa?: string, estado: string, insumos: Insumo[], escritos: EscritoFila[], datosSolicitados?: { nombre: string, recibido: boolean }[]
+    alcancePendiente?: boolean, emergencia?: Emergencia | null
+  }
   // Matriz de insumos (catálogo) y documentos de la entrega (modelos de la firma)
   matriz: ItemMatriz[]
   documentosEntrega: Record<string, string>
@@ -37,8 +41,31 @@ type Props = {
   puedePedirInsumos: boolean
   puedePedirDatos: boolean
   puedeCerrar: boolean
+  // Reunión 23-nov: la radicación en el juzgado la registra la asistencia administrativa
+  puedeRadicar: boolean
   motivosCierre: string[]
   tipoEscrito: string
+  // Lo que el auxiliar completa en la ficha al enviar a revisión (reunión 23-nov)
+  ficha: DatosFicha
+  derechos: ItemFicha[]
+  peticiones: ItemFicha[]
+}
+
+// Escrito de emergencia de la etapa (si la admite) y si ya está el modelo de la firma
+export type Emergencia = { escrito: string, alcance: string, modelo: boolean }
+
+// Cómo se llama cada escrito según su clase, con la versión dentro de la clase (la emergencia y su
+// alcance cuentan cada uno desde V1, como en la ficha y el correo de entrega)
+const NOMBRE_CLASE: Record<string, string> = { EMERGENCIA: "Emergencia", ALCANCE: "Alcance" }
+const versionesDeClase = (escritos: EscritoFila[]) => {
+  const vistas = new Map<number, string>()
+  const cuenta: Record<string, number> = {}
+  for (const e of [...escritos].sort((x, y) => x.version - y.version)) {
+    const clase = e.clase ?? "PRINCIPAL"
+    cuenta[clase] = (cuenta[clase] ?? 0) + 1
+    vistas.set(e.id, `${NOMBRE_CLASE[clase] ? `${NOMBRE_CLASE[clase]} ` : ""}V${cuenta[clase]}`)
+  }
+  return vistas
 }
 
 // Cómo se nombra cada documento dentro de la versión del escrito
@@ -53,9 +80,9 @@ const ESTADOS_ESCRITO: Record<string, string> = {
   ENTREGADO: "Entregado", DEVUELTO: "Devuelto por la entidad", APROBADO: "Aprobado"
 }
 
-export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosEntrega, documentoSugerido, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedePedirDatos, puedeCerrar, motivosCierre, tipoEscrito }: Props) {
+export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosEntrega, documentoSugerido, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedePedirDatos, puedeCerrar, puedeRadicar, motivosCierre, tipoEscrito, ficha, derechos, peticiones }: Props) {
   const [pendiente, iniciar] = useTransition()
-  const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "devolverAux" | "entregar" | "respuesta" | "radicacion" | "cierre">("")
+  const [abierto, setAbierto] = useState<"" | "insumos" | "datos" | "revision" | "devolverAux" | "entregar" | "respuesta" | "radicacion" | "cierre">("")
   // Texto con el que abre la solicitud de datos faltantes (el del expediente viene ya escrito)
   const [textoDatos, setTextoDatos] = useState("")
   const pedirDatos = (texto: string) => { setTextoDatos(texto); setAbierto(abierto === "datos" && textoDatos === texto ? "" : "datos") }
@@ -75,8 +102,18 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
 
   const escritos = [...a.escritos].sort((x, y) => y.version - x.version)
   const actual = escritos[0] ?? null
+  const vistas = versionesDeClase(escritos)
+  const etiqueta = (e: EscritoFila) => vistas.get(e.id) ?? `V${e.version}`
   const enElaboracion = actual && ["BORRADOR", "AJUSTE_INTERNO"].includes(actual.estado)
-  const puedeSubirEscrito = puedeTrabajar && !cerrada && !sinEtapa && (!actual || ["BORRADOR", "AJUSTE_INTERNO", "DEVUELTO"].includes(actual.estado) || (actual.estado === "EN_REVISION" && puedeRevisar))
+  // Tras entregar la emergencia sigue el escrito completo: se sube como un escrito nuevo (alcance)
+  const sigueAlcance = !!a.alcancePendiente && actual?.clase === "EMERGENCIA" && ["ENTREGADO", "APROBADO"].includes(actual.estado)
+  const puedeSubirEscrito = puedeTrabajar && !cerrada && !sinEtapa && (!actual || sigueAlcance || ["BORRADOR", "AJUSTE_INTERNO", "DEVUELTO"].includes(actual.estado) || (actual.estado === "EN_REVISION" && puedeRevisar))
+  // Emergencia: la etapa la admite, ya se pidieron insumos y no hay un escrito de la etapa en curso
+  const borradorVacio = actual?.estado === "BORRADOR" && (actual.clase ?? "PRINCIPAL") === "PRINCIPAL" && !archivos.some(x => x.escritoId === actual.id && x.tipo === "ESCRITO")
+  const ofreceEmergencia = !!a.emergencia && puedeTrabajar && !cerrada && a.insumos.length > 0 &&
+    (!actual || borradorVacio || (actual.clase === "EMERGENCIA" && actual.estado === "DEVUELTO"))
+  // Documento que se marca solo en la entrega según la clase del escrito
+  const sugeridoEntrega = actual?.clase === "EMERGENCIA" ? "EMERGENCIA" : actual?.clase === "ALCANCE" && a.etapa === "ACCION" ? "ALCANCE" : documentoSugerido
   const deEscrito = (id: number) => archivos.filter(x => x.escritoId === id)
   const insumosRecibidos = archivos.filter(x => !x.escritoId && x.tipo === "INSUMO")
   const sueltos = archivos.filter(x => !x.escritoId && x.tipo !== "INSUMO")
@@ -89,19 +126,26 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
         <div className={CABECERA}>
           <h3 className={TITULO}><FileText size={15} className="text-slate-400" />{tipoEscrito}</h3>
           <div className="flex flex-wrap gap-2">
+            {ofreceEmergencia && (
+              <button disabled={pendiente || !a.emergencia!.modelo} className="boton-secundario py-1.5 text-xs"
+                title={a.emergencia!.modelo ? undefined : "Falta el modelo de la firma para este escrito"}
+                onClick={() => ejecutar("emergencia", {}, `${a.emergencia!.escrito} generado: revíselo en los documentos del escrito`, `¿Generar el ${a.emergencia!.escrito.toLowerCase()}? Después queda pendiente la ${a.emergencia!.alcance.toLowerCase()}.`)}>
+                <Siren size={13} />Escrito de emergencia
+              </button>
+            )}
             {puedeSubirEscrito && <SubirArchivos actuacionId={a.id} tipos={["ESCRITO", "ANEXO"]} />}
             {/* La ficha se genera sola al entregar; este botón es para revisarla antes */}
             {puedeTrabajar && !cerrada && !sinEtapa && (
               <button disabled={pendiente} className="boton-secundario py-1.5 text-xs" onClick={() => ejecutar("ficha", {}, "Ficha técnica generada: quedó en los documentos")}>Generar ficha técnica</button>
             )}
             {puedeTrabajar && enElaboracion && (
-              <button disabled={pendiente} className="boton-primario py-1.5 text-xs" onClick={() => ejecutar("revision", {}, "Enviado al revisor")}>Enviar a revisión</button>
+              <button disabled={pendiente} className="boton-primario py-1.5 text-xs" onClick={() => setAbierto(abierto === "revision" ? "" : "revision")}>Enviar a revisión</button>
             )}
             {puedeRevisar && actual?.estado === "EN_REVISION" && (
               <>
                 <button disabled={pendiente} className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "devolverAux" ? "" : "devolverAux")}>Devolver al auxiliar</button>
                 <button disabled={pendiente} className="boton-primario py-1.5 text-xs" onClick={() => setAbierto(abierto === "entregar" ? "" : "entregar")}>
-                  Entregar V{actual.version}
+                  Entregar {etiqueta(actual)}
                 </button>
               </>
             )}
@@ -111,6 +155,15 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
           </div>
         </div>
         <div className="space-y-3 p-5">
+        {a.alcancePendiente && a.emergencia && !cerrada && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Se generó el escrito de emergencia: falta la {a.emergencia.alcance.toLowerCase()} cuando lleguen los insumos.
+          </p>
+        )}
+        {abierto === "revision" && (
+          <FichaRevision inicial={ficha} derechos={derechos} peticiones={peticiones} pendiente={pendiente} cancelar={() => setAbierto("")}
+            enviar={f => ejecutar("revision", { ficha: f }, "Ficha técnica generada y escrito enviado al revisor")} />
+        )}
         {abierto === "devolverAux" && (
           <form action={d => ejecutar("devolver-auxiliar", { observacion: d.get("observacion") }, "Devuelto al auxiliar")} className="flex gap-2">
             <input name="observacion" required placeholder="Qué debe ajustar" className="campo" />
@@ -118,9 +171,9 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
           </form>
         )}
         {abierto === "entregar" && actual && (
-          <FormEntrega version={actual.version} documentos={documentosEntrega} sugerido={documentoSugerido} pendiente={pendiente}
+          <FormEntrega version={etiqueta(actual)} documentos={documentosEntrega} sugerido={sugeridoEntrega} pendiente={pendiente}
             anexos={matriz.filter(i => i.clase === "DOCUMENTO" && i.grupo !== GRUPO_GENERAL)}
-            enviar={d => ejecutar("entregar", d, `V${actual.version} entregada a la entidad`, `¿Entregar la V${actual.version} a la entidad? Se comparte la carpeta del escrito y sale el correo de entrega.`)} />
+            enviar={d => ejecutar("entregar", d, `${etiqueta(actual)} entregada a la entidad`, `¿Entregar ${etiqueta(actual)} a la entidad? Se comparte la carpeta del escrito y sale el correo de entrega.`)} />
         )}
         {abierto === "respuesta" && <FormRespuesta pendiente={pendiente} enviar={c => ejecutar("respuesta", c, "Respuesta registrada")} />}
 
@@ -128,7 +181,7 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
         {escritos.map(e => (
           <div key={e.id} className="rounded-lg border border-slate-200 p-3 space-y-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="font-semibold">V{e.version}</span>
+              <span className="font-semibold">{etiqueta(e)}</span>
               <span className="text-slate-600">{ESTADOS_ESCRITO[e.estado] ?? e.estado}</span>
               {e.fechaEnvioRevision && <span className="text-xs text-slate-500">A revisión {fechaHora(e.fechaEnvioRevision)}</span>}
               {e.fechaEntregaEntidad && <span className="text-xs text-slate-500">Entregado {fechaHora(e.fechaEntregaEntidad)}</span>}
@@ -227,12 +280,12 @@ export default function PanelTrabajo({ casoId, actuacion: a, matriz, documentosE
       </section>
 
       {/* RADICACIÓN Y CIERRE */}
-      {!cerrada && (puedeTrabajar || puedeCerrar) && (
+      {!cerrada && (puedeRadicar || puedeCerrar) && (
         <section className="tarjeta overflow-hidden text-sm">
           <div className={CABECERA}>
             <h3 className={TITULO}><Landmark size={15} className="text-slate-400" />Radicación y cierre</h3>
             <div className="flex flex-wrap gap-2">
-              {puedeTrabajar && ["APROBADO", "ENTREGADO"].includes(a.estado) && (
+              {puedeRadicar && ["APROBADO", "ENTREGADO"].includes(a.estado) && (
                 <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "radicacion" ? "" : "radicacion")}>Registrar radicación</button>
               )}
               {puedeCerrar && <button className="boton-secundario py-1.5 text-xs" onClick={() => setAbierto(abierto === "cierre" ? "" : "cierre")}>Cerrar actuación</button>}
@@ -266,7 +319,8 @@ export function FormRespuesta({ pendiente, enviar, sugerencia, motivos = [], con
   pendiente: boolean, enviar: (cuerpo: Record<string, unknown>) => void, sugerencia?: string | null,
   motivos?: { id: number, nombre: string }[], conFecha?: boolean
 }) {
-  const [tipo, setTipo] = useState(sugerencia ?? "ACUSE")
+  // Reunión 23-nov: no se registra la aprobación (el envío sin devolución se entiende aprobado)
+  const [tipo, setTipo] = useState(sugerencia === "DEVOLUCION" ? "DEVOLUCION" : "ACUSE")
   return (
     <form
       action={d => enviar({
@@ -277,7 +331,7 @@ export function FormRespuesta({ pendiente, enviar, sugerencia, motivos = [], con
       className="space-y-2 rounded-lg border border-slate-200 p-3"
     >
       <div className="flex flex-wrap gap-4">
-        {[["ACUSE", "Acuse de recibido"], ["APROBACION", "Aprobado"], ["DEVOLUCION", "Devuelto"]].map(([k, v]) => (
+        {[["ACUSE", "Acuse de recibido"], ["DEVOLUCION", "Devuelto"]].map(([k, v]) => (
           <label key={k} className="flex items-center gap-1.5"><input type="radio" checked={tipo === k} onChange={() => setTipo(k)} /> {v}</label>
         ))}
       </div>

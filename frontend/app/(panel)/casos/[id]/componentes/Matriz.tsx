@@ -114,7 +114,7 @@ export function FormInsumosMatriz({ matriz, pendiente, enviar }: { matriz: ItemM
 export type DatosEntrega = { documentos: string[], otroDocumento: string, anexos: string[], otrosAnexos: string }
 
 export function FormEntrega({ version, documentos, sugerido, anexos, pendiente, enviar }: {
-  version: number, documentos: Record<string, string>, sugerido: string | null, anexos: ItemMatriz[], pendiente: boolean, enviar: (d: DatosEntrega) => void
+  version: string, documentos: Record<string, string>, sugerido: string | null, anexos: ItemMatriz[], pendiente: boolean, enviar: (d: DatosEntrega) => void
 }) {
   const [marcados, setMarcados] = useState<string[]>(sugerido ? [sugerido] : [])
   const [otroDocumento, setOtroDocumento] = useState("")
@@ -147,7 +147,7 @@ export function FormEntrega({ version, documentos, sugerido, anexos, pendiente, 
         ))}
         <textarea value={otrosAnexos} onChange={e => setOtrosAnexos(e.target.value)} rows={2} placeholder="Otros anexos (uno por línea)" className="campo mt-2" />
       </div>
-      <button disabled={pendiente} className="boton-primario" onClick={() => enviar({ documentos: marcados, otroDocumento, anexos: anexosMarcados, otrosAnexos })}>Entregar V{version}</button>
+      <button disabled={pendiente} className="boton-primario" onClick={() => enviar({ documentos: marcados, otroDocumento, anexos: anexosMarcados, otrosAnexos })}>Entregar {version}</button>
     </div>
   )
 }

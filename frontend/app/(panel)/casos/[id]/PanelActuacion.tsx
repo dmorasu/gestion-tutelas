@@ -9,7 +9,8 @@ import Semaforo from "@/components/ui/Semaforo"
 import Seccion from "@/components/ui/Seccion"
 import Dato from "@/components/ui/Dato"
 import Criticidad from "@/components/ui/Criticidad"
-import PanelTrabajo, { type ArchivoCaso, type EscritoFila, type Insumo } from "./PanelTrabajo"
+import PanelTrabajo, { type ArchivoCaso, type Emergencia, type EscritoFila, type Insumo } from "./PanelTrabajo"
+import type { ItemFicha } from "./componentes/FichaRevision"
 import Fallos, { type DecisionFila } from "./componentes/Fallos"
 import RutaActuacion from "./componentes/RutaActuacion"
 import ClasificarNulidad from "./componentes/ClasificarNulidad"
@@ -28,6 +29,7 @@ export type ActuacionDetalle = {
   fechaAsumida?: string | null, fechaCierre?: string | null, radicaciones?: { fechaRadicacion: string }[]
   tipoRespuestaId?: number | null, datosSolicitados?: { nombre: string, recibido: boolean }[]
   origenNulidad?: boolean, fechaClasificacion?: string | null
+  peticionIds?: number[], alcancePendiente?: boolean, emergencia?: Emergencia | null
 }
 
 type Props = {
@@ -36,11 +38,13 @@ type Props = {
   puedeTrabajar: boolean, puedeRevisar: boolean, puedePedirInsumos: boolean, puedeCerrar: boolean, motivosCierre: string[], sentidos: Record<string, string[]>, porDerechoPeticion?: boolean
   // Catálogos (reunión 18-nov): tipos de respuesta, matriz de insumos y documentos de la entrega
   tiposRespuesta: { id: number, nombre: string, activo?: boolean }[], matriz: ItemMatriz[], documentosEntrega: Record<string, string>, documentoDeEscrito: Record<string, string>
+  // Ficha técnica (reunión 23-nov): hechos y derechos del caso y peticiones de la etapa
+  caso: { resumenHechos: string | null, derechosIds: number[] }, derechos: ItemFicha[], peticiones: ItemFicha[], puedeRadicar: boolean
 }
 
 const FUENTE_CRITICIDAD: Record<string, string> = { ASUNTO: "la marcó la entidad", CALCULADA: "calculada", MANUAL: "puesta a mano" }
 
-export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, reasigna, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion, tiposRespuesta, matriz, documentosEntrega, documentoDeEscrito }: Props) {
+export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordina, usuarioId, reasigna, auxiliares, revisores, archivos, puedeTrabajar, puedeRevisar, puedePedirInsumos, puedeCerrar, motivosCierre, sentidos, porDerechoPeticion, tiposRespuesta, matriz, documentosEntrega, documentoDeEscrito, caso, derechos, peticiones, puedeRadicar }: Props) {
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState(false)
   const esResponsable = a.auxiliarId === usuarioId || a.revisorId === usuarioId
@@ -81,6 +85,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
   const limite = a.fechaLimiteEntrega
   const entregada = yaEntregada(a.estado)
   const tipoRespuesta = tiposRespuesta.find(t => t.id === a.tipoRespuestaId)?.nombre ?? null
+  const peticionesElegidas = peticiones.filter(p => (a.peticionIds ?? []).includes(p.id)).map(p => p.nombre)
   const suspendido = a.datosFaltantesPendientes
     ? "El ANS está suspendido hasta que lleguen los datos faltantes de la asignación. El término judicial sigue corriendo."
     : a.requiereInsumos && !limite ? "El ANS está suspendido hasta que lleguen los insumos. El término judicial sigue corriendo." : null
@@ -141,7 +146,10 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
             <Dato etiqueta="Escrito" valor={tipoEscrito(a)} />
             {a.tipoPeticion && <Dato etiqueta="Tipo de petición" valor={TIPOS_PETICION[a.tipoPeticion] ?? a.tipoPeticion} />}
             {a.origenNulidad && <Dato etiqueta="Nulidad clasificada" valor={fechaHora(a.fechaClasificacion)} />}
-            {a.loQueSePide && <Dato etiqueta="Lo que se pide al juez" valor={<span className="whitespace-pre-line">{a.loQueSePide}</span>} className="sm:col-span-3" />}
+            {(peticionesElegidas.length > 0 || a.loQueSePide) && (
+              <Dato etiqueta="Petición al despacho" className="sm:col-span-3"
+                valor={<span className="whitespace-pre-line">{[...peticionesElegidas, a.loQueSePide].filter(Boolean).join("\n")}</span>} />
+            )}
             {porDerechoPeticion && a.etapa === "ACCION" && (
               <p className="text-xs text-slate-600 sm:col-span-3">Tutela por derecho de petición: la contestación pide al juez hecho superado con la respuesta de la PQRS ligada (pestaña Información).</p>
             )}
@@ -209,7 +217,7 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
             <label className="flex items-center gap-2"><input type="checkbox" name="requiereInsumos" defaultChecked={a.requiereInsumos} /> Requiere insumos</label>
           </div>
           <div className="sm:col-span-3">
-            <label className="etiqueta">Lo que se pide al juez</label>
+            <label className="etiqueta">Petición al despacho (precisión u otra)</label>
             <textarea name="loQueSePide" rows={2} defaultValue={a.loQueSePide ?? ""} className="campo" />
           </div>
           <div className="sm:col-span-3 flex gap-2 justify-end">
@@ -232,8 +240,12 @@ export default function PanelActuacion({ casoId, actuacion: a, gestiona, coordin
         documentosEntrega={documentosEntrega}
         documentoSugerido={documentoDeEscrito[a.etapa === "IMPUGNACION" && a.origenImpugnacion === "ACCIONANTE" ? "DESCORRE" : a.etapa] ?? null}
         puedeCerrar={puedeCerrar}
+        puedeRadicar={puedeRadicar}
         motivosCierre={motivosCierre}
         tipoEscrito={tipoEscrito(a)}
+        ficha={{ resumenHechos: caso.resumenHechos, derechosIds: caso.derechosIds, peticionIds: a.peticionIds ?? [], loQueSePide: a.loQueSePide }}
+        derechos={derechos}
+        peticiones={peticiones}
       />
       {["ACCION", "IMPUGNACION", "DESACATO"].includes(a.etapa) && (
         <Fallos casoId={casoId} actuacionId={a.id} decisiones={a.decisiones ?? []} sentidos={sentidos} puedeRegistrar={puedeTrabajar} coordina={coordina} />

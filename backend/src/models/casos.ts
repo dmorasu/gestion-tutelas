@@ -271,6 +271,20 @@ export class Actuacion extends Model {
   @Column(DataType.TEXT)
   declare loQueSePide: string | null
 
+  // Petición al despacho (reunión del 23-nov): las solicitudes de la etapa, del catálogo PETICION.
+  // Las marca el auxiliar al enviar a revisión y van en la ficha técnica; loQueSePide queda como precisión libre
+  @Default([])
+  @AllowNull(false)
+  @Column(DataType.ARRAY(DataType.INTEGER))
+  declare peticionIds: number[]
+
+  // Se entregó un escrito de emergencia y falta el escrito completo que lo sigue (alcance de la
+  // contestación o respuesta del requerimiento o del desacato). Mientras tanto la actuación no se cierra
+  @Default(false)
+  @AllowNull(false)
+  @Column(DataType.BOOLEAN)
+  declare alcancePendiente: boolean
+
   // Impugnación: quién impugna y cuándo la pidió la entidad (ANS-03)
   @Column(DataType.STRING(15))
   declare origenImpugnacion: 'ACCIONANTE' | 'ACCIONADO' | null
@@ -378,6 +392,13 @@ export class Escrito extends Model {
   @AllowNull(false)
   @Column(DataType.STRING(30))
   declare tipo: string
+
+  // PRINCIPAL: el escrito de la etapa. EMERGENCIA: el que sale antes, mientras llegan los insumos
+  // (reunión del 23-nov). ALCANCE: el escrito completo que sigue a una emergencia
+  @Default('PRINCIPAL')
+  @AllowNull(false)
+  @Column(DataType.STRING(12))
+  declare clase: 'PRINCIPAL' | 'EMERGENCIA' | 'ALCANCE'
 
   // BORRADOR: el auxiliar lo está armando. EN_REVISION: con el revisor. AJUSTE_INTERNO: el revisor lo devolvió al auxiliar.
   // ENTREGADO, DEVUELTO o APROBADO: según la respuesta de la entidad

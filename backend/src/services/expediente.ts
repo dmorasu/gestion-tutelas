@@ -24,13 +24,19 @@ const datosActuacion = async (actuacionId: number) => {
   return a
 }
 
-// Sube un documento nuevo al expediente de la actuación
+// Sube un documento nuevo al expediente de la actuación. reemplazar: el documento que la app vuelve a
+// generar (la ficha técnica al enviar a revisión y otra vez al entregar) pisa el anterior con el mismo
+// nombre en la misma carpeta, en vez de dejar dos copias en el paquete que ve la entidad
 export const guardarEnExpediente = async (d: {
   actuacionId: number, sub: Subcarpeta, nombre: string, contenido: Buffer, tipoMime?: string | null,
-  tipo: Archivo['tipo'], escritoId?: number | null, usuarioId?: number | null
+  tipo: Archivo['tipo'], escritoId?: number | null, usuarioId?: number | null, reemplazar?: boolean
 }) => {
   const a = await datosActuacion(d.actuacionId)
-  const ubicacion = await guardarArchivo(carpetaActuacion(a.caso!, a.etapa, d.sub), d.nombre, d.contenido, d.tipoMime)
+  const ubicacion = await guardarArchivo(carpetaActuacion(a.caso!, a.etapa, d.sub), d.nombre, d.contenido, d.tipoMime, d.reemplazar)
+  if (d.reemplazar) {
+    const anterior = await Archivo.findOne({ where: { actuacionId: a.id, ruta: ubicacion.ruta } })
+    if (anterior) return anterior.update({ tamano: d.contenido.length, ...ubicacion, usuarioId: d.usuarioId ?? null })
+  }
   return Archivo.create({
     nombre: d.nombre, tipoMime: d.tipoMime ?? null, tamano: d.contenido.length, tipo: d.tipo, ...ubicacion,
     casoId: a.casoId, actuacionId: a.id, escritoId: d.escritoId ?? null, usuarioId: d.usuarioId ?? null

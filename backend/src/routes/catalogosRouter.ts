@@ -6,7 +6,7 @@ import { manejarErroresEntrada } from '../middleware/validacion'
 import { requiereRol } from '../middleware/auth'
 import { cargarParametros, parametro, PARAMETROS_BASE } from '../services/parametros'
 import { cargarCalendario } from '../services/calendario'
-import { ROLES, ETAPAS, PLANTILLAS, TIPOS_PETICION } from '../services/constantes'
+import { ROLES, ETAPAS, ETAPAS_PROCESO, PLANTILLAS, TIPOS_PETICION } from '../services/constantes'
 import { MARCADORES, PLANTILLAS_BASE, vistaPrevia, enviarPrueba } from '../services/buzon/correosSalida'
 import type { CodigoPlantilla } from '../services/constantes'
 import { responderError, ErrorNegocio } from '../utils/errores'
@@ -85,7 +85,7 @@ router.get('/motivos-devolucion', async (_req, res) => {
   res.json(await MotivoDevolucion.findAll({ where: { activo: true }, order: [['nombre', 'ASC']] }))
 })
 
-// ── Catálogos editables: derechos, tipos de respuesta y matriz de insumos (reunión 18-nov) ──
+// ── Catálogos editables: derechos, tipos de respuesta, matriz de insumos (reunión 18-nov) y peticiones (23-nov) ──
 // Los formularios piden solo los activos; Configuración los pide todos (?todos=1)
 router.get('/items', query('catalogo').isIn(CATALOGOS), manejarErroresEntrada, async (req, res) => {
   try {
@@ -109,10 +109,13 @@ router.post('/items', administran, body('catalogo').isIn(CATALOGOS), body('nombr
     const { catalogo, nombre } = req.body
     // La matriz de insumos siempre va por grupo y clase: así se filtra al pedir datos o insumos
     if (catalogo === 'INSUMO' && !(req.body.grupo?.trim() && req.body.clase)) throw new ErrorNegocio('Indique el grupo y si es documento o información')
+    // La petición siempre es de una etapa: el auxiliar solo ve las de la etapa de su actuación
+    if (catalogo === 'PETICION' && !(ETAPAS_PROCESO as readonly string[]).includes(req.body.grupo)) throw new ErrorNegocio('Indique la etapa de la petición')
     const orden = (await ItemCatalogo.max<number, ItemCatalogo>('orden', { where: { catalogo } })) ?? 0
+    const agrupado = catalogo === 'INSUMO' || catalogo === 'PETICION'
     // Lo crea la firma: no es supuesto
     res.status(201).json(await ItemCatalogo.create({
-      catalogo, nombre, grupo: catalogo === 'INSUMO' ? req.body.grupo.trim() : null, clase: catalogo === 'INSUMO' ? req.body.clase : null, orden: orden + 1
+      catalogo, nombre, grupo: agrupado ? req.body.grupo.trim() : null, clase: catalogo === 'INSUMO' ? req.body.clase : null, orden: orden + 1
     }))
   } catch (error) {
     responderError(res, error)
@@ -128,6 +131,10 @@ router.put('/items/:id', administran, param('id').isInt(), ...validarItem, body(
     const cambios: Record<string, unknown> = {}
     for (const campo of ['nombre', 'activo', 'supuesto'] as const) if (campo in req.body) cambios[campo] = req.body[campo]
     if (item.catalogo === 'INSUMO') for (const campo of ['grupo', 'clase'] as const) if (req.body[campo]) cambios[campo] = req.body[campo]
+    if (item.catalogo === 'PETICION' && req.body.grupo) {
+      if (!(ETAPAS_PROCESO as readonly string[]).includes(req.body.grupo)) throw new ErrorNegocio('Indique la etapa de la petición')
+      cambios.grupo = req.body.grupo
+    }
     // Editarlo a mano es confirmarlo
     if (cambios.nombre !== undefined) cambios.supuesto = false
     await item.update(cambios)

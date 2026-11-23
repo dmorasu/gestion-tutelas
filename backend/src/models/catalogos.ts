@@ -181,9 +181,11 @@ export class PlantillaCorreo extends Model {
 // - DERECHO: derechos fundamentales que el auxiliar marca en el caso (ficha y correo de insumos)
 // - TIPO_RESPUESTA: tipo de respuesta del escrito (tiempos por tipo y reglas como la del escrito de emergencia)
 // - INSUMO: matriz de insumos y anexos del cliente, por grupo; cada ítem es un documento o una información
+// - PETICION: lo que se le pide al despacho, por etapa (reunión del 23-nov); el grupo es el código de la
+//   etapa (ACCION, IMPUGNACION…). Va en la ficha técnica
 // Los que la semilla carga sin confirmación del cliente quedan como supuesto hasta que alguien los confirme
 // =====================================
-export const CATALOGOS = ['DERECHO', 'TIPO_RESPUESTA', 'INSUMO'] as const
+export const CATALOGOS = ['DERECHO', 'TIPO_RESPUESTA', 'INSUMO', 'PETICION'] as const
 export type TipoCatalogo = typeof CATALOGOS[number]
 
 @Table({ tableName: 'items_catalogo' })
@@ -192,7 +194,8 @@ export class ItemCatalogo extends Model {
   @Column(DataType.STRING(20))
   declare catalogo: TipoCatalogo
 
-  // Solo la matriz de insumos se agrupa (generales, proceso contravencional, cobro coactivo…)
+  // La matriz de insumos se agrupa (generales, proceso contravencional, cobro coactivo…) y las
+  // peticiones van por etapa (código de la etapa)
   @Column(DataType.STRING(120))
   declare grupo: string | null
 

@@ -6,6 +6,7 @@ import type { ArchivoCaso, EscritoFila, Insumo } from "../PanelTrabajo"
 // =====================================
 // RUTA DE LA ACTUACIÓN
 // Los pasos del flujo en una línea: qué se hizo (con fecha y quién), en qué paso va y qué falta,
+// (reunión 23-nov: no hay paso de aprobación; el envío sin devolución se entiende aprobado)
 // con el responsable y el plazo. Sale de los mismos datos del flujo: no guarda nada aparte.
 // =====================================
 
@@ -13,14 +14,14 @@ type Persona = { nombre: string } | null
 type Actuacion = {
   estado: string, fechaAsignacion: string, fechaAsumida?: string | null, fechaCierre?: string | null, fechaLimiteEntrega: string | null
   requiereInsumos: boolean, datosFaltantesPendientes: boolean, auxiliar: Persona, revisor: Persona
-  insumos: Insumo[], escritos: EscritoFila[], radicaciones?: { fechaRadicacion: string }[]
+  insumos: Insumo[], escritos: EscritoFila[], radicaciones?: { fechaRadicacion: string }[], alcancePendiente?: boolean
 }
 type Paso = { nombre: string, fecha?: string | null, quien?: string | null, nota?: string | null }
 
 // En qué paso está cada estado (índices de PASOS)
 const PASO_DEL_ESTADO: Record<string, number> = {
   POR_ASUMIR: 1, EN_INSUMOS: 2, EN_ANALISIS: 3, EN_PROYECCION: 3, AJUSTE_INTERNO: 3, DEVUELTO: 3,
-  EN_REVISION: 4, ENTREGADO: 5, APROBADO: 6, RADICADO: 7, CERRADA: 8
+  EN_REVISION: 4, ENTREGADO: 5, APROBADO: 5, RADICADO: 6, CERRADA: 7
 }
 
 export default function RutaActuacion({ actuacion: a, archivos }: { actuacion: Actuacion, archivos: ArchivoCaso[] }) {
@@ -41,7 +42,6 @@ export default function RutaActuacion({ actuacion: a, archivos }: { actuacion: A
     { nombre: escrito ? `Escrito V${escrito.version}` : "Escrito", quien: escrito ? auxiliar : null },
     { nombre: "Revisión", fecha: escrito?.fechaEnvioRevision, quien: escrito?.fechaEnvioRevision ? revisor : null, nota: a.estado === "AJUSTE_INTERNO" ? "Devuelta por el revisor" : null },
     { nombre: "Entrega", fecha: escrito?.fechaEntregaEntidad },
-    { nombre: "Aprobación", fecha: escrito?.fechaAprobacion },
     { nombre: "Radicación", fecha: radicacion },
     { nombre: "Cierre", fecha: a.fechaCierre }
   ]
@@ -65,9 +65,12 @@ export default function RutaActuacion({ actuacion: a, archivos }: { actuacion: A
         hasta: devolucion?.fechaLimiteCorreccion ? fechaHora(devolucion.fechaLimiteCorreccion) : plazo, detalle: devolucion?.observacion ?? null
       }
       case "EN_REVISION": return { accion: `Revisar la V${escrito?.version ?? 1}: entregarla a la entidad o devolverla al auxiliar`, quien: revisor, hasta: plazo }
-      case "ENTREGADO": return { accion: "Esperar la respuesta de la entidad (acuse, aprobación o devolución) y registrarla", quien: auxiliar }
-      case "APROBADO": return { accion: "Registrar la radicación cuando la entidad la informe", quien: auxiliar }
-      case "RADICADO": return { accion: "Cerrar la actuación", quien: `${revisor} o coordinación` }
+      // Sin devolución se entiende aprobado: lo que sigue es la radicación en el juzgado
+      case "ENTREGADO":
+      case "APROBADO": return a.alcancePendiente
+        ? { accion: "Proyectar el escrito completo que sigue al de emergencia cuando lleguen los insumos", quien: auxiliar }
+        : { accion: "Registrar una devolución si la entidad la envía; si no, registrar la radicación en el juzgado", quien: "Asistencia administrativa" }
+      case "RADICADO": return { accion: "Cerrar con el fallo favorable de contestación o impugnación", quien: `${revisor} o coordinación` }
       default: return null
     }
   })()

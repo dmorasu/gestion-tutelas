@@ -14,6 +14,11 @@ export type ItemCatalogo = {
 
 const CLASES = { DOCUMENTO: "Documento", INFORMACION: "Información" } as const
 
+// Las peticiones van por etapa (reunión 23-nov): el grupo es el código de la etapa
+const ETAPAS_PETICION: Record<string, string> = {
+  ACCION: "Contestación", IMPUGNACION: "Impugnación", CUMPLIMIENTO: "Cumplimiento", REQUERIMIENTO_PREVIO: "Requerimiento previo", DESACATO: "Desacato"
+}
+
 // Reglas que el sistema aplica a algunos ítems: se pueden renombrar o apagar, no cambiar de sentido
 const REGLAS: Record<string, string> = {
   EMERGENCIA: "Exige insumos pedidos",
@@ -24,7 +29,9 @@ export default function ListaCatalogo({ catalogo, items }: { catalogo: string, i
   const [pendiente, iniciar] = useTransition()
   const [editando, setEditando] = useState<number | null>(null)
   const esMatriz = catalogo === "INSUMO"
-  const grupos = esMatriz ? [...new Set(items.map(i => i.grupo ?? ""))] : [""]
+  const esPeticion = catalogo === "PETICION"
+  const agrupado = esMatriz || esPeticion
+  const grupos = esPeticion ? Object.keys(ETAPAS_PETICION) : esMatriz ? [...new Set(items.map(i => i.grupo ?? ""))] : [""]
 
   const ejecutar = (accion: () => Promise<Resultado>, mensaje: string, despues?: () => void) => iniciar(async () => {
     const r = await accion()
@@ -35,19 +42,27 @@ export default function ListaCatalogo({ catalogo, items }: { catalogo: string, i
 
   const agregar = (d: FormData) => ejecutar(() => crearItem({
     catalogo, nombre: String(d.get("nombre") ?? "").trim(),
-    ...(esMatriz && { grupo: String(d.get("grupo") ?? "").trim(), clase: String(d.get("clase") ?? "") })
+    ...(esMatriz && { grupo: String(d.get("grupo") ?? "").trim(), clase: String(d.get("clase") ?? "") }),
+    ...(esPeticion && { grupo: String(d.get("grupo") ?? "") })
   }), "Agregado")
 
   const renombrar = (item: ItemCatalogo, d: FormData) => ejecutar(() => guardarItem(item.id, {
     nombre: String(d.get("nombre") ?? "").trim(),
-    ...(esMatriz && { grupo: String(d.get("grupo") ?? "").trim(), clase: String(d.get("clase") ?? "") })
+    ...(esMatriz && { grupo: String(d.get("grupo") ?? "").trim(), clase: String(d.get("clase") ?? "") }),
+    ...(esPeticion && { grupo: String(d.get("grupo") ?? "") })
   }), "Guardado", () => setEditando(null))
+
+  const selectorEtapa = (valor: string | null, clase: string) => (
+    <select name="grupo" defaultValue={valor ?? "ACCION"} required className={clase}>
+      {Object.entries(ETAPAS_PETICION).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+    </select>
+  )
 
   return (
     <div className="space-y-4">
       <form action={agregar} className="tarjeta flex flex-wrap items-end gap-3 p-4">
         <div className="min-w-64 flex-1">
-          <label className="etiqueta">{esMatriz ? "Documento o información" : "Nombre"}</label>
+          <label className="etiqueta">{esMatriz ? "Documento o información" : esPeticion ? "Petición" : "Nombre"}</label>
           <input name="nombre" required maxLength={400} className="campo" />
         </div>
         {esMatriz && (
@@ -65,14 +80,15 @@ export default function ListaCatalogo({ catalogo, items }: { catalogo: string, i
             </div>
           </>
         )}
+        {esPeticion && <div className="w-52"><label className="etiqueta">Etapa</label>{selectorEtapa(null, "campo")}</div>}
         <button disabled={pendiente} className="boton-primario"><Plus size={15} />Agregar</button>
       </form>
 
       {grupos.map(grupo => {
-        const delGrupo = items.filter(i => !esMatriz || (i.grupo ?? "") === grupo)
+        const delGrupo = items.filter(i => !agrupado || (i.grupo ?? "") === grupo)
         return (
           <section key={grupo} className="tarjeta overflow-hidden">
-            {esMatriz && <h2 className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{grupo}</h2>}
+            {agrupado && <h2 className="border-b border-slate-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">{esPeticion ? ETAPAS_PETICION[grupo] : grupo}</h2>}
             <table className="tabla">
               <tbody>
                 {delGrupo.map(item => (
@@ -89,6 +105,7 @@ export default function ListaCatalogo({ catalogo, items }: { catalogo: string, i
                               </select>
                             </>
                           )}
+                          {esPeticion && selectorEtapa(item.grupo, "campo w-48")}
                           <button disabled={pendiente} className="boton-icono" title="Guardar" aria-label="Guardar"><Check size={15} /></button>
                           <button type="button" onClick={() => setEditando(null)} className="boton-icono" title="Cancelar" aria-label="Cancelar"><X size={15} /></button>
                         </form>

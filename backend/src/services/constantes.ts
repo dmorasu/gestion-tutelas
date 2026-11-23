@@ -163,7 +163,8 @@ export const DOCUMENTOS_ENTREGA = {
   DESACATO: 'Respuesta a incidente de desacato',
   AUTO_PRUEBAS: 'Respuesta auto de pruebas',
   NULIDAD: 'Solicitud de nulidad',
-  ALCANCE: 'Memorial / alcance a respuesta'
+  ALCANCE: 'Memorial / alcance a respuesta',
+  EMERGENCIA: 'Escrito de emergencia'
 } as const
 export type DocumentoEntrega = keyof typeof DOCUMENTOS_ENTREGA
 
@@ -171,3 +172,22 @@ export const DOCUMENTO_DE_ESCRITO: Partial<Record<TipoEscrito, DocumentoEntrega>
   ACCION: 'CONTESTACION', IMPUGNACION: 'IMPUGNACION', CUMPLIMIENTO: 'MEMORIAL_CUMPLIMIENTO',
   REQUERIMIENTO_PREVIO: 'REQUERIMIENTO', DESACATO: 'DESACATO'
 }
+
+// =====================================
+// ESCRITO DE EMERGENCIA (reunión del 23-nov)
+// Sale mientras llegan los insumos pedidos, solo en estas etapas, y siempre deja pendiente el escrito
+// completo que lo sigue. plantilla: el Word de la firma en backend/recursos/plantillas
+// =====================================
+export type ReglaEmergencia = { plantilla: string, escrito: string, alcance: string }
+
+const EMERGENCIA_TUTELA: Partial<Record<Etapa, ReglaEmergencia>> = {
+  ACCION: { plantilla: 'emergencia-contestacion', escrito: 'Escrito de emergencia (contestación)', alcance: 'Alcance de la contestación' },
+  REQUERIMIENTO_PREVIO: { plantilla: 'emergencia-requerimiento-previo', escrito: 'Escrito de emergencia (requerimiento previo)', alcance: 'Respuesta al requerimiento previo' },
+  DESACATO: { plantilla: 'emergencia-desacato', escrito: 'Escrito de emergencia (desacato)', alcance: 'Respuesta al incidente de desacato' }
+}
+const EMERGENCIA_CUMPLIMIENTO: Partial<Record<Etapa, ReglaEmergencia>> = {
+  REQUERIMIENTO_PREVIO: { plantilla: 'emergencia-requerimiento-cumplimiento', escrito: 'Escrito de emergencia (requerimiento previo)', alcance: 'Respuesta al requerimiento previo' }
+}
+
+export const reglaEmergencia = (tipoSolicitud: string, etapa: Etapa): ReglaEmergencia | null =>
+  (tipoSolicitud === 'TUTELA' ? EMERGENCIA_TUTELA[etapa] : tipoSolicitud === 'ACCION_CUMPLIMIENTO' ? EMERGENCIA_CUMPLIMIENTO[etapa] : undefined) ?? null

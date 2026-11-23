@@ -1,6 +1,6 @@
 # Nodex Tutelas: resumen técnico para continuar
 
-_Actualizado: 2026-11-22 · rama `desarrollo`_
+_Actualizado: 2026-11-23 · ramas `desarrollo` y `main` (versión de pruebas)_
 
 App para recibir, repartir, trabajar, entregar y medir las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
 
@@ -198,6 +198,15 @@ Pantallas:
 
 ## Pendientes
 
+**Ajustes de la firma del 23-nov** (hechos):
+- **Alertas:** ya estaban en dos cortes; la asistencia revisa, envía sueltas y reenvía.
+- **Ficha técnica:** el auxiliar la completa al enviar a revisión (`POST /casos/actuaciones/:id/revision` con `ficha`): hechos, derechos y petición al despacho. La petición sale del catálogo nuevo `PETICION`, agrupado por código de etapa, con supuestos para contestación e impugnación, y se guarda en `Actuacion.peticionIds`, más `loQueSePide` como precisión. La ficha se genera ahí y se reemplaza al entregar, con `guardarEnExpediente({ reemplazar })`. La plantilla tiene ahora la fila "Petición" (`plantillas-word.ts`).
+- **Aprobación:** no se registra; el envío sin devolución se entiende aprobado. El tipo `APROBACION` queda en la API solo por compatibilidad.
+- **Radicación:** solo asistencia y coordinación, y después de la entrega. Pendiente: automatizar la consulta con Icarus.
+- **Cierre:** la causal normal es "Fallo favorable en contestación o impugnación" y exige el último fallo de la instancia más alta favorable. La PQRS tiene su causal propia. Se conservan las causales excepcionales del manual.
+- **Escrito de emergencia:** `POST /casos/actuaciones/:id/emergencia`, con las reglas en `constantes.reglaEmergencia`. Va en contestación, requerimiento previo y desacato de la tutela, y en requerimiento previo de la acción de cumplimiento, siempre con insumos pedidos. Marca `Actuacion.alcancePendiente`, y el escrito siguiente es de clase `ALCANCE` (`Escrito.clase`: `PRINCIPAL`, `EMERGENCIA` o `ALCANCE`). Cada clase cuenta su V1 y V2. Sin el alcance entregado, la actuación no se cierra. **Faltan los cuatro modelos Word de la firma** en `backend/recursos/plantillas`: `emergencia-contestacion`, `emergencia-requerimiento-previo`, `emergencia-desacato` y `emergencia-requerimiento-cumplimiento`. Se llenan con los marcadores de `valoresEscrito` en `documentosWord.ts`; mientras no estén, el botón aparece apagado.
+- **Unir casos:** solo con el mismo accionante y, en lo judicial, la misma raíz de 21 dígitos (cambia solo la instancia).
+
 **Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fases 1 a 7 hechas, y el detalle del caso rediseñado (Actuación con encabezado de indicadores y tarjetas; Información con hechos y derechos primero). **Pendientes:** las plantillas de emergencia y falta de legitimación (los modelos los manda la firma), llenar `CORREOS_ALERTAS` y confirmar con la firma las horas de corte (`HORAS_CORTE_ALERTAS`) y el fin de la jornada (`HORA_FIN_JORNADA`, supuesto 17:00). Fase 6 (2026-11-22): alertas al cliente en dos cortes al día; ver `alertas.ts`. Fase 7 (2026-11-22): tramos, tiempos por paso y productividad diaria; ver `tiempos.ts`. Al arrancar se reconstruyeron 94 tramos desde la bitácora. Fase 5: etapa excepcional `NULIDAD` (registro manual, Excel o asunto `[NULIDAD]`); ningún equipo la atiende, así que el reparto la da a cualquier auxiliar con cupo; ese auxiliar la clasifica (`POST /casos/actuaciones/:id/clasificar-nulidad`) en una de las cinco etapas (`ETAPAS_PROCESO`), la actuación pasa a esa etapa con `origenNulidad`, se reparte al equipo de la etapa, se recalculan plazos, sus documentos van a la carpeta de la etapa y queda en la bitácora con la nota. No se puede clasificar en una etapa que ya está abierta en el caso ni empezar el escrito antes de clasificar. Fase 4: Fase 4: ficha técnica y solicitud del expediente en Word (`documentosWord.ts`); datos de la entidad y del apoderado en parámetros (`ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `APODERADO_*`), que hay que llenar. Faltan los modelos de emergencia y falta de legitimación. Fase 3: Fase 3: correos con los modelos; datos faltantes con casillas de la lista general de la matriz (`Actuacion.datosSolicitados`, el ANS corre cuando llega todo lo pedido); insumos de la matriz por grupo (`SolicitudInsumo.itemCatalogoId` y `clase`), que exigen el resumen de los hechos y los derechos del caso (`Caso.resumenHechos`, `Caso.derechosIds`, `PATCH /casos/:id/ficha`); confirmaciones que listan lo que llegó; entrega con documentos entregados y anexos (`Escrito.documentosEntregados` y `anexosEntregados`); tipo de respuesta por actuación (`Actuacion.tipoRespuestaId`); el escrito de emergencia no se empieza ni va a revisión sin insumos pedidos; la observación del revisor se lee en la bitácora; `ENTIDAD_NOMBRE` en parámetros. Antes, fases 1 y 2 (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad; radicado de otra instancia al registrar, casos relacionados con aviso al auxiliar, unir casos, facturación por radicado). La temeridad la propone hoy la app como antecedente: cuando los derechos sean catálogo (fase 4) se sugerirá sola si coinciden. Siguen: 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
 
 **Para mañana (con el usuario):**
@@ -219,7 +228,7 @@ Pantallas:
    - Usuario propio de base y `tablero_lectura` para Power BI.
    - PM2, Nginx y HTTPS.
    - Puerta de enlace de Power BI en la red de la oficina.
-   - El `next build` del frontend no se ha corrido en esta sesión (el servidor de desarrollo estaba encendido): correrlo antes de publicar.
+   - Versión de pruebas: paso a paso en `Docs/PRODUCCION.md` §0 (builds de backend y frontend probados el 2026-11-23).
 3. **Configuración en la app:**
    - `FECHA_INICIO_PLAN` (sin ella no se miden ANS-04 ni ANS-11 ni hay descuentos).
    - Destinatarios `CORREOS_*`, con PST (D25).

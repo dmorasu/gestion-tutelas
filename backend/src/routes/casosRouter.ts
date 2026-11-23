@@ -8,14 +8,14 @@ import { registrarAsignacion, recalcularPlazos } from '../services/registroCasos
 import { revisorDeEquipo } from '../services/reparto'
 import { semaforo } from '../services/plazos'
 import { parametro } from '../services/parametros'
-import { DOCUMENTOS_ENTREGA, DOCUMENTO_DE_ESCRITO, ETAPAS_PROCESO, ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION } from '../services/constantes'
+import { DOCUMENTOS_ENTREGA, DOCUMENTO_DE_ESCRITO, ETAPAS_PROCESO, ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, ESTADOS_ACTUACION, CRITICIDADES, BUZONES, TIPOS_ESCRITO, TIPOS_PETICION, reglaEmergencia } from '../services/constantes'
 import { normalizarRadicado, normalizarRadicadoPqrs, raizProceso } from '../utils/radicado'
 import { dondeRadicado, sugerirRelaciones, relacionesDe, decidirRelacion, relacionarManual, unirCasos, NOMBRES_RELACION } from '../services/relacionesCasos'
 import { TIPOS_RELACION } from '../models/casos'
 import { crearPqrsLigada } from '../services/pqrs'
 import { exigirResponsable, exigirRevisor, exigirQuienPideInsumos, exigirQuienReasigna, responsablesDelRegistro, alcanceActuaciones } from '../services/permisosActuacion'
 import * as flujo from '../services/flujoEscritos'
-import { generarFicha } from '../services/documentosWord'
+import { existePlantilla, generarFicha } from '../services/documentosWord'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
 import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
@@ -239,7 +239,12 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
       })
     ])
     const datos = caso.toJSON() as Record<string, unknown> & { actuaciones?: Record<string, unknown>[] }
-    datos.actuaciones = (caso.actuaciones ?? []).map(a => ({ ...a.toJSON(), semaforo: a.estado === 'CERRADA' ? null : semaforoDe(a) }))
+    // Reunión 23-nov: si la etapa admite escrito de emergencia y si ya está el modelo de la firma
+    const emergencias = await Promise.all((caso.actuaciones ?? []).map(async a => {
+      const regla = reglaEmergencia(caso.tipoSolicitud, a.etapa)
+      return regla ? { escrito: regla.escrito, alcance: regla.alcance, modelo: await existePlantilla(regla.plantilla) } : null
+    }))
+    datos.actuaciones = (caso.actuaciones ?? []).map((a, i) => ({ ...a.toJSON(), semaforo: a.estado === 'CERRADA' ? null : semaforoDe(a), emergencia: emergencias[i] }))
     // D24: la PQRS ligada a esta tutela, o la tutela de la que nace esta PQRS
     const relacionados = await Caso.findAll({
       where: { [Op.or]: [{ casoRelacionadoId: caso.id }, ...(caso.casoRelacionadoId ? [{ id: caso.casoRelacionadoId }] : [])] },
@@ -251,7 +256,7 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     // al abrir el caso: así aparecen los de antes de la regla y los que llegaron después de este
     await sugerirRelaciones(caso.id).catch(error => console.error('❌ Relaciones del caso', error))
     const vinculos = await relacionesDe(caso.id)
-    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, documentosEntrega: DOCUMENTOS_ENTREGA, documentoDeEscrito: DOCUMENTO_DE_ESCRITO, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.MOTIVOS_CIERRE, sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, documentosEntrega: DOCUMENTOS_ENTREGA, documentoDeEscrito: DOCUMENTO_DE_ESCRITO, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.motivosDeCierre(caso.tipoSolicitud), sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }
@@ -542,8 +547,18 @@ router.post('/actuaciones/:id/insumos/recibidos', param('id').isInt(), body('ins
     fecha: fechaOpcional(req.body.fecha), enviarAcuse: !!req.body.enviarAcuse, usuarioId: req.usuario!.id
   })))
 
-router.post('/actuaciones/:id/revision', param('id').isInt(), manejarErroresEntrada,
-  paso('RESPONSABLE', (req, a) => flujo.enviarARevision({ actuacionId: a.id, usuarioId: req.usuario!.id })))
+// Reunión 23-nov: al enviar a revisión el auxiliar completa la ficha técnica (hechos, derechos y
+// petición al despacho) y la ficha se genera con eso
+router.post('/actuaciones/:id/revision', param('id').isInt(),
+  body('ficha.resumenHechos').optional({ values: 'null' }).isString().isLength({ max: 4000 }).withMessage('El resumen va hasta 4.000 caracteres'),
+  body('ficha.derechosIds').optional().isArray(), body('ficha.peticionIds').optional().isArray(),
+  body('ficha.loQueSePide').optional({ values: 'null' }).isString().isLength({ max: 4000 }), manejarErroresEntrada,
+  paso('RESPONSABLE', (req, a) => flujo.enviarARevision({ actuacionId: a.id, ficha: req.body.ficha, usuarioId: req.usuario!.id })))
+
+// Escrito de emergencia con el modelo de la firma (reunión 23-nov): exige insumos pedidos y deja
+// pendiente el alcance
+router.post('/actuaciones/:id/emergencia', param('id').isInt(), manejarErroresEntrada,
+  paso('RESPONSABLE', (req, a) => flujo.generarEmergencia({ actuacionId: a.id, usuarioId: req.usuario!.id })))
 
 router.post('/actuaciones/:id/devolver-auxiliar', param('id').isInt(), body('observacion').isString(), manejarErroresEntrada,
   paso('REVISOR', (req, a) => flujo.devolverAlAuxiliar({ actuacionId: a.id, observacion: req.body.observacion, usuarioId: req.usuario!.id })))
@@ -567,7 +582,8 @@ router.post('/actuaciones/:id/respuesta', param('id').isInt(),
     fecha: fechaOpcional(req.body.fecha), devolucion: req.body.devolucion, usuarioId: req.usuario!.id
   })))
 
-router.post('/actuaciones/:id/radicacion', param('id').isInt(), body('fecha').isISO8601().withMessage('Indique la fecha de radicación'), manejarErroresEntrada,
+// La radicación en el juzgado la registra la asistencia administrativa (reunión del 23-nov)
+router.post('/actuaciones/:id/radicacion', requiereRol(ROLES.ASISTENTE, ROLES.COORDINADOR), param('id').isInt(), body('fecha').isISO8601().withMessage('Indique la fecha de radicación'), manejarErroresEntrada,
   paso('RESPONSABLE', (req, a) => flujo.registrarRadicacion({ actuacionId: a.id, fecha: new Date(req.body.fecha), usuarioId: req.usuario!.id })))
 
 router.post('/actuaciones/:id/cerrar', requiereRol(ROLES.COORDINADOR, ROLES.ASISTENTE, ROLES.REVISOR), param('id').isInt(), body('motivo').isString(), manejarErroresEntrada,

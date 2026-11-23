@@ -1,7 +1,7 @@
 import { Op } from 'sequelize'
 import { Actuacion, Archivo, Caso, Correo, Decision, Devolucion, Escrito, HistorialCaso, ItemCatalogo, RadicacionJuzgado, SolicitudInsumo, Usuario } from '../models'
 import { enviarPlantilla, listaCorreo, NOTA_EXPEDIENTE } from './buzon/correosSalida'
-import { generarFicha, solicitudExpediente } from './documentosWord'
+import { escritoEmergencia, existePlantilla, generarFicha, solicitudExpediente, versionDeClase } from './documentosWord'
 import { carpetaCaso, compartirCarpeta, moverArchivo } from './almacenamiento'
 import { carpetaActuacion, guardarEnExpediente } from './expediente'
 import { asignacionEfectiva, finDeDiasHabilesSiguientes } from './plazos'
@@ -9,7 +9,7 @@ import { parametro } from './parametros'
 import { recalcularPlazos } from './registroCasos'
 import { repartir, revisorDeEquipo } from './reparto'
 import { textoFechaHora } from '../utils/fechaColombia'
-import { tipoEscrito, DOCUMENTOS_ENTREGA, ETAPAS_PROCESO, NOMBRES_ETAPAS, type DocumentoEntrega, type Etapa } from './constantes'
+import { reglaEmergencia, tipoEscrito, DOCUMENTOS_ENTREGA, ETAPAS_PROCESO, NOMBRES_ETAPAS, type DocumentoEntrega, type Etapa } from './constantes'
 import { ErrorNegocio } from '../utils/errores'
 
 // =====================================
@@ -21,7 +21,7 @@ import { ErrorNegocio } from '../utils/errores'
 // =====================================
 
 const cargarActuacion = async (actuacionId: number) => {
-  const a = await Actuacion.findByPk(actuacionId, { include: [{ model: Caso, attributes: ['id', 'radicado', 'numeroInterno'] }] })
+  const a = await Actuacion.findByPk(actuacionId, { include: [{ model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'tipoSolicitud'] }] })
   if (!a?.caso) throw new ErrorNegocio('La actuación no existe', 404)
   if (a.estado === 'CERRADA') throw new ErrorNegocio('La actuación está cerrada')
   return a
@@ -171,17 +171,62 @@ const exigirInsumosSiEmergencia = async (a: Actuacion) => {
   }
 }
 
+// Reunión 23-nov: después de entregar el escrito de emergencia sigue el escrito completo (alcance)
+const sigueAlcance = (a: Actuacion, ultimo: Escrito | null) =>
+  !!ultimo && ultimo.clase === 'EMERGENCIA' && a.alcancePendiente && ['ENTREGADO', 'APROBADO'].includes(ultimo.estado)
+
 // El escrito que se está armando; si no hay o el último fue devuelto, empieza la versión siguiente
+// (de la misma clase: la corrección de una emergencia es otra emergencia). Tras una emergencia
+// entregada, empieza el alcance
 export const escritoEnElaboracion = async (actuacionId: number) => {
   const a = await cargarActuacion(actuacionId)
   if (a.etapa === 'NULIDAD') throw new ErrorNegocio('Clasifique primero en qué etapa queda la nulidad')
   await exigirInsumosSiEmergencia(a)
   const ultimo = await Escrito.findOne({ where: { actuacionId }, order: [['version', 'DESC']] })
   if (ultimo && ABIERTOS.includes(ultimo.estado)) return ultimo
-  if (ultimo && ultimo.estado !== 'DEVUELTO') throw new ErrorNegocio(`La V${ultimo.version} ya se entregó: espere la respuesta de la entidad`)
-  const escrito = await Escrito.create({ actuacionId, version: (ultimo?.version ?? 0) + 1, tipo: tipoEscrito(a), estado: 'BORRADOR' })
-  if (['POR_ASUMIR', 'EN_ANALISIS', 'DEVUELTO'].includes(a.estado)) await a.update({ estado: 'EN_PROYECCION' })
+  const alcance = sigueAlcance(a, ultimo)
+  if (ultimo && ultimo.estado !== 'DEVUELTO' && !alcance) throw new ErrorNegocio(`La V${ultimo.version} ya se entregó: espere la respuesta de la entidad`)
+  const clase = alcance ? 'ALCANCE' : ultimo?.estado === 'DEVUELTO' ? ultimo.clase : 'PRINCIPAL'
+  const escrito = await Escrito.create({ actuacionId, version: (ultimo?.version ?? 0) + 1, tipo: tipoEscrito(a), clase, estado: 'BORRADOR' })
+  if (['POR_ASUMIR', 'EN_ANALISIS', 'DEVUELTO', ...(alcance ? ['ENTREGADO', 'APROBADO', 'RADICADO'] : [])].includes(a.estado)) await a.update({ estado: 'EN_PROYECCION' })
   return escrito
+}
+
+// =====================================
+// ESCRITO DE EMERGENCIA (reunión del 23-nov)
+// En contestación, requerimiento previo y desacato de la tutela, y en requerimiento previo de la acción
+// de cumplimiento, el auxiliar puede sacar desde la app un escrito de emergencia con el modelo de la
+// firma, siempre que ya haya pedido los insumos. Queda pendiente el escrito completo (alcance), que
+// se arma cuando llegan; la actuación no se cierra sin él
+// =====================================
+export const generarEmergencia = async (d: { actuacionId: number, usuarioId: number }) => {
+  const a = await cargarActuacion(d.actuacionId)
+  const regla = reglaEmergencia(a.caso!.tipoSolicitud, a.etapa)
+  if (!regla) throw new ErrorNegocio('El escrito de emergencia solo va en contestación, requerimiento previo y desacato de la tutela, y en requerimiento previo de la acción de cumplimiento')
+  if (!(await SolicitudInsumo.count({ where: { actuacionId: a.id } }))) throw new ErrorNegocio('Primero pida los insumos: el escrito de emergencia sale mientras llegan')
+  // Antes de crear nada: sin el modelo de la firma no hay escrito que generar
+  if (!(await existePlantilla(regla.plantilla))) throw new ErrorNegocio(`Falta el modelo del ${regla.escrito.toLowerCase()}: la firma debe entregarlo para poder generarlo`)
+
+  const ultimo = await Escrito.findOne({ where: { actuacionId: a.id }, order: [['version', 'DESC']] })
+  let escrito: Escrito
+  if (ultimo && ABIERTOS.includes(ultimo.estado)) {
+    // Un borrador vacío del escrito de la etapa se vuelve la emergencia; si ya tiene el Word, no se pisa
+    if (ultimo.clase !== 'EMERGENCIA') {
+      if (ultimo.estado !== 'BORRADOR' || ultimo.clase !== 'PRINCIPAL' || await Archivo.count({ where: { escritoId: ultimo.id, tipo: 'ESCRITO' } })) {
+        throw new ErrorNegocio('Ya hay un escrito en elaboración: el de emergencia va antes de proyectar el escrito de la etapa')
+      }
+      await ultimo.update({ clase: 'EMERGENCIA' })
+    }
+    escrito = ultimo
+  } else if (!ultimo || (ultimo.estado === 'DEVUELTO' && ultimo.clase === 'EMERGENCIA')) {
+    escrito = await Escrito.create({ actuacionId: a.id, version: (ultimo?.version ?? 0) + 1, tipo: tipoEscrito(a), clase: 'EMERGENCIA', estado: 'BORRADOR' })
+  } else {
+    throw new ErrorNegocio(ultimo.clase === 'EMERGENCIA' ? `Ya se entregó el escrito de emergencia: sigue la ${regla.alcance.toLowerCase()}` : 'El escrito de la etapa ya se entregó: no cabe uno de emergencia')
+  }
+  const word = await escritoEmergencia({ actuacionId: a.id, escrito })
+  const archivo = await guardarEnExpediente({ actuacionId: a.id, sub: `Escritos/V${escrito.version}`, ...word, tipo: 'ESCRITO', escritoId: escrito.id, usuarioId: d.usuarioId })
+  await a.update({ alcancePendiente: true, ...(['POR_ASUMIR', 'EN_ANALISIS', 'EN_INSUMOS', 'DEVUELTO'].includes(a.estado) && { estado: 'EN_PROYECCION' }) })
+  return { escritoId: escrito.id, archivo: { id: archivo.id, nombre: archivo.nombre }, alcance: regla.alcance }
 }
 
 const escritoActual = async (actuacionId: number, estados: string[], mensaje: string) => {
@@ -190,11 +235,47 @@ const escritoActual = async (actuacionId: number, estados: string[], mensaje: st
   return escrito
 }
 
-export const enviarARevision = async (d: { actuacionId: number, usuarioId: number }) => {
+// Datos de la ficha técnica que el auxiliar completa al enviar a revisión (reunión del 23-nov)
+export type DatosFicha = { resumenHechos?: string | null, derechosIds?: number[], peticionIds?: number[], loQueSePide?: string | null }
+
+const guardarDatosFicha = async (a: Actuacion, f: DatosFicha) => {
+  const caso = await Caso.findByPk(a.casoId)
+  if (!caso) throw new ErrorNegocio('El caso no existe', 404)
+  const delCaso: Partial<Caso> = {}
+  if (f.resumenHechos !== undefined) delCaso.resumenHechos = String(f.resumenHechos ?? '').trim().slice(0, 4000) || null
+  if (f.derechosIds) {
+    const ids = [...new Set(f.derechosIds.map(Number).filter(Boolean))]
+    if ((await ItemCatalogo.count({ where: { id: ids, catalogo: 'DERECHO' } })) !== ids.length) throw new ErrorNegocio('Algún derecho no está en el catálogo')
+    delCaso.derechosIds = ids
+  }
+  if (Object.keys(delCaso).length) await caso.update(delCaso)
+  const deActuacion: Partial<Actuacion> = {}
+  if (f.peticionIds) {
+    const ids = [...new Set(f.peticionIds.map(Number).filter(Boolean))]
+    if ((await ItemCatalogo.count({ where: { id: ids, catalogo: 'PETICION', grupo: a.etapa } })) !== ids.length) throw new ErrorNegocio('Alguna petición no es de esta etapa')
+    deActuacion.peticionIds = ids
+  }
+  if (f.loQueSePide !== undefined) deActuacion.loQueSePide = String(f.loQueSePide ?? '').trim().slice(0, 4000) || null
+  if (Object.keys(deActuacion).length) await a.update(deActuacion)
+  // Lo que exige la ficha: hechos, derechos y, si la etapa tiene peticiones en el catálogo, la petición
+  const faltan = [
+    !caso.resumenHechos?.trim() && 'el resumen de los hechos',
+    !(caso.derechosIds.length || caso.derechosInvolucrados?.trim()) && 'los derechos involucrados',
+    !a.peticionIds.length && !a.loQueSePide?.trim() && await ItemCatalogo.count({ where: { catalogo: 'PETICION', grupo: a.etapa, activo: true } }) > 0 && 'la petición al despacho'
+  ].filter(Boolean)
+  if (faltan.length) throw new ErrorNegocio(`Complete la ficha técnica antes de enviar a revisión: falta ${faltan.join(', ').replace(/, ([^,]*)$/, ' y $1')}`)
+}
+
+export const enviarARevision = async (d: { actuacionId: number, ficha?: DatosFicha, usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
   const escrito = await escritoActual(a.id, ['BORRADOR', 'AJUSTE_INTERNO'], 'No hay un escrito en elaboración: suba primero el escrito')
   if (!(await Archivo.count({ where: { escritoId: escrito.id, tipo: 'ESCRITO' } }))) throw new ErrorNegocio('Suba el escrito (Word) antes de enviarlo a revisión')
   await exigirInsumosSiEmergencia(a)
+  await guardarDatosFicha(a, d.ficha ?? {})
+  // La ficha se genera aquí, con lo que el auxiliar acaba de registrar, para que el revisor la vea en
+  // el paquete. Si el almacenamiento falla no frena la revisión: se vuelve a generar al entregar
+  await generarFicha({ actuacionId: a.id, escritoId: escrito.id, usuarioId: d.usuarioId })
+    .catch(error => console.error('❌ Ficha técnica al enviar a revisión', error))
   const ahora = new Date()
   await escrito.update({ estado: 'EN_REVISION', fechaEnvioRevision: ahora, elaboradoPorId: escrito.elaboradoPorId ?? d.usuarioId })
   const revisorId = a.revisorId ?? await revisorDeEquipo(a.equipoId)
@@ -230,10 +311,13 @@ export const entregar = async (d: { actuacionId: number, documentos?: string[], 
   await generarFicha({ actuacionId: a.id, escritoId: escrito.id, fechaEntrega: new Date(), entregados: [...documentos, ...anexos], usuarioId: d.usuarioId })
   const carpeta = carpetaActuacion(a.caso!, a.etapa, `Escritos/V${escrito.version}`)
   const { enlace } = await compartirCarpeta(carpeta, [...para, ...cc], parametro<number>('DIAS_VIGENCIA_ENLACE'))
+  // V2 es la corrección de una devolución, con su propio correo; la versión es la de la clase del
+  // escrito (la emergencia y su alcance cuentan cada uno desde V1)
+  const version = await versionDeClase(escrito)
   const correo = await enviarPlantilla({
-    codigo: escrito.version > 1 ? 'ENTREGA_V2' : 'ENTREGA_V1', actuacionId: a.id, para, cc,
+    codigo: version > 1 ? 'ENTREGA_V2' : 'ENTREGA_V1', actuacionId: a.id, para, cc,
     extra: {
-      enlace, version: String(escrito.version), fechaEntrega: textoFechaHora(new Date()),
+      enlace, version: String(version), fechaEntrega: textoFechaHora(new Date()),
       documentos: listaCorreo(documentos), anexos: listaCorreo(anexos, 'Sin anexos.')
     },
     usuarioId: d.usuarioId
@@ -248,7 +332,8 @@ export const entregar = async (d: { actuacionId: number, documentos?: string[], 
   const anterior = await Escrito.findOne({ where: { actuacionId: a.id, version: escrito.version - 1 }, include: [Devolucion] })
   const devolucion = anterior?.devoluciones?.find(x => !x.fechaNuevaEntrega)
   if (devolucion) await devolucion.update({ fechaNuevaEntrega: correo.fechaCorreo })
-  await a.update({ estado: 'ENTREGADO' })
+  // Entregado el alcance, ya no queda nada pendiente de la emergencia
+  await a.update({ estado: 'ENTREGADO', ...(escrito.clase === 'ALCANCE' && { alcancePendiente: false }) })
   return { escrito, correo }
 }
 
@@ -265,6 +350,8 @@ export const registrarRespuesta = async (d: {
   const escrito = await escritoActual(a.id, d.tipo === 'ACUSE' ? ['ENTREGADO', 'APROBADO'] : ['ENTREGADO'], 'No hay un escrito entregado esperando respuesta')
 
   if (d.tipo === 'ACUSE') await escrito.update({ fechaAcuse: escrito.fechaAcuse ?? fecha })
+  // Reunión 23-nov: la firma no registra aprobaciones (el envío sin devolución se entiende aprobado).
+  // Se conserva para lo que ya se registró así y para el correo que la entidad mande aprobando
   if (d.tipo === 'APROBACION') {
     await escrito.update({ estado: 'APROBADO', fechaAprobacion: fecha, fechaAcuse: escrito.fechaAcuse ?? fecha })
     await a.update({ estado: 'APROBADO' })
@@ -291,24 +378,49 @@ export const registrarRespuesta = async (d: {
 }
 
 // ── Radicación y cierre ──
+// La radicación en el juzgado la registra la asistencia administrativa (reunión del 23-nov), después de
+// entregar el escrito. Queda pendiente automatizar la consulta de estados con Icarus
 export const registrarRadicacion = async (d: { actuacionId: number, fecha: Date, usuarioId: number }) => {
   const a = await cargarActuacion(d.actuacionId)
+  if (!['ENTREGADO', 'APROBADO', 'RADICADO'].includes(a.estado)) throw new ErrorNegocio('La radicación se registra después de entregar el escrito a la entidad')
   await RadicacionJuzgado.create({ actuacionId: a.id, fechaRadicacion: d.fecha, fuente: 'MANUAL' })
   await a.update({ estado: 'RADICADO' })
 }
 
-// Causales del manual (§27)
+// Causales del manual (§27). Reunión 23-nov: el cierre normal es solo con un fallo favorable en
+// contestación o impugnación; las demás causales son salidas excepcionales del manual
+export const CIERRE_FALLO_FAVORABLE = 'Fallo favorable en contestación o impugnación'
+// La PQRS no tiene fallo: se cierra con la respuesta presentada por la entidad
+export const CIERRE_PQRS = 'PQRS respondida por la entidad y sin productos pendientes'
 export const MOTIVOS_CIERRE = [
-  'Presentada por la entidad y sin productos pendientes',
+  CIERRE_FALLO_FAVORABLE,
+  CIERRE_PQRS,
   'Reasignada formalmente por la entidad o el supervisor',
   'Excluida por duplicidad, falta de competencia o retiro',
   'Atendida directamente por la Defensa Jurídica',
   'Entregada a la entidad en la liquidación del contrato'
 ] as const
 
+export const motivosDeCierre = (tipoSolicitud: string) =>
+  MOTIVOS_CIERRE.filter(m => m !== (tipoSolicitud === 'PQRS' ? CIERRE_FALLO_FAVORABLE : CIERRE_PQRS))
+
+// El fallo que manda es el último de la instancia más alta (la segunda revisa la primera)
+const falloVigente = async (casoId: number) => {
+  const actuaciones = await Actuacion.findAll({ where: { casoId }, attributes: ['id'] })
+  const fallos = await Decision.findAll({ where: { actuacionId: actuaciones.map(x => x.id), instancia: ['PRIMERA', 'SEGUNDA'] }, order: [['createdAt', 'DESC']] })
+  return fallos.find(f => f.instancia === 'SEGUNDA') ?? fallos[0] ?? null
+}
+
 export const cerrarActuacion = async (d: { actuacionId: number, motivo: string }) => {
   const a = await cargarActuacion(d.actuacionId)
   if (!d.motivo.trim()) throw new ErrorNegocio('Indique la causal de cierre')
+  if (!(motivosDeCierre(a.caso!.tipoSolicitud) as readonly string[]).includes(d.motivo.trim())) throw new ErrorNegocio('Escoja una causal de cierre de la lista')
+  if (a.alcancePendiente) throw new ErrorNegocio('Falta entregar el escrito completo que sigue al de emergencia')
+  if (d.motivo.trim() === CIERRE_FALLO_FAVORABLE) {
+    const fallo = await falloVigente(a.casoId)
+    if (!fallo) throw new ErrorNegocio('Registre primero el fallo: el cierre se hace con un fallo favorable de primera o segunda instancia')
+    if (fallo.favorable !== true) throw new ErrorNegocio(`El fallo de ${fallo.instancia === 'SEGUNDA' ? 'segunda' : 'primera'} instancia registrado no es favorable: el caso sigue abierto`)
+  }
   const ahora = new Date()
   await a.update({ estado: 'CERRADA', fechaCierre: ahora })
   // Sin otras actuaciones abiertas, el caso también se cierra con la misma causal
