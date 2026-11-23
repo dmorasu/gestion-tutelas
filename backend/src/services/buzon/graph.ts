@@ -72,6 +72,19 @@ export const rutaBuzon = (buzon: Buzon) => {
   return `/users/${encodeURIComponent(direccion)}`
 }
 
+// =====================================
+// MODO PRUEBA (CORREO_REDIRIGIR_A)
+// Con la variable llena, todo lo que sale (correos y permisos de las carpetas de SharePoint) va solo a
+// esa dirección, sin importar a quién iba: así se prueba el circuito completo con un buzón de la firma
+// en el papel de la entidad, y ni un correo real que llegue a los buzones recibe respuesta. Cada
+// correo lleva arriba un aviso con los destinatarios reales
+// =====================================
+export const destinoDePrueba = () => process.env.CORREO_REDIRIGIR_A?.trim().toLowerCase() || null
+
+const avisoPrueba = (para: string[], cc: string[] = []) =>
+  `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:8px 12px;margin-bottom:12px;font:13px Arial,sans-serif">` +
+  `<b>Correo de prueba.</b> En operación iría a: ${[...para, ...cc.map(c => `${c} (copia)`)].join(', ') || '(sin destinatarios)'}</div>`
+
 // Envía un correo desde el buzón y devuelve su id y su hilo (para emparejar la respuesta).
 // Se crea como borrador primero: así Graph devuelve el id y el conversationId antes de enviarlo
 export const enviarCorreo = async (buzon: Buzon, datos: {
@@ -82,11 +95,12 @@ export const enviarCorreo = async (buzon: Buzon, datos: {
 }) => {
   const base = rutaBuzon(buzon)
   const destinatarios = (lista: string[] = []) => lista.map(address => ({ emailAddress: { address } }))
+  const prueba = destinoDePrueba()
   const mensaje = {
     subject: datos.asunto,
-    body: { contentType: 'HTML', content: datos.html },
-    toRecipients: destinatarios(datos.para),
-    ccRecipients: destinatarios(datos.cc)
+    body: { contentType: 'HTML', content: prueba ? avisoPrueba(datos.para, datos.cc) + datos.html : datos.html },
+    toRecipients: destinatarios(prueba ? [prueba] : datos.para),
+    ccRecipients: destinatarios(prueba ? [] : datos.cc)
   }
   // Al responder, Graph arma el borrador con el hilo y el texto citado; luego se le pone el asunto,
   // el cuerpo y los destinatarios propios

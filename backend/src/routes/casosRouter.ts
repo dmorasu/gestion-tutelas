@@ -19,7 +19,8 @@ import { existePlantilla, generarFicha } from '../services/documentosWord'
 import { INSTANCIAS, SENTIDOS_POR_INSTANCIA, registrarDecision, abrirCumplimiento } from '../services/fallos'
 import { lineaTiempo } from '../services/lineaTiempo'
 import { filtroPorAtender, asignacionesVencidas } from '../services/buzon/atencion'
-import { modoEnvio, borradorLibre, enviarLibre } from '../services/buzon/correosSalida'
+import { envioEnPantalla, borradorLibre, enviarLibre } from '../services/buzon/correosSalida'
+import { destinoDePrueba } from '../services/buzon/graph'
 import { proveedorAlmacen } from '../services/almacenamiento'
 import { MotivoDevolucion, Alerta } from '../models'
 import { responderError, ErrorNegocio } from '../utils/errores'
@@ -256,7 +257,7 @@ router.get('/:id', param('id').isInt(), manejarErroresEntrada, async (req, res) 
     // al abrir el caso: así aparecen los de antes de la regla y los que llegaron después de este
     await sugerirRelaciones(caso.id).catch(error => console.error('❌ Relaciones del caso', error))
     const vinculos = await relacionesDe(caso.id)
-    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, documentosEntrega: DOCUMENTOS_ENTREGA, documentoDeEscrito: DOCUMENTO_DE_ESCRITO, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.motivosDeCierre(caso.tipoSolicitud), sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: modoEnvio(), almacen: proveedorAlmacen() })
+    res.json({ caso: datos, correos, archivos, relacionados, vinculos, tiposRelacion: NOMBRES_RELACION, documentosEntrega: DOCUMENTOS_ENTREGA, documentoDeEscrito: DOCUMENTO_DE_ESCRITO, notas, tiposPeticion: TIPOS_PETICION, pqrsActivo: parametro<boolean>('AMBITO_PQRS_ACTIVO'), motivosCierre: flujo.motivosDeCierre(caso.tipoSolicitud), sentidos: SENTIDOS_POR_INSTANCIA, tiposEscrito: TIPOS_ESCRITO, envio: envioEnPantalla(), redirigeA: destinoDePrueba(), almacen: proveedorAlmacen() })
   } catch (error) {
     responderError(res, error)
   }

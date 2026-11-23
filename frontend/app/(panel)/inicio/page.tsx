@@ -31,7 +31,7 @@ type Resumen = {
   porRegistrar: number, porRevisar: number, alertasPendientes: number, porAtender: number, asignacionesSinAtender: number
 }
 type EstadoBuzon = {
-  activo: boolean, envio: string,
+  activo: boolean, envio: string, redirigeA?: string | null,
   buzones: { buzon: string, direccion: string, porcentaje: number | null, alerta: boolean, estado: { ultimaEjecucion: string | null, ultimoError: string | null } | null }[]
 }
 type Pendiente = { cantidad: number, texto: string }
@@ -199,6 +199,7 @@ export default async function InicioPage() {
                   </p>
                 ))}
                 {buzon.envio === "SIMULADO" && <p className="text-amber-700">Envío de correos simulado</p>}
+                {buzon.envio === "PRUEBA" && <p className="text-amber-700">Modo prueba: los correos salen solo a {buzon.redirigeA}</p>}
               </div>
             )}
           </div>

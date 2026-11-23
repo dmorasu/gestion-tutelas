@@ -42,6 +42,7 @@ type Detalle = {
   notas: number
   tiposPeticion: Record<string, string>
   envio: string
+  redirigeA: string | null
   almacen: string
 }
 type Usuario = { id: number, nombre: string, activo: boolean, equipoId: number | null, roles: { codigo: string }[] }
@@ -55,7 +56,7 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
   const gestiona = tieneRol(sesion.roles, ["ASISTENTE", "COORDINADOR"])
   const coordina = tieneRol(sesion.roles, ["COORDINADOR"])
   const tab = (["actuacion", "informacion", "documentos", "correos", "historial"].includes(filtros.tab ?? "") ? filtros.tab : "actuacion") as Pestana
-  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, vinculos, tiposRelacion, notas, tiposPeticion, envio, almacen, documentosEntrega, documentoDeEscrito }, historial, usuarios, derechos, tiposRespuesta, matriz, peticiones] = await Promise.all([
+  const [{ caso, correos, archivos, motivosCierre, sentidos, relacionados, vinculos, tiposRelacion, notas, tiposPeticion, envio, redirigeA, almacen, documentosEntrega, documentoDeEscrito }, historial, usuarios, derechos, tiposRespuesta, matriz, peticiones] = await Promise.all([
     obtener<Detalle>(`/casos/${id}`),
     tab === "historial" ? obtener<EventoCaso[]>(`/casos/${id}/historial`).catch(() => null) : Promise.resolve(null),
     obtener<Usuario[]>("/catalogos/usuarios"),
@@ -142,6 +143,9 @@ export default async function CasoPage({ params, searchParams }: { params: Promi
             </p>
           )}
         </div>
+      )}
+      {envio === "PRUEBA" && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">Modo prueba: todos los correos y enlaces salen solo a {redirigeA}.</p>
       )}
       {(envio === "SIMULADO" || almacen === "LOCAL") && (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900">

@@ -1,6 +1,6 @@
 import { Actuacion, Caso, Correo, PlantillaCorreo, Usuario, Parte, Juzgado, ItemCatalogo } from '../../models'
 import { entraConfigurado } from '../../config/entra'
-import { enviarCorreo, direccionBuzon } from './graph'
+import { enviarCorreo, direccionBuzon, destinoDePrueba } from './graph'
 import { armarCorreoHtml, logoDataUri, logoIncrustado, CID_LOGO } from './disenoCorreo'
 import { parametro } from '../parametros'
 import { NOMBRES_CRITICIDAD, NOMBRES_ETAPAS, PLANTILLAS, type Buzon, type CodigoPlantilla } from '../constantes'
@@ -263,6 +263,9 @@ export const valoresDeActuacion = async (actuacionId: number, extra: Record<stri
 }
 
 export const modoEnvio = () => (entraConfigurado() && process.env.CORREO_ENVIO_ACTIVO === 'true' ? 'REAL' : 'SIMULADO')
+
+// Lo que muestran las pantallas: PRUEBA si los correos salen de verdad pero todos al buzón de pruebas
+export const envioEnPantalla = () => (modoEnvio() === 'REAL' && destinoDePrueba() ? 'PRUEBA' : modoEnvio())
 
 export type DatosEnvio = {
   codigo: CodigoPlantilla

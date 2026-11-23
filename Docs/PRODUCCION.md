@@ -47,6 +47,28 @@ Para que la firma pruebe con datos reales sin que salga nada al cliente: los cor
 
 Para actualizar la versión de pruebas, ver "Actualizar" al final.
 
+## 0.1 Prueba completa con correos (buzón de la firma en el papel de la entidad)
+
+Igual que la sección 0, pero los correos salen de verdad y se leen los buzones. **Todo lo que sale va solo al buzón de pruebas**, gracias a `CORREO_REDIRIGIR_A`. Así, aunque llegue un correo real de la entidad o algún parámetro tenga una dirección real, nadie fuera de la firma recibe nada. Cada correo lleva arriba un aviso amarillo con los destinatarios que tendría en operación, y la app muestra "Modo prueba".
+
+1. Instalar Redis (`sudo apt install -y redis-server && sudo systemctl enable --now redis-server`).
+2. En `backend/.env`, además de lo de la sección 0:
+   ```
+   CORREO_ENVIO_ACTIVO=true
+   BUZON_ACTIVO=true
+   CORREO_REDIRIGIR_A=pruebas-entidad@gomezpinedaabogados.com
+   BUZON_LEER_DESDE=<fecha de hoy>
+   REDIS_HOST=127.0.0.1
+   REDIS_PORT=6379
+   REDIS_DB=5
+   ```
+   También `ENTRA_*`, `BUZON_*` y `SHAREPOINT_*`, copiados del `.env` de desarrollo.
+3. Una lectura a mano para ver que Graph responde: `cd backend && node dist/scripts/leerBuzon.js`. Después, los tres procesos: `pm2 start ecosystem.config.cjs`.
+4. Solo un equipo lee los buzones: en el Mac, `BUZON_ACTIVO=false` y no correr `npm run leer-buzon`, porque el avance de la lectura está en la base compartida.
+5. En Parámetros, `CORREOS_INSUMOS`, `CORREOS_ENTREGA` y `CORREOS_ALERTAS` pueden quedar con el buzón de pruebas o con los definitivos: igual salen al de pruebas.
+6. Desde el buzón de pruebas se escribe a `asignacionsdmc@` con el asunto `[GPA] [ORDINARIO] [<radicado de 23 dígitos>] [TUTELA] [Vence: dd/mm/aaaa hh:mm]` y se sigue el circuito: acuse, datos faltantes, insumos y su respuesta, entrega, devolución y V2, y corte de alertas.
+7. Para pasar a operación se deja `CORREO_REDIRIGIR_A` vacío y se reinicia: `pm2 restart all --update-env`.
+
 ## 1. Base de datos
 
 1. El administrador de Postgres crea el usuario de la app, dueño de la base `gpa_legal` (no el de desarrollo de Nodex).

@@ -14,7 +14,7 @@ type CorreoFila = {
   caso: { id: number, radicado: string, numeroInterno: string | null } | null, archivos: { id: number }[], deOtroOperador: boolean
 }
 type EstadoBuzon = {
-  envio: string, porAtender: number, mios: number, asignacionesVencidas: number, minutosAlerta: number, cuotaGb: number
+  envio: string, redirigeA?: string | null, porAtender: number, mios: number, asignacionesVencidas: number, minutosAlerta: number, cuotaGb: number
   buzones: { buzon: string, direccion: string, porcentaje: number | null, alerta: boolean, estado: { tamanoBytes: string | null, ultimoError: string | null } | null }[]
 }
 
@@ -61,6 +61,7 @@ export default async function CorreosPage({ searchParams }: { searchParams: Prom
           <p className="mt-1 text-xs text-slate-400">
             {b.porAtender} por atender · {b.mios} a su nombre
             {b.envio === "SIMULADO" && <span className="text-amber-700"> · Envío simulado: los correos de salida no salen</span>}
+            {b.envio === "PRUEBA" && <span className="text-amber-700"> · Modo prueba: los correos salen solo a {b.redirigeA}</span>}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -14,7 +14,8 @@ import { ROLES, ETAPAS, TIPOS_SOLICITUD, UNIDADES_TERMINO, CRITICIDADES, BUZONES
 import { responderError, ErrorNegocio } from '../utils/errores'
 import { encolarLecturaBuzon } from '../queues/buzonQueue'
 import { buzonesConfigurados } from '../services/buzon/graph'
-import { modoEnvio } from '../services/buzon/correosSalida'
+import { envioEnPantalla } from '../services/buzon/correosSalida'
+import { destinoDePrueba } from '../services/buzon/graph'
 import { archivarAdjuntos, destinoAdjuntos } from '../services/expediente'
 import { parametro } from '../services/parametros'
 
@@ -112,7 +113,9 @@ router.get('/estado-buzon', async (_req, res) => {
   ])
   res.json({
     activo: process.env.BUZON_ACTIVO === 'true',
-    envio: modoEnvio(),
+    envio: envioEnPantalla(),
+    // Modo prueba: todo lo que sale va a esta dirección (CORREO_REDIRIGIR_A)
+    redirigeA: destinoDePrueba(),
     // Uso de cada buzón frente a su capacidad (50 GB el compartido sin licencia)
     buzones: configurados.map(b => {
       const estado = estados.find(e => e.buzon === b.direccion) ?? null

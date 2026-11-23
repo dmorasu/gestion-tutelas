@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { graph, graphRespuesta, ErrorGraph } from './buzon/graph'
+import { graph, graphRespuesta, ErrorGraph, destinoDePrueba } from './buzon/graph'
 import { entraConfigurado } from '../config/entra'
 
 // =====================================
@@ -170,9 +170,11 @@ export const compartirCarpeta = async (carpeta: string, correos: string[], dias:
   const d = await driveId()
   const id = await asegurarCarpetaSharepoint(dir)
   const vence = new Date(Date.now() + dias * 24 * 60 * 60 * 1000).toISOString()
+  // En modo prueba el permiso es solo para el buzón de pruebas, igual que los correos
+  const prueba = destinoDePrueba()
   await graph(`/drives/${d}/items/${id}/invite`, {
     metodo: 'POST',
-    cuerpo: { recipients: correos.map(email => ({ email })), requireSignIn: true, sendInvitation: false, roles: ['read'], expirationDateTime: vence }
+    cuerpo: { recipients: (prueba ? [prueba] : correos).map(email => ({ email })), requireSignIn: true, sendInvitation: false, roles: ['read'], expirationDateTime: vence }
   })
   const item = await graph<ItemGraph>(`/drives/${d}/items/${id}?$select=webUrl`)
   return { enlace: item.webUrl, compartido: true }
