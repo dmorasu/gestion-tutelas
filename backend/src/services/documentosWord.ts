@@ -2,7 +2,8 @@ import fs from 'fs/promises'
 import { Op } from 'sequelize'
 import path from 'path'
 import JSZip from 'jszip'
-import { Actuacion, Caso, Escrito, ItemCatalogo, Juzgado, Parte, Usuario } from '../models'
+import { Actuacion, Caso, Decision, Escrito, ItemCatalogo, Juzgado, Parte, Usuario } from '../models'
+import { finDeDiasHabilesSiguientes } from './plazos'
 import { guardarEnExpediente, type Subcarpeta } from './expediente'
 import { parametro } from './parametros'
 import { tiempoRestante } from './buzon/correosSalida'
@@ -54,7 +55,7 @@ const cargar = async (actuacionId: number) => {
     include: [
       {
         model: Caso, attributes: ['id', 'radicado', 'numeroInterno', 'tipoSolicitud', 'deOtroOperador', 'resumenHechos', 'derechosIds', 'derechosInvolucrados', 'calidadEntidad'],
-        include: [{ model: Parte, attributes: ['rol', 'nombre'], required: false }, { model: Juzgado, attributes: ['nombre', 'correos'] }]
+        include: [{ model: Parte, attributes: ['rol', 'nombre'], required: false }, { model: Juzgado, attributes: ['nombre', 'correos', 'ciudad'] }]
       },
       { model: Usuario, as: 'auxiliar', attributes: ['nombre'] },
       { model: Usuario, as: 'revisor', attributes: ['nombre'] }
@@ -166,31 +167,66 @@ export const solicitudExpediente = async (actuacionId: number) => {
 
 // =====================================
 // ESCRITO DE EMERGENCIA (reunión del 23-nov)
-// Se arma con el modelo de la firma para la etapa y el tipo de acción (constantes: reglaEmergencia).
-// Los marcadores disponibles son los de valoresEscrito: el Word del modelo se prepara con ellos
+// Se arma con el modelo de la firma para la etapa y el tipo de acción (constantes: reglaEmergencia),
+// preparado desde Docs/formatos con Docs/herramientas/plantillas-word.ts. Los marcadores son los de
+// valoresEscrito; lo que el modelo deja entre corchetes (la orden del fallo, las gestiones…) lo
+// completa el auxiliar en el Word antes de enviarlo a revisión
 // =====================================
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+// "23 de noviembre de 2026" a partir de un día AAAA-MM-DD
+const fechaLarga = (dia: string) => {
+  const [anio, mes, d] = dia.split('-').map(Number)
+  return `${d} de ${MESES[mes - 1]} de ${anio}`
+}
+
+// Lo que la app no sabe queda a la vista para que el auxiliar lo complete en el Word
+const completar = (que: string) => `[completar: ${que}]`
+
+// El fallo que se cumple: el último de la instancia más alta del caso
+const falloDelCaso = async (casoId: number) => {
+  const actuaciones = await Actuacion.findAll({ where: { casoId }, attributes: ['id'] })
+  const fallos = await Decision.findAll({ where: { actuacionId: actuaciones.map(x => x.id), instancia: ['PRIMERA', 'SEGUNDA'] }, order: [['createdAt', 'DESC']] })
+  return fallos.find(f => f.instancia === 'SEGUNDA') ?? fallos[0] ?? null
+}
 
 const valoresEscrito = async (a: Actuacion): Promise<Record<string, string>> => {
   const caso = a.caso!
   const { derechos, peticion } = await derechosYPeticion(a)
-  const [anio, mes, dia] = enBogota(new Date()).dia.split('-').map(Number)
+  const fallo = await falloDelCaso(caso.id)
+  const dias = parametro<number>('DIAS_TERMINO_EMERGENCIA') || 5
+  const legal = parametro<string>('ENTIDAD_NOMBRE_LEGAL') || '[ENTIDAD]'
+  const corta = parametro<string>('ENTIDAD_NOMBRE') || 'la entidad'
   return {
-    fecha: `${dia} de ${MESES[mes - 1]} de ${anio}`,
+    fecha: fechaLarga(enBogota(new Date()).dia),
+    entidadMayus: legal.toUpperCase(),
+    entidad: corta,
+    Entidad: corta.charAt(0).toUpperCase() + corta.slice(1),
+    ciudad: caso.juzgado?.ciudad ?? '',
+    fechaFallo: fallo?.fechaDecision ? fechaLarga(fallo.fechaDecision) : completar('fecha del fallo'),
+    // La fecha del auto no se registra en la app; la de notificación es la de la actuación
+    fechaAuto: completar('fecha del auto'),
+    fechaNotificacion: a.fechaNotificacion ? fechaLarga(enBogota(a.fechaNotificacion).dia) : completar('fecha de notificación'),
+    diasTermino: String(dias),
+    // Hasta cuándo va el término pedido, contado en días hábiles desde hoy
+    fechaTermino: fechaLarga(enBogota(finDeDiasHabilesSiguientes(new Date(), dias)).dia),
+    direccionEntidad: parametro<string>('ENTIDAD_DIRECCION_NOTIFICACIONES') || completar('dirección de notificaciones de la entidad'),
+    correoEntidad: parametro<string>('ENTIDAD_CORREO_NOTIFICACIONES') || completar('correo de notificaciones judiciales de la entidad'),
     numeroInterno: caso.numeroInterno ?? '',
     juzgado: (caso.juzgado?.nombre ?? '').toUpperCase(),
     correoJuzgado: caso.juzgado?.correos?.[0] ?? '',
     radicado: formatoRadicado(caso.radicado),
     accionante: accionantesDe(caso),
     calidadEntidad: (caso.calidadEntidad ?? '').toLowerCase(),
-    entidadCompleta: parametro<string>('ENTIDAD_NOMBRE_LEGAL') || '[ENTIDAD]',
+    entidadCompleta: legal,
     nitEntidad: parametro<string>('ENTIDAD_NIT') || '[NIT]',
     apoderado: parametro<string>('APODERADO_NOMBRE') || '[APODERADO]',
     ccApoderado: parametro<string>('APODERADO_CEDULA') || '[CÉDULA]',
     tpApoderado: parametro<string>('APODERADO_TARJETA') || '[T.P.]',
     correoApoderado: parametro<string>('APODERADO_CORREO') || '[CORREO]',
     hechos: caso.resumenHechos ?? '',
-    derechos,
+    // Va dentro de la frase ("el derecho fundamental de debido proceso"): en minúscula
+    derechos: derechos.toLowerCase() || completar('derecho fundamental'),
     peticion
   }
 }

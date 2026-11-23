@@ -35,7 +35,7 @@ Para que la firma pruebe con datos reales sin que salga nada al cliente: los cor
 8. **Primer administrador:** `cd /opt/tutelas/backend && node dist/scripts/crearAdmin.js correo "Nombre"`. Da una contraseña temporal.
 9. **En la app**, antes de dar acceso:
    - Usuarios con perfil y equipo, y la asistencia del día.
-   - En Parámetros: `FECHA_INICIO_PLAN`, `CORREOS_*` (también `CORREOS_ALERTAS`), `PREFIJO_ASUNTO`, `ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT` y `APODERADO_*`.
+   - En Parámetros: `FECHA_INICIO_PLAN`, `CORREOS_*` (también `CORREOS_ALERTAS`), `PREFIJO_ASUNTO`, `ENTIDAD_NOMBRE`, `ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `ENTIDAD_DIRECCION_NOTIFICACIONES`, `ENTIDAD_CORREO_NOTIFICACIONES`, `APODERADO_*` y `DIAS_TERMINO_EMERGENCIA`. Sin ellos, los escritos de emergencia salen con `[ENTIDAD]`, `[APODERADO]`, etc.
    - En Catálogos: confirmar los derechos, los tipos de respuesta y las peticiones por etapa, que están marcados como "Supuesto".
 10. **Comprobar:**
     - Entrar con el administrador.

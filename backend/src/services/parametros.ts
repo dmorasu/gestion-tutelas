@@ -50,6 +50,10 @@ export const PARAMETROS_BASE = {
   APODERADO_CEDULA: { valor: '', descripcion: 'Cédula del apoderado' },
   APODERADO_TARJETA: { valor: '', descripcion: 'Tarjeta profesional del apoderado' },
   APODERADO_CORREO: { valor: '', descripcion: 'Correo de notificaciones del apoderado' },
+  // Reunión 23-nov: escritos de emergencia (modelos de la firma en Docs/formatos)
+  ENTIDAD_DIRECCION_NOTIFICACIONES: { valor: '', descripcion: 'Dirección física de notificaciones judiciales de la entidad (escrito de emergencia de la acción de cumplimiento)' },
+  ENTIDAD_CORREO_NOTIFICACIONES: { valor: '', descripcion: 'Correo de notificaciones judiciales de la entidad (escrito de emergencia de la acción de cumplimiento)' },
+  DIAS_TERMINO_EMERGENCIA: { valor: 5, descripcion: 'Supuesto. Días hábiles de término adicional que pide el escrito de emergencia de requerimiento previo y desacato (el de contestación trae 5 en el modelo)' },
   PREFIJO_ASUNTO: { valor: process.env.PREFIJO_ASUNTO || 'GPA', fuente: 'Correo del cliente §4', descripcion: 'Primer bloque del asunto de los correos de salida, entre corchetes' },
   // Destinatarios que define el cliente en la fase inicial (manual §9 y §10.2): se llenan en Parámetros
   CORREOS_INSUMOS: { valor: [] as string[], descripcion: 'A quién se piden los insumos (enlace operativo del cliente)' },
