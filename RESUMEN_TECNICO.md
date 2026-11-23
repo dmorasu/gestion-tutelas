@@ -4,31 +4,34 @@ _Actualizado: 2026-11-23 · ramas `desarrollo` y `main` (versión de pruebas)_
 
 App para recibir, repartir, trabajar, entregar y medir las tutelas, acciones de cumplimiento y PQRS que una entidad le asigna a la firma (GPA, Gómez Pineda Abogados). El cliente que origina el proyecto es la SDM, pero **la app no la nombra**: en pantalla y en el código es "la entidad". En pantalla se llama **Nodex Tutelas** y el pie dice "GPA Legal".
 
-La app está completa en funciones (bloques 1 a 3, bandeja de trabajo, respuestas D1–D30: fallos, tablero para Power BI, descuentos, asistencia y PQRS) y conectada a Microsoft 365 (lectura de buzones y SharePoint probadas; el envío sigue **simulado**). Falta activar el envío real y la lectura automática, y montar el servidor de producción (guía lista).
+La app está completa en funciones: bloques 1 a 3, bandeja de trabajo, respuestas D1–D30 (fallos, tablero para Power BI, descuentos, asistencia y PQRS), el plan de la reunión del 18-nov y los ajustes de la firma del 23-nov. También está conectada a Microsoft 365.
+
+**Desde el 2026-11-23 hay una versión de pruebas publicada** en https://tutelas.nodexgpa.com, en el servidor de Nodex (ver "Servidor de pruebas"). Lee los buzones y envía de verdad, pero en **modo prueba**: todo lo que sale va solo al buzón de pruebas de `CORREO_REDIRIGIR_A`. Falta recorrer el circuito completo con correos y, después, pasar a operación.
 
 Documentos:
 - `Docs/PLAN.md`: qué cambió con la información del cliente, flujo por buzón, bloques, respuestas a D1–D30 y lo que sigue abierto (§5), decisiones (SharePoint, no SendGrid) y el límite de 50 GB de los buzones.
 - `Docs/CONFIGURAR_BUZON_M365.md`: guía para el administrador de 365 (tres buzones, app de Entra, política de acceso, sitio de SharePoint, retención).
 - `Docs/tablero/POWER_BI.md` y `USUARIO_LECTURA.sql`: vistas del tablero, conexión de Power BI y usuario de solo lectura.
-- `Docs/PRODUCCION.md`: servidor, PM2 (`ecosystem.config.cjs`), Nginx con HTTPS, variables y verificación antes de abrir.
+- `Docs/PRODUCCION.md`: §0.2 es el paso a paso **en el servidor de Nodex** (el que se usó); §0 y §0.1 explican la versión de pruebas sin correos y con correos. Incluye PM2 (`ecosystem.config.cjs`), Nginx con HTTPS y las variables.
+- `Docs/formatos`: modelos de la firma de la ficha técnica (V19112026) y de los cuatro escritos de emergencia. De ellos salen las plantillas de `backend/recursos/plantillas` (`Docs/herramientas/plantillas-word.ts`).
 - Fuentes del cliente (no se modifican): `Docs/Flujo proceso - sabana.xlsx`, `Docs/informacion_correo.txt`, `Docs/cuerpo_correo_informacion_2.txt` y el manual operativo v1.1 (`Docs/20261103_Manual_Operativo_…docx`) y las respuestas a las dudas (`Docs/Dudas TI .docx`).
 - Manual de funcionamiento para leer (no técnico): documento "Nodex Tutelas · Cómo funciona" en claude.ai.
 
 ## Arquitectura
 
-Independiente de Nodex (repositorio, backend, base y servidor propios), con el mismo stack y el mismo diseño.
+Independiente de Nodex (repositorio, backend y base propios), con el mismo stack y el mismo diseño. Por decisión del 2026-11-23 se publica **en el mismo servidor de Nodex**, sin compartir procesos, puertos, base ni base de Redis.
 
 | Pieza | Dónde | Puerto | Tecnología / estado |
 |---|---|---|---|
-| API | `backend/` | 4100 | Express 5 + Sequelize-typescript + Postgres. `npm run dev` (nodemon) |
+| API | `backend/` | 4100 (Mac) · 9100 (servidor) | Express 5 + Sequelize-typescript + Postgres. `npm run dev` (nodemon) |
 | Worker | `backend/src/worker.ts` | — | BullMQ + Redis, proceso aparte (`npm run worker`). Ver "Tareas programadas" |
-| Frontend | `frontend/` | 3100 | Next 16.4 (Turbopack) + React 19 + Tailwind 3 + headlessui + lucide |
-| Base | Postgres de Nodex (10.0.4.4), base **`gpa_legal`** | 5432 | Usuario de desarrollo de Nodex por ahora |
-| Redis | el de cada equipo, `REDIS_DB=5` (Nodex usa 0) | 6379 | Solo el worker y el botón "Leer buzón ahora" |
-| Correo | Microsoft Graph sobre **tres buzones**: asignaciones, insumos y entregas | — | **Configurado** (app de Entra y los tres buzones en el `.env`; lectura probada el 2026-11-18). Salida aún **simulada** (`CORREO_ENVIO_ACTIVO=false`) y lectura automática apagada (`BUZON_ACTIVO=false`) |
+| Frontend | `frontend/` | 3100 (Mac) · 9101 (servidor) | Next 16.4 (Turbopack) + React 19 + Tailwind 3 + headlessui + lucide |
+| Base | Postgres del servidor de Nodex (10.0.4.4), base **`gpa_legal`** | 5432 | Usuario `desarrolloti` (el de desarrollo) también en el servidor de pruebas; pool de 5 conexiones por proceso (`DB_POOL_MAX`) |
+| Redis | el de cada equipo; en el servidor, el de Nodex con `REDIS_DB=5` (Nodex usa la 1) y la cola `tutelas-buzon` | 6379 | Solo el worker y el botón "Leer buzón ahora". El servidor tiene Redis 6.0.16: BullMQ avisa que recomienda 6.2, pero funciona. No se actualiza porque es compartido |
+| Correo | Microsoft Graph sobre **tres buzones**: asignaciones, insumos y entregas | — | En el Mac: salida simulada y lectura apagada (debe seguir así: un solo lector de los buzones, porque el avance está en la base compartida). En el servidor: lectura cada 120 s y envío real con `CORREO_REDIRIGIR_A` (modo prueba) |
 | Documentos | **SharePoint** (sitio `tutelasdmc`, Graph con `Sites.Selected`) | — | **Configurado** y probado (subida de archivos desde el 2026-11-18). `backend/almacen-local` (en `.gitignore`) queda solo para equipos sin 365 |
 
-Los puertos no chocan con Nodex (4000, 3000-3002).
+En el servidor ocupan otros puertos: Nodex 9000–9003, Monitor 9010, y Vehículos e Inmuebles 3001, 3002, 5000, 5001 y 6001.
 
 **Arranque del backend** (`server.ts`): `activarHistorialCasos()` → `authenticate` → se quitan las vistas del tablero → `db.sync({ alter: true })` fuera de producción (en producción `sync()` y los ALTER idempotentes de `config/ajustesEsquema.ts`) → `sembrarBase()` → `cargarCalendario` → se recrean las vistas del tablero y se refresca la foto del ANS (cada 30 min). La semilla es idempotente: roles, parámetros, plantillas (actualiza los borradores que nadie editó), los 4 equipos iniciales si no hay ninguno, la secuencia del número interno y el número de los casos que no lo tengan. Contra la base remota el arranque tarda cerca de un minuto. Si algo falla imprime "Falló la conexión a la base de datos" y **el servidor sigue arriba**: revisar el log. Una columna nueva en una tabla existente se agrega también en `ajustesEsquema.ts`; las vistas se quitan antes del sync porque Postgres no deja alterar columnas que usa una vista.
 
@@ -196,7 +199,77 @@ Pantallas:
 
 **Al probar:** borrar solo por id lo que crea la prueba (el usuario usa la app al mismo tiempo), devolver la secuencia del número interno al mayor que exista, y no cargar el archivo maestro en la base real (reemplaza la tabla). Los scripts de prueba van fuera de `backend/src`, porque un archivo nuevo ahí reinicia el nodemon. **No editar el backend mientras el usuario usa la app:** cada cambio reinicia nodemon (cerca de un minuto contra la base remota) y dos reinicios seguidos pueden chocar al recrear las vistas del tablero ("Falló la conexión a la base de datos"). El usuario levanta los servidores a mano.
 
+## Servidor de pruebas (publicado el 2026-11-23)
+
+| Dato | Valor |
+|---|---|
+| Dirección | https://tutelas.nodexgpa.com (registro A → `20.186.19.92`; certificado Let's Encrypt hasta el 2027-02-21, con renovación automática) |
+| Máquina | VM de Azure `SRVWEBNOX02`, la de Nodex (2 vCPU, 7,8 GB). Se trabaja como `root` (`sudo -i`) |
+| Código | `/home/desarrolloti/tutelas`, rama `main` (git como root, con `safe.directory` solo para esa carpeta) |
+| Procesos | PM2 de root: `tutelas-api` (9100), `tutelas-web` (9101) y `tutelas-worker`, todos en 127.0.0.1. Lista guardada con `pm2 save` |
+| Nginx | sitio propio `/etc/nginx/sites-available/tutelas` → `127.0.0.1:9101`, con `snippets/seguridad-nodexgpa.conf` y `client_max_body_size 70m`. No declara `map` ni `limit_req_zone` (ya están en el sitio de Nodex) |
+| `.env` | `backend/.env` (600): producción, `PORT=9100`, `URL_FRONTEND` con el dominio, la base `gpa_legal` con el usuario de desarrollo, `REDIS_DB=5`, un `JWT_SECRET` nuevo, los datos de 365 copiados del Mac, `BUZON_ACTIVO=true`, `CORREO_ENVIO_ACTIVO=true`, `CORREO_REDIRIGIR_A=<buzón de pruebas>` y `BUZON_LEER_DESDE=2026-11-23`. `frontend/.env`: `API_URL=http://127.0.0.1:9100/api` |
+| Comprobado | la API se conecta a la base y escucha en 9100; el worker lee los tres buzones cada 120 s; Tutelas, Trámites, Gastos y Tramitadores responden 307 (la redirección a la entrada); los procesos de Nodex siguen online sin reinicios nuevos |
+
+**Modo prueba (`CORREO_REDIRIGIR_A`):**
+- Con la variable llena, `enviarCorreo` (`services/buzon/graph.ts`) manda cada correo solo a esa dirección, sin copias. Arriba del correo va un aviso amarillo con los destinatarios que tendría en operación.
+- `compartirCarpeta` da el permiso de SharePoint solo a esa dirección.
+- La app muestra "Modo prueba" en el caso, en Correos y en Inicio (`envioEnPantalla()` devuelve `PRUEBA`).
+- Para pasar a operación se vacía la variable y se ejecuta `pm2 restart tutelas-api tutelas-worker --update-env`.
+
+**Reglas del servidor** (guía del servidor de Nodex, 2026-11-23). Nodex está en producción:
+- **PM2:** siempre por nombre (`tutelas-*`). Prohibidos `pm2 restart|stop|delete all`, `pm2 kill`, `pm2 update`, `pm2 unstartup`, `pm2 flush` sin nombre y volver a correr `pm2 startup`. `pm2 save` solo con todo Nodex online.
+- **Nginx:** `nginx -t && systemctl reload nginx`, nunca `restart`. Si `-t` falla, se quita el enlace de Tutelas y no se recarga.
+- **Postgres y Redis:** no se reinician ni se reconfiguran. No se toca ninguna base ajena y en Redis no se usan `FLUSH*`.
+- **Horarios:** no intervenir a las 08:00, 09:00, 13:00 ni 02:30 (WhatsApp de Nodex, aviso push y respaldo). Compilar fuera de horario y una app a la vez: un build sube la CPU al 95 %.
+- **Sistema:** no se abren puertos, no se ejecuta `apt upgrade` y no se reinicia la máquina.
+- **Si Nodex se cae:** `pm2 stop tutelas-api tutelas-worker tutelas-web`, quitar el enlace de Nginx de Tutelas, recargar y avisar.
+
+**Actualizar el servidor:**
+```bash
+sudo -i
+cd /home/desarrolloti/tutelas && git pull
+cd backend && npm ci && npm run build
+cd ../frontend && npm ci && npm run build
+pm2 restart tutelas-api tutelas-worker tutelas-web --update-env
+```
+La primera vez después del commit `45b9d72`, el worker se pasa a modo `fork`. PM2 lo había arrancado en `cluster` porque el ecosystem decía `instances: 1` sin `exec_mode`:
+```bash
+pm2 delete tutelas-worker && pm2 start /home/desarrolloti/tutelas/ecosystem.config.cjs --only tutelas-worker && pm2 save
+```
+
+**Respaldo:** el respaldo nocturno del servidor (02:30) incluye todas las bases, así que `gpa_legal` queda respaldada. El código de Tutelas no entra en ese respaldo; está en GitHub.
+
 ## Pendientes
+
+**Para seguir con la prueba en el servidor:**
+- **En la app:**
+  - Usuarios: asistente, auxiliar con cupo y revisor, en un equipo, con la asistencia del día.
+  - Parámetros: `CORREOS_INSUMOS`, `CORREOS_ENTREGA` y `CORREOS_ALERTAS` con el buzón de pruebas, y `PREFIJO_ASUNTO`.
+  - Datos de la entidad y del apoderado, que los escritos de emergencia necesitan: `ENTIDAD_NOMBRE`, `ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `ENTIDAD_DIRECCION_NOTIFICACIONES`, `ENTIDAD_CORREO_NOTIFICACIONES` y `APODERADO_*`.
+- **El circuito con correos:** desde el buzón de pruebas, escribir a `asignacionsdmc@` con el asunto `[GPA] [ORDINARIO] [<radicado de 23 dígitos>] [TUTELA] [Vence: dd/mm/aaaa hh:mm]`. Después recorrer, en orden:
+  1. el acuse en el mismo hilo
+  2. los datos faltantes
+  3. los insumos y su respuesta con adjuntos
+  4. el escrito de emergencia
+  5. la revisión con la ficha
+  6. la entrega V1 con el enlace de SharePoint
+  7. la devolución y la V2
+  8. la radicación
+  9. el corte de alertas
+- **Antes de operación:**
+  - Vaciar `CORREO_REDIRIGIR_A`.
+  - Revisar `Test-ApplicationAccessPolicy`.
+  - Un usuario de base propio (`tutelas`) en lugar del de desarrollo, si se decide.
+  - Agregar el sitio a `MONITOR_SITIOS` del Monitor de Nodex.
+  - Anotar cuándo vence el secreto de Entra.
+- **En el Mac:** mantener `BUZON_ACTIVO=false` y no correr `npm run leer-buzon` mientras el servidor lea los buzones. La base es la misma: lo que se prueba en el servidor se ve también en el Mac.
+- **Copias duplicadas:** las 228 copias "… 2" que aparecieron en el repositorio, probablemente de una copia del Finder o iCloud, rompían `tsc`. Se movieron a `../copias-2-gestion-tutelas` (al lado del repositorio) y no se borraron. Si no hacen falta, el usuario puede borrar esa carpeta.
+- **Pendientes de la firma:**
+  - El modelo de falta de legitimación.
+  - Confirmar si los modelos de requerimiento previo y desacato de tutela deben ser distintos (hoy traen el mismo texto).
+  - Confirmar los supuestos: horas de corte (10:00 y 14:30), fin de la jornada (17:00), `DIAS_TERMINO_EMERGENCIA` (5), y las peticiones y derechos del catálogo.
+  - Automatizar la consulta de la radicación con Icarus cuando se defina.
 
 **Ajustes de la firma del 23-nov** (hechos):
 - **Alertas:** ya estaban en dos cortes; la asistencia revisa, envía sueltas y reenvía.
@@ -212,7 +285,7 @@ Pantallas:
   - En el modelo de la acción de cumplimiento se corrigió "TERCERO" por "SEGUNDO". Los modelos de requerimiento previo y desacato de tutela tienen el mismo texto.
 - **Unir casos:** solo con el mismo accionante y, en lo judicial, la misma raíz de 21 dígitos (cambia solo la instancia).
 
-**Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fases 1 a 7 hechas, y el detalle del caso rediseñado (Actuación con encabezado de indicadores y tarjetas; Información con hechos y derechos primero). **Pendientes:** las plantillas de emergencia y falta de legitimación (los modelos los manda la firma), llenar `CORREOS_ALERTAS` y confirmar con la firma las horas de corte (`HORAS_CORTE_ALERTAS`) y el fin de la jornada (`HORA_FIN_JORNADA`, supuesto 17:00). Fase 6 (2026-11-22): alertas al cliente en dos cortes al día; ver `alertas.ts`. Fase 7 (2026-11-22): tramos, tiempos por paso y productividad diaria; ver `tiempos.ts`. Al arrancar se reconstruyeron 94 tramos desde la bitácora. Fase 5: etapa excepcional `NULIDAD` (registro manual, Excel o asunto `[NULIDAD]`); ningún equipo la atiende, así que el reparto la da a cualquier auxiliar con cupo; ese auxiliar la clasifica (`POST /casos/actuaciones/:id/clasificar-nulidad`) en una de las cinco etapas (`ETAPAS_PROCESO`), la actuación pasa a esa etapa con `origenNulidad`, se reparte al equipo de la etapa, se recalculan plazos, sus documentos van a la carpeta de la etapa y queda en la bitácora con la nota. No se puede clasificar en una etapa que ya está abierta en el caso ni empezar el escrito antes de clasificar. Fase 4: Fase 4: ficha técnica y solicitud del expediente en Word (`documentosWord.ts`); datos de la entidad y del apoderado en parámetros (`ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `APODERADO_*`), que hay que llenar. Faltan los modelos de emergencia y falta de legitimación. Fase 3: Fase 3: correos con los modelos; datos faltantes con casillas de la lista general de la matriz (`Actuacion.datosSolicitados`, el ANS corre cuando llega todo lo pedido); insumos de la matriz por grupo (`SolicitudInsumo.itemCatalogoId` y `clase`), que exigen el resumen de los hechos y los derechos del caso (`Caso.resumenHechos`, `Caso.derechosIds`, `PATCH /casos/:id/ficha`); confirmaciones que listan lo que llegó; entrega con documentos entregados y anexos (`Escrito.documentosEntregados` y `anexosEntregados`); tipo de respuesta por actuación (`Actuacion.tipoRespuestaId`); el escrito de emergencia no se empieza ni va a revisión sin insumos pedidos; la observación del revisor se lee en la bitácora; `ENTIDAD_NOMBRE` en parámetros. Antes, fases 1 y 2 (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad; radicado de otra instancia al registrar, casos relacionados con aviso al auxiliar, unir casos, facturación por radicado). La temeridad la propone hoy la app como antecedente: cuando los derechos sean catálogo (fase 4) se sugerirá sola si coinciden. Siguen: 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
+**Plan de la reunión del 18-nov** (notas en `Docs/NOTAS NODEX REUNIÓN 18112026[73].docx`, modelos y matriz en `Docs/insumos`). Fases 1 a 7 hechas, y el detalle del caso rediseñado (Actuación con encabezado de indicadores y tarjetas; Información con hechos y derechos primero). **Pendientes:** la plantilla de falta de legitimación (las de emergencia ya están, 23-nov), llenar `CORREOS_ALERTAS` y confirmar con la firma las horas de corte (`HORAS_CORTE_ALERTAS`) y el fin de la jornada (`HORA_FIN_JORNADA`, supuesto 17:00). Fase 6 (2026-11-22): alertas al cliente en dos cortes al día; ver `alertas.ts`. Fase 7 (2026-11-22): tramos, tiempos por paso y productividad diaria; ver `tiempos.ts`. Al arrancar se reconstruyeron 94 tramos desde la bitácora. Fase 5: etapa excepcional `NULIDAD` (registro manual, Excel o asunto `[NULIDAD]`); ningún equipo la atiende, así que el reparto la da a cualquier auxiliar con cupo; ese auxiliar la clasifica (`POST /casos/actuaciones/:id/clasificar-nulidad`) en una de las cinco etapas (`ETAPAS_PROCESO`), la actuación pasa a esa etapa con `origenNulidad`, se reparte al equipo de la etapa, se recalculan plazos, sus documentos van a la carpeta de la etapa y queda en la bitácora con la nota. No se puede clasificar en una etapa que ya está abierta en el caso ni empezar el escrito antes de clasificar. Fase 4: Fase 4: ficha técnica y solicitud del expediente en Word (`documentosWord.ts`); datos de la entidad y del apoderado en parámetros (`ENTIDAD_NOMBRE_LEGAL`, `ENTIDAD_NIT`, `APODERADO_*`), que hay que llenar. Faltan los modelos de emergencia y falta de legitimación. Fase 3: Fase 3: correos con los modelos; datos faltantes con casillas de la lista general de la matriz (`Actuacion.datosSolicitados`, el ANS corre cuando llega todo lo pedido); insumos de la matriz por grupo (`SolicitudInsumo.itemCatalogoId` y `clase`), que exigen el resumen de los hechos y los derechos del caso (`Caso.resumenHechos`, `Caso.derechosIds`, `PATCH /casos/:id/ficha`); confirmaciones que listan lo que llegó; entrega con documentos entregados y anexos (`Escrito.documentosEntregados` y `anexosEntregados`); tipo de respuesta por actuación (`Actuacion.tipoRespuestaId`); el escrito de emergencia no se empieza ni va a revisión sin insumos pedidos; la observación del revisor se lee en la bitácora; `ENTIDAD_NOMBRE` en parámetros. Antes, fases 1 y 2 (catálogos, semáforo, reasignar, datos faltantes al asistente, eliminar, búsqueda, prioridad; radicado de otra instancia al registrar, casos relacionados con aviso al auxiliar, unir casos, facturación por radicado). La temeridad la propone hoy la app como antecedente: cuando los derechos sean catálogo (fase 4) se sugerirá sola si coinciden. Siguen: 3 correos con los modelos y casillas de la matriz · 4 resumen de hechos, derechos y tipo de respuesta en el caso, ficha técnica y solicitud de expediente en Word · 5 nulidades · 6 alertas en dos cortes · 7 tiempos y productividad. Los modelos de emergencia y falta de legitimación los manda la firma más adelante. Datos de la entidad para los escritos (nombre, NIT, apoderado): parámetros.
 
 **Para mañana (con el usuario):**
 - Crear los usuarios reales con perfiles y equipos. Por eso aún no se puede asignar: no hay auxiliares ni revisores.
@@ -225,16 +298,13 @@ Pantallas:
 
 1. **Microsoft 365** (`Docs/CONFIGURAR_BUZON_M365.md`). Ya están los tres buzones, la app de Entra y el sitio `tutelasdmc`. Falta:
    - Confirmar la política de acceso (paso 3): `Test-ApplicationAccessPolicy` debe dar *Denied* en un buzón ajeno.
-   - Aprobar las plantillas y activar el envío real (`CORREO_ENVIO_ACTIVO=true`): la confirmación debe llegar a un Gmail en el mismo hilo.
-   - Lectura automática: `BUZON_ACTIVO=true`, Redis y `npm run worker`.
+   - Envío real y lectura automática: **encendidos en el servidor desde el 2026-11-23**, en modo prueba. Falta comprobar el circuito y aprobar las plantillas antes de quitar `CORREO_REDIRIGIR_A`.
    - Probar una respuesta por insumos y otra por entregas, compartir una entrega con el cliente (uso compartido externo limitado a sus dominios) y descargar un enlace suyo.
    - Anotar en el calendario el vencimiento del secreto de Entra.
-2. **Servidor de producción** (`Docs/PRODUCCION.md`):
-   - Usuario propio de base y `tablero_lectura` para Power BI.
-   - PM2, Nginx y HTTPS.
-   - Puerta de enlace de Power BI en la red de la oficina.
-   - Versión de pruebas: paso a paso en `Docs/PRODUCCION.md` §0 (builds de backend y frontend probados el 2026-11-23).
-   - Va en el **servidor de Nodex** (SRVWEBNOX02, §0.2): root y PM2 de root, puertos 9100 (API) y 9101 (web), Redis base 5, Postgres compartido con pool de 5 por proceso. Nunca comandos de PM2 con `all`, y Nginx solo con `reload`. Modo prueba con correos: `CORREO_REDIRIGIR_A`.
+2. **Servidor:** PM2, Nginx y HTTPS **hechos** (ver "Servidor de pruebas"). Falta:
+   - `tablero_lectura` para Power BI.
+   - La puerta de enlace de Power BI en la red de la oficina.
+   - El paso a operación (ver arriba).
 3. **Configuración en la app:**
    - `FECHA_INICIO_PLAN` (sin ella no se miden ANS-04 ni ANS-11 ni hay descuentos).
    - Destinatarios `CORREOS_*`, con PST (D25).
@@ -261,6 +331,8 @@ Pantallas:
 | `BUZON_ASIGNACIONES`, `BUZON_INSUMOS`, `BUZON_ENTREGAS` | Los tres buzones |
 | `BUZON_ACTIVO`, `BUZON_INTERVALO_SEGUNDOS`, `BUZON_LEER_DESDE` | Lectura automática |
 | `CORREO_ENVIO_ACTIVO` | `true` = los correos salen de verdad; si no, quedan simulados |
+| `CORREO_REDIRIGIR_A` | Modo prueba: todo lo que sale (correos y permisos de SharePoint) va solo a esta dirección, con un aviso de los destinatarios reales. Vacío en operación |
+| `DB_POOL_MAX` | Conexiones a Postgres por proceso (5 por defecto; el motor es compartido con Nodex) |
 | `SHAREPOINT_SITIO`, `SHAREPOINT_BIBLIOTECA` | Sitio de los expedientes |
 | `ALMACEN_LOCAL` | Carpeta de desarrollo sin SharePoint |
 | `PREFIJO_ASUNTO` | Solo al crear el parámetro la primera vez |
