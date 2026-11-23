@@ -67,7 +67,26 @@ Igual que la sección 0, pero los correos salen de verdad y se leen los buzones.
 4. Solo un equipo lee los buzones: en el Mac, `BUZON_ACTIVO=false` y no correr `npm run leer-buzon`, porque el avance de la lectura está en la base compartida.
 5. En Parámetros, `CORREOS_INSUMOS`, `CORREOS_ENTREGA` y `CORREOS_ALERTAS` pueden quedar con el buzón de pruebas o con los definitivos: igual salen al de pruebas.
 6. Desde el buzón de pruebas se escribe a `asignacionsdmc@` con el asunto `[GPA] [ORDINARIO] [<radicado de 23 dígitos>] [TUTELA] [Vence: dd/mm/aaaa hh:mm]` y se sigue el circuito: acuse, datos faltantes, insumos y su respuesta, entrega, devolución y V2, y corte de alertas.
-7. Para pasar a operación se deja `CORREO_REDIRIGIR_A` vacío y se reinicia: `pm2 restart all --update-env`.
+7. Para pasar a operación se deja `CORREO_REDIRIGIR_A` vacío y se reinicia: `pm2 restart tutelas-api tutelas-worker --update-env`. Nunca `pm2 restart all`: en el servidor de Nodex reiniciaría también Nodex.
+
+## 0.2 En el mismo servidor de Nodex
+
+Tutelas convive con Nodex sin tocarlo:
+
+| | Nodex producción | Nodex ensayo | Tutelas |
+|---|---|---|---|
+| Carpeta | `/home/desarrolloti/nodex4.0` | `/home/desarrolloti/nodex5.0` | `/home/desarrolloti/tutelas` |
+| Puertos (solo 127.0.0.1) | 4000 / 3000 | 9000–9003 | **4100 (API) / 3100 (web)** |
+| Redis | base 0 | base 1 | **base 5** |
+| PM2 | `apiNodex4.5`, `Nodex4.5`, `worker4.5` | `nodex-ensayo-*` | **`tutelas-api`, `tutelas-web`, `tutelas-worker`** |
+| Base | `nodex` | `nodex_pruebas` | **`gpa_legal`** (usuario propio) |
+| Dominio | | `*.nodexgpa.com` | **`tutelas.nodexgpa.com`** (o el que se defina) |
+
+- **Node, Redis, Nginx, PM2 y certbot ya están en el servidor:** no se instala nada. Tutelas usa el mismo Next 16 que Nodex, así que sirve el Node que ya hay (22).
+- **Base:** Postgres corre en el mismo servidor, así que `DB_HOST=127.0.0.1`. La base y el usuario se crean con `sudo -u postgres psql`.
+- **PM2:** siempre con los nombres de Tutelas. **Nunca** `pm2 restart all` ni `pm2 delete all`. `pm2 save` guarda también los procesos de Nodex, que es lo correcto. `pm2 startup` ya está configurado en el servidor: no se vuelve a correr.
+- **Nginx:** un sitio aparte (`/etc/nginx/sites-available/tutelas`), con el mismo snippet de seguridad de Nodex. Primero se agrega el registro DNS del subdominio y después se corre `certbot` solo para ese dominio.
+- **Firewall:** 3100 y 4100 no se abren; solo entra Nginx.
 
 ## 1. Base de datos
 
