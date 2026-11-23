@@ -25,7 +25,9 @@ module.exports = {
       cwd: path.join(raiz, 'backend'),
       script: 'dist/worker.js',
       env: { NODE_ENV: 'production' },
+      // fork explícito: con "instances" solo, PM2 lo arranca en modo cluster
       instances: 1,
+      exec_mode: 'fork',
       max_memory_restart: '500M',
       time: true
     },
