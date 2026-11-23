@@ -234,6 +234,7 @@ Pantallas:
    - PM2, Nginx y HTTPS.
    - Puerta de enlace de Power BI en la red de la oficina.
    - Versión de pruebas: paso a paso en `Docs/PRODUCCION.md` §0 (builds de backend y frontend probados el 2026-11-23).
+   - Va en el **servidor de Nodex** (SRVWEBNOX02, §0.2): root y PM2 de root, puertos 9100 (API) y 9101 (web), Redis base 5, Postgres compartido con pool de 5 por proceso. Nunca comandos de PM2 con `all`, y Nginx solo con `reload`. Modo prueba con correos: `CORREO_REDIRIGIR_A`.
 3. **Configuración en la app:**
    - `FECHA_INICIO_PLAN` (sin ella no se miden ANS-04 ni ANS-11 ni hay descuentos).
    - Destinatarios `CORREOS_*`, con PST (D25).

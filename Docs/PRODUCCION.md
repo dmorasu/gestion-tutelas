@@ -1,6 +1,6 @@
 # Salida a producción
 
-Servidor propio (aparte del de Nodex) con Node 24, Redis, Nginx y PM2. La base sigue en el Postgres de la oficina (`gpa_legal`), con un usuario propio.
+Se publica en el servidor de Nodex (§0.2), con Node, Redis, Nginx y PM2 compartidos. Las secciones 0 y 0.1 describen la configuración; los comandos y puertos del servidor son los de §0.2. La base sigue en el Postgres de la oficina (`gpa_legal`), con un usuario propio.
 
 ## 0. Versión de pruebas (paso a paso)
 
@@ -15,7 +15,7 @@ Para que la firma pruebe con datos reales sin que salga nada al cliente: los cor
    cd backend && npm ci && cp .env.example .env
    ```
 4. **`backend/.env`** (ver §2). Lo propio de pruebas:
-   - `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=4100`, `URL_FRONTEND=https://<dirección de pruebas>`
+   - `NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=9100`, `URL_FRONTEND=https://<dirección de pruebas>`
    - `DB_*` con el usuario del paso 2 y `DB_NAME=gpa_legal`
    - `JWT_SECRET=$(openssl rand -hex 48)`: uno nuevo, no el de desarrollo
    - `CORREO_ENVIO_ACTIVO=false`: los correos quedan en el caso, pero no salen
@@ -25,10 +25,10 @@ Para que la firma pruebe con datos reales sin que salga nada al cliente: los cor
    ```bash
    cd /opt/tutelas/backend && npm run build
    cd ../frontend && npm ci
-   echo "API_URL=http://127.0.0.1:4100/api" > .env
+   echo "API_URL=http://127.0.0.1:9100/api" > .env
    npm run build
    ```
-6. **Procesos:** `cd /opt/tutelas && pm2 start ecosystem.config.cjs --only tutelas-api,tutelas-web && pm2 save && pm2 startup`. Después, `pm2 logs tutelas-api` debe mostrar "Conexión exitosa a la base de tutelas" y "API de tutelas en el puerto 4100".
+6. **Procesos:** `cd /opt/tutelas && pm2 start ecosystem.config.cjs --only tutelas-api,tutelas-web && pm2 save`. Después, `pm2 logs tutelas-api` debe mostrar "Conexión exitosa a la base de tutelas" y "API de tutelas en el puerto 9100".
    - El worker no se arranca: con `BUZON_ACTIVO=false` se apaga solo y PM2 lo reiniciaría sin parar.
    - Sin worker no hay detección ni cortes automáticos de alertas. En pruebas, el corte se envía a mano desde Alertas ("Enviar corte ahora"), que también detecta las alertas.
 7. **Nginx y HTTPS:** §4, con el nombre de la dirección de pruebas. Luego `certbot --nginx -d <dirección de pruebas>`.
@@ -69,24 +69,151 @@ Igual que la sección 0, pero los correos salen de verdad y se leen los buzones.
 6. Desde el buzón de pruebas se escribe a `asignacionsdmc@` con el asunto `[GPA] [ORDINARIO] [<radicado de 23 dígitos>] [TUTELA] [Vence: dd/mm/aaaa hh:mm]` y se sigue el circuito: acuse, datos faltantes, insumos y su respuesta, entrega, devolución y V2, y corte de alertas.
 7. Para pasar a operación se deja `CORREO_REDIRIGIR_A` vacío y se reinicia: `pm2 restart tutelas-api tutelas-worker --update-env`. Nunca `pm2 restart all`: en el servidor de Nodex reiniciaría también Nodex.
 
-## 0.2 En el mismo servidor de Nodex
+## 0.2 En el servidor de Nodex (SRVWEBNOX02) — así se publica
 
-Tutelas convive con Nodex sin tocarlo:
+Se sigue la guía del servidor de Nodex ("Servidor de Nodex: guía para montar otro proyecto sin dañar Nodex", 2026-11-23). Nodex está en producción.
 
-| | Nodex producción | Nodex ensayo | Tutelas |
-|---|---|---|---|
-| Carpeta | `/home/desarrolloti/nodex4.0` | `/home/desarrolloti/nodex5.0` | `/home/desarrolloti/tutelas` |
-| Puertos (solo 127.0.0.1) | 4000 / 3000 | 9000–9003 | **4100 (API) / 3100 (web)** |
-| Redis | base 0 | base 1 | **base 5** |
-| PM2 | `apiNodex4.5`, `Nodex4.5`, `worker4.5` | `nodex-ensayo-*` | **`tutelas-api`, `tutelas-web`, `tutelas-worker`** |
-| Base | `nodex` | `nodex_pruebas` | **`gpa_legal`** (usuario propio) |
-| Dominio | | `*.nodexgpa.com` | **`tutelas.nodexgpa.com`** (o el que se defina) |
+**Reglas:**
+- Todo como `root` (`sudo -i`), con el PM2 de root.
+- Nada que reinicie lo compartido: Nginx solo con `reload`; Postgres y Redis no se tocan.
+- No intervenir a las 08:00, 09:00, 13:00 ni 02:30.
+- Compilar fuera de horario y una app a la vez: con 2 vCPU, un build sube la CPU al 95 %.
 
-- **Node, Redis, Nginx, PM2 y certbot ya están en el servidor:** no se instala nada. Tutelas usa el mismo Next 16 que Nodex, así que sirve el Node que ya hay (22).
-- **Base:** Postgres corre en el mismo servidor, así que `DB_HOST=127.0.0.1`. La base y el usuario se crean con `sudo -u postgres psql`.
-- **PM2:** siempre con los nombres de Tutelas. **Nunca** `pm2 restart all` ni `pm2 delete all`. `pm2 save` guarda también los procesos de Nodex, que es lo correcto. `pm2 startup` ya está configurado en el servidor: no se vuelve a correr.
-- **Nginx:** un sitio aparte (`/etc/nginx/sites-available/tutelas`), con el mismo snippet de seguridad de Nodex. Primero se agrega el registro DNS del subdominio y después se corre `certbot` solo para ese dominio.
-- **Firewall:** 3100 y 4100 no se abren; solo entra Nginx.
+| | Nodex | **Tutelas** |
+|---|---|---|
+| Carpeta | `/home/desarrolloti/nodex5.0` | **`/home/desarrolloti/tutelas`** |
+| Puertos (127.0.0.1) | 9000–9003 (Monitor 9010) | **9100 (API) y 9101 (web)** |
+| Redis | base 1, cola `notifications` | **base 5** (comprobar que esté vacía), cola `tutelas-buzon` |
+| PM2 | `nodex-*` | **`tutelas-api`, `tutelas-worker`, `tutelas-web`** |
+| Postgres | `DB_HOST=10.0.4.4`, base `nodex` | **mismo motor, base `gpa_legal`, usuario `tutelas`**, pool de 5 por proceso |
+| Dominio | `*.nodexgpa.com` | **`tutelas.nodexgpa.com`** (registro A → `20.186.19.92`) |
+
+### 1. Revisar antes de tocar nada (solo lectura)
+```bash
+sudo -i
+pm2 list
+ss -ltnp | grep -E ':(910[0-9])\b'        # no debe salir nada
+ls -l /etc/nginx/sites-enabled/ && nginx -t
+cd /tmp && sudo -u postgres psql -Atc "SELECT datname FROM pg_database WHERE NOT datistemplate"
+sudo -u postgres psql -Atc "SELECT count(*), current_setting('max_connections') FROM pg_stat_activity"
+redis-cli INFO keyspace && redis-cli -n 5 DBSIZE      # la 5 debe dar 0
+free -m && df -h / && node -v
+```
+
+### 2. Base de datos
+Si `gpa_legal` no está en la lista del paso 1:
+```bash
+cd /tmp
+sudo -u postgres psql -c "CREATE ROLE tutelas LOGIN PASSWORD '<clave nueva>';"
+sudo -u postgres createdb -O tutelas gpa_legal
+sudo -u postgres psql -c "REVOKE CONNECT ON DATABASE gpa_legal FROM PUBLIC;"
+```
+Si ya existe (la que se usa desde el Mac), se usa esa con su usuario actual o se le pasa a `tutelas`. Lo decide el usuario. Nunca se toca ninguna otra base. El respaldo de las 02:30 la incluye sola desde la noche siguiente.
+
+### 3. Código
+```bash
+cd /home/desarrolloti
+git clone https://github.com/dmorasu/gestion-tutelas.git tutelas
+git config --global --add safe.directory /home/desarrolloti/tutelas     # solo esta carpeta
+cd tutelas && git checkout main
+cd backend && npm ci && cp .env.example .env && nano .env
+```
+
+### 4. `backend/.env`
+```
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=9100
+URL_FRONTEND=https://tutelas.nodexgpa.com
+DB_HOST=10.0.4.4
+DB_PORT=5432
+DB_USER=tutelas
+DB_PASSWORD=<clave>
+DB_NAME=gpa_legal
+DB_POOL_MAX=5
+JWT_SECRET=<openssl rand -hex 48>
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+REDIS_DB=5
+```
+Además, `ENTRA_*`, `BUZON_*` y `SHAREPOINT_*`, copiados del `.env` de desarrollo de Tutelas (nunca de los `.env` de Nodex). Para la prueba con correos:
+```
+BUZON_ACTIVO=true
+CORREO_ENVIO_ACTIVO=true
+CORREO_REDIRIGIR_A=<buzón de pruebas de la firma>
+BUZON_LEER_DESDE=<fecha de hoy>
+```
+Sin correos: `BUZON_ACTIVO=false` y `CORREO_ENVIO_ACTIVO=false`. En ese caso el worker no se arranca (§0).
+
+### 5. Compilar (fuera de horario, una cosa a la vez)
+```bash
+cd /home/desarrolloti/tutelas/backend && npm run build
+cd ../frontend && npm ci
+echo "API_URL=http://127.0.0.1:9100/api" > .env
+npm run build
+cd ../backend && node dist/scripts/leerBuzon.js        # con correos: lee los tres buzones sin error
+```
+
+### 6. PM2
+```bash
+pm2 start /home/desarrolloti/tutelas/ecosystem.config.cjs
+pm2 list                         # nodex-* online y sin reinicios nuevos; tutelas-* online
+pm2 logs tutelas-api --lines 40 --nostream
+pm2 save                         # solo con todos los nodex-* online
+```
+Prohibidos: `pm2 restart|stop|delete all`, `pm2 kill`, `pm2 update`, `pm2 unstartup` y `pm2 flush` sin nombre.
+
+### 7. Nginx (`/etc/nginx/sites-available/tutelas`, archivo propio)
+```nginx
+server {
+    listen 80;
+    server_name tutelas.nodexgpa.com;
+    include snippets/seguridad-nodexgpa.conf;
+    # Escritos y anexos: la app acepta hasta 60 MB por archivo
+    client_max_body_size 70m;
+
+    location / {
+        proxy_pass http://127.0.0.1:9101;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_read_timeout 120s;
+    }
+}
+```
+- No se declara `map` ni `limit_req_zone`: el `map $connection_upgrade` ya existe en el sitio de Nodex.
+- No se usa `default_server`.
+- La API (9100) no se publica: solo la llama el frontend por 127.0.0.1.
+```bash
+ln -s /etc/nginx/sites-available/tutelas /etc/nginx/sites-enabled/tutelas
+ls -l /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx        # si -t falla: quitar el enlace y no recargar
+certbot --nginx -d tutelas.nodexgpa.com   # solo este dominio, después del registro DNS
+```
+
+### 8. Administrador y comprobación de Nodex
+```bash
+cd /home/desarrolloti/tutelas/backend && node dist/scripts/crearAdmin.js <correo> "<Nombre>"
+pm2 list
+for s in tramites gastos tramitadores; do curl -s -o /dev/null -w "$s %{http_code}\n" https://$s.nodexgpa.com; done   # 200 o 307
+curl -s -o /dev/null -w "tutelas %{http_code}\n" https://tutelas.nodexgpa.com
+```
+Opcional: agregar `https://tutelas.nodexgpa.com` a `MONITOR_SITIOS` en `/opt/nodex-monitor/.env` (lo hace el usuario). Un `tutelas-*` caído le avisa por WhatsApp.
+
+### Actualizar
+```bash
+cd /home/desarrolloti/tutelas && git pull
+cd backend && npm ci && npm run build
+cd ../frontend && npm ci && npm run build
+pm2 restart tutelas-api tutelas-worker tutelas-web --update-env
+```
+
+### Si algo de Nodex se cae
+`pm2 stop tutelas-api tutelas-worker tutelas-web`, quitar el enlace de Nginx de Tutelas, `nginx -t && systemctl reload nginx` y avisar. No arreglar Nodex desde Tutelas.
 
 ## 1. Base de datos
 
@@ -104,7 +231,7 @@ cd backend && npm ci && cp .env.example .env   # completar .env
 npm run build
 
 cd ../frontend && npm ci
-echo "API_URL=http://127.0.0.1:4100/api" > .env
+echo "API_URL=http://127.0.0.1:9100/api" > .env
 npm run build
 ```
 
@@ -131,10 +258,10 @@ Primer administrador: `node dist/scripts/crearAdmin.js correo "Nombre"` (desde `
 ```bash
 cd /opt/tutelas
 pm2 start ecosystem.config.cjs
-pm2 save && pm2 startup
+pm2 save
 ```
 
-Tres procesos: `tutelas-api` (4100), `tutelas-worker` (buzones, alertas, limpieza) y `tutelas-web` (3100). Los dos primeros escuchan solo en `127.0.0.1`.
+Tres procesos: `tutelas-api` (9100), `tutelas-worker` (buzones, alertas, limpieza) y `tutelas-web` (9101). Los dos primeros escuchan solo en `127.0.0.1`.
 
 ## 4. Nginx y HTTPS
 
@@ -150,7 +277,7 @@ server {
     client_max_body_size 70m;
 
     location / {
-        proxy_pass http://127.0.0.1:3100;
+        proxy_pass http://127.0.0.1:9101;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

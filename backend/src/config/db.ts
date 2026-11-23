@@ -15,5 +15,8 @@ export const db = new Sequelize({
   models: modelos,
   logging: false,
   // Las fechas con hora se guardan en UTC; la zona de Colombia se aplica al calcular y mostrar
-  timezone: '+00:00'
+  timezone: '+00:00',
+  // El motor de Postgres es el de Nodex (máximo 100 conexiones, Nodex llega a ~34): la API y el
+  // worker juntos no pasan de 10
+  pool: { max: Number(process.env.DB_POOL_MAX) || 5, min: 0, idle: 10_000 }
 })
